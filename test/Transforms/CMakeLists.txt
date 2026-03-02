@@ -1,0 +1,6 @@
+add_subdirectory(Steane)
+add_subdirectory(Surface)
+add_subdirectory(Magic)
+add_subdirectory(Syndrome)
+add_subdirectory(Correction)
+add_subdirectory(Gates)
