@@ -141,6 +141,31 @@ endif()
 #=======================================================================
 # Install
 #=======================================================================
+
+add_custom_command(
+  OUTPUT ${CMAKE_BINARY_DIR}/setup.source
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  COMMAND echo "SCRIPT_FILE=\${BASH_SOURCE[0]}" > ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "PYTHON_EXE=$(command -v python || command -v python3)" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "if [[ -z \"\$PYTHON_EXE\" ]]; then" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "    echo \"No Python is detected! Cannot source\" " >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "    return" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "fi" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "SCRIPT=$(\$PYTHON_EXE -c \"import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))\" \${SCRIPT_FILE})" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
+  COMMAND echo "export FTQC=$(dirname -- \${SCRIPT})" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export PATH=.:\$FTQC/bin:\$PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export LD_LIBRARY_PATH=.:\$FTQC/lib:\$FTQC/lib64:\$LD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export DYLD_LIBRARY_PATH=.:\$FTQC/default:\$FTQC/lib:\$DYLD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export CPATH=\$FTQC/include:\$CPATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export PYTHONPATH=\$FTQC:\$PYTHONPATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export SYSTEM=\$(hostname|cut -d . -f 1|sed 's/[0-9]*//g')" >>  ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export MACHINE=$(echo \"\$SYSTEM\" | awk '{print toupper(substr(\$0,1,1)) tolower(substr(\$0,2))}')" >>  ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "echo \"*********************** FTQC Environent *********************\"" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "echo \"FTQC: \$FTQC\"" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "echo \"*************************************************************\"" >> ${CMAKE_BINARY_DIR}/setup.source
+  )
+add_custom_target(setup_source ALL DEPENDS ${CMAKE_BINARY_DIR}/setup.source)
+install(FILES ${CMAKE_BINARY_DIR}/setup.source DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(DIRECTORY include/FTQC DESTINATION include)
 install(TARGETS FTQCDialect FTQCTransforms FTQCAnalysis FTQCUtils
         EXPORT FTQCTargets
