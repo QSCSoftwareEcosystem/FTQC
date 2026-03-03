@@ -1,93 +1,461 @@
-# FTQC
+---
+marp: true
+theme: default
+paginate: true
+math: mathjax
+style: |
+  section {
+    font-size: 1.6rem;
+  }
+  section.lead h1 {
+    font-size: 2.6rem;
+  }
+  code {
+    font-size: 0.85em;
+  }
+  pre code {
+    font-size: 0.78em;
+  }
+  h2 { border-bottom: 2px solid #4a90d9; padding-bottom: 4px; }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+---
 
+<!-- _class: lead -->
 
+# FTQC MLIR Dialect
 
-## Getting started
+### A Fault-Tolerant Quantum Computing Compiler Infrastructure
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Built on LLVM/MLIR 22 · Clifford+T · Steane · Surface · Color Code
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+## Motivation
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+**The fault-tolerance gap**: today's NISQ devices have physical error rates $p \sim 10^{-2}$–$10^{-3}$.
+Useful algorithms (Shor, quantum chemistry) require logical error rates $p_L < 10^{-10}$.
+
+**Quantum error correction (QEC)** encodes one logical qubit in many physical qubits and detects/corrects errors before they accumulate.
+
+**The compiler's job**:
+
+| Task | Traditional | FTQC |
+|------|------------|------|
+| Logical gates | H, CNOT, T | transversal gates + magic injection |
+| Error model | none | syndrome extraction, EC rounds |
+| Resource budget | gate count | physical qubits, T-gate count, distillation |
+
+> **FTQC** makes this pipeline a first-class citizen of the MLIR compiler stack.
+
+---
+
+## What Is an MLIR Dialect?
+
+MLIR is a reusable compiler infrastructure for representing and transforming programs at multiple levels of abstraction.
 
 ```
-cd existing_repo
-git remote add origin https://code.ornl.gov/qsc-ct/ftqc.git
-git branch -M main
-git push -uf origin main
+┌─────────────────────────────────────────────┐
+│  MLIR Module                                │
+│  ┌─────────────────┐  ┌──────────────────┐  │
+│  │  func Dialect   │  │  FTQC Dialect    │  │
+│  │  (control flow) │  │  (quantum ops)   │  │
+│  └─────────────────┘  └──────────────────┘  │
+└─────────────────────────────────────────────┘
+         │ passes transform IR
+         ▼
+     ftqc-opt
 ```
 
-## Integrate with your tools
+A **dialect** bundles:
+- **Types** — `!ftqc.logical_qubit`, `!ftqc.syndrome`, `!ftqc.magic_state`
+- **Ops** — `ftqc.logical_h`, `ftqc.steane_x_syndrome`, `ftqc.logical_toffoli`
+- **Attributes** — `#ftqc.ecc<steane, 3>`, `#ftqc.code_props<7, 1, 3>`
+- **Passes** — analysis and transformation passes on the IR
 
-* [Set up project integrations](https://code.ornl.gov/qsc-ct/ftqc/-/settings/integrations)
+---
 
-## Collaborate with your team
+## FTQC Type System
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Logical Qubits — parameterized by ECC code and distance
 
-## Test and Deploy
+```mlir
+!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>     // Steane [[7,1,3]]
+!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>    // Surface d=5
+!ftqc.logical_qubit<#ftqc.ecc<color_code, 3>> // Triangular color code
+```
 
-Use the built-in continuous integration in GitLab.
+### Syndrome Types — width depends on code and distance
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```mlir
+!ftqc.syndrome<6>    // Steane: 3 X-checks + 3 Z-checks
+!ftqc.syndrome<16>   // Surface d=3: (d²-1) = 8 X + 8 Z stabilizers
+```
 
-***
+### Magic State Types — for non-Clifford gates
 
-# Editing this README
+```mlir
+!ftqc.magic_state          // |T⟩ — enables logical T gate
+!ftqc.magic_state<CCZ>     // |CCZ⟩ — enables Toffoli gate
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Pauli Frame — deferred classical correction
 
-## Suggestions for a good README
+```mlir
+!ftqc.pauli_frame<1>       // tracks Pauli byproducts for 1 qubit
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+---
 
-## Name
-Choose a self-explaining name for your project.
+## Supported Error-Correcting Codes
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+<div class="columns">
+<div>
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Steane \[\[7,1,3\]\]
+- **Parameters**: $n=7$, $k=1$, $d=3$
+- **Threshold**: $\sim 1\%$
+- **Transversal**: H, CNOT, X, Z
+- **Magic injection**: T, S via $T^2$
+- **Syndrome width**: 6 bits (3X + 3Z)
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### Surface Code (distance $d$)
+- **Parameters**: $n=d^2$, $k=1$
+- **Threshold**: $\sim 1\%$ (high)
+- **Logical error**: $p_L \sim (p/p_\text{th})^{(d+1)/2}$
+- **Syndrome width**: $2(d^2-1)$ bits
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+</div>
+<div>
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### Triangular Color Code
+- **Parameters**: $[\![t^2+t+1, 1, t+1]\!]$
+- **Transversal**: full Clifford group (incl. S!)
+- **Advantage**: S gate without magic injection
+- **Status**: stub (lowering not yet implemented)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Code Properties Attribute
+```mlir
+#ftqc.code_props<
+  n = 7,    // physical qubits
+  k = 1,    // logical qubits
+  d = 3     // distance
+>
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+</div>
+</div>
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+---
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Logical Gate Operations
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Single-qubit Clifford (transversal on all codes)
+```mlir
+%out = ftqc.logical_h %q   : <<steane, 3>>
+%out = ftqc.logical_x %q   : <<steane, 3>>
+%out = ftqc.logical_z %q   : <<steane, 3>>
+%out = ftqc.logical_s %q   : <<color_code, 3>>   // transversal on color only
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### Two-qubit gates
+```mlir
+%c, %t = ftqc.logical_cnot %ctrl, %tgt  : (<<steane,3>>, <<steane,3>>) -> (...)
+%a, %b = ftqc.logical_cz   %q0,   %q1   : (<<surface,5>>, <<surface,5>>) -> (...)
+```
 
-## License
-For open source projects, say how it is licensed.
+### Non-Clifford — requires magic state injection
+```mlir
+%ms  = ftqc.prepare_magic_t : !ftqc.magic_state
+%out = ftqc.logical_t %q, %ms : (<<steane,3>>, !ftqc.magic_state) -> <<steane,3>>
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+%ccz = ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
+%a, %b, %c = ftqc.logical_toffoli %c0, %c1, %t, %ccz : (...)
+```
+
+---
+
+## Syndrome Extraction
+
+After each logical gate, syndrome rounds detect errors before they propagate.
+
+### Steane Method — transversal ancilla measurement
+```mlir
+// X-type check: detects Z errors
+%q2, %xsyn = ftqc.steane_x_syndrome %q : <<steane,3>> -> (<<steane,3>>, <6>)
+
+// Z-type check: detects X errors
+%q3, %zsyn = ftqc.steane_z_syndrome %q2 : <<steane,3>> -> (<<steane,3>>, <6>)
+```
+
+### Surface Code Rounds
+```mlir
+%q2, %syn = ftqc.surface_round %q cycles = 3
+    : <<surface,5>> -> (<<surface,5>>, <48>)
+```
+
+### Error Correction
+```mlir
+// Inline correction (syndromes decoded immediately)
+%corrected = ftqc.correct %q, %xsyn : (<<steane,3>>, <6>) -> <<steane,3>>
+
+// Deferred correction via Pauli frame tracking
+%frame = ftqc.create_frame : !ftqc.pauli_frame<1>
+%frame2 = ftqc.pauli_frame_update %frame, %xsyn <{qubitIndex = 0}>
+              : (!ftqc.pauli_frame<1>, <6>) -> !ftqc.pauli_frame<1>
+```
+
+---
+
+## Magic State Distillation
+
+Raw $|T\rangle$ states have high error rate; distillation protocols purify them.
+
+```
+        ┌───┐        ┌────────────┐
+|T⟩  ──┤   │        │            │
+|T⟩  ──┤   │        │  15-to-1   │──▶  |T⟩_clean
+  ⋮    ──┤ EC├───────┤ distillation│     (error ε² for input error ε)
+|T⟩  ──┤   │        │ (Reed-Muller│
+|T⟩  ──┤   │        │  7-to-1)   │
+        └───┘        └────────────┘
+```
+
+### Distillation Ops
+```mlir
+// High-fidelity magic state after distillation (future pass output)
+%t_clean = ftqc.distill_15to1 %raw_t : (!ftqc.magic_state) -> !ftqc.magic_state
+%t_clean = ftqc.distill_7to1  %raw_t : (!ftqc.magic_state) -> !ftqc.magic_state
+```
+
+> **Status**: `--ftqc-magic-distill` pass infrastructure exists; full protocol implementation is in progress.
+
+---
+
+## Transform Pass Pipeline
+
+```
+Source MLIR
+    │
+    ▼  --ftqc-steane-encode / --ftqc-surface-encode
+Encode logical operations into chosen ECC
+    │
+    ▼  --ftqc-insert-syndrome
+Insert syndrome extraction rounds after each gate
+    │
+    ▼  --ftqc-transversal-gates
+Lower S (Steane) → T·T via magic injection; keep S on color code
+    │
+    ▼  --ftqc-magic-distill  (optional)
+Wrap magic state prep in distillation protocol
+    │
+    ▼  --ftqc-pauli-frame-opt  (optional)
+Replace ftqc.correct with deferred Pauli frame tracking
+    │
+    ▼  --ftqc-resource-estimate
+Annotate with T-count, CNOT-count, EC rounds, physical qubit estimate
+    │
+    ▼
+Annotated MLIR + resource report
+```
+
+---
+
+## Analysis Passes
+
+### Fault Path Analysis (`--ftqc-fault-path`)
+Enumerates leading-order fault paths through the circuit.
+
+```
+Fault path analysis for @cnot_fault_paths
+  Fault locations: init_zero(0), logical_h(0), logical_cnot(0,1)
+  Weight-1 paths:  3 paths → logical error rate O(p)
+```
+
+### Threshold Analysis (`--ftqc-threshold`)
+Checks whether the physical error rate is below the code threshold.
+
+```mlir
+// p = 1e-3 < 1% → circuit is below threshold, no warning
+ftqc.init_zero : <<steane, 3>>
+```
+
+### Resource Estimation (`--ftqc-resource-estimate`)
+Emits a structured annotation on each function:
+
+```mlir
+ftqc.resource_annotation {
+  tGateCount = 6 : i64,        logicalQubits = 3 : i64,
+  cnotCount  = 9 : i64,        physicalQubits = 147 : i64,
+  ecRounds   = 36 : i64,       estimatedLogicalErrorRate = 0.0 : f64
+}
+```
+
+---
+
+## Full Pipeline Example — 3-qubit QFT
+
+```mlir
+func.func @qft3_steane(
+    %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, ...
+) -> (...) {
+  // H on q0
+  %h0 = ftqc.logical_h %q0 : <<steane, 3>>
+
+  // Controlled-S (Rz(π/2)) via T-gate injection
+  %ms0 = ftqc.prepare_magic_t : !ftqc.magic_state
+  %t0a = ftqc.logical_t %h0, %ms0  : (<<steane,3>>, !ftqc.magic_state) -> <<steane,3>>
+  %c0a, %t1a = ftqc.logical_cnot %q1, %t0a : ...
+
+  // ... 5 more T gates, 9 CNOTs, 3 Hadamards, 1 SWAP (3 CNOTs)
+}
+```
+
+**After `--ftqc-insert-syndrome --ftqc-transversal-gates --ftqc-resource-estimate`:**
+
+```
+=== FTQC Resource Report ===
+Logical T gates     : 6        EC rounds           : 36
+Logical CNOT gates  : 9        Distillation rounds : 6
+Logical Clifford    : 3        Distillation qubits : 105
+```
+
+---
+
+## Utility Libraries
+
+<div class="columns">
+<div>
+
+### Pauli Algebra (`PauliUtils.h`)
+- Binary symplectic representation of Pauli operators
+- `pauliProduct()`, `pauliWeight()`
+- Clifford tableau simulation
+- `conjugateByGate()` for H, S, CNOT
+- GF(2) Gaussian elimination
+
+### Stabilizer Codes (`StabilizerUtils.h`)
+- CSS code structure (X-checks / Z-checks)
+- `StabilizerCode` class with parity-check matrices
+- Pre-built constants for Steane `[7,1,3]`
+- Distance computation, minimum-weight decoder
+
+</div>
+<div>
+
+### Syndrome Decoder (`SyndromeDecoder.h`)
+
+Abstract decoder hierarchy:
+
+```
+SyndromeDecoder (interface)
+├── LookupTableDecoder  ← O(1) for small codes
+├── MinWeightDecoder    ← MWPM for surface codes
+└── SteaneDecoder       ← Steane-specific
+```
+
+Factory: `createDecoder(eccKind, distance)`
+
+### Fault Path Analysis (`FaultPathAnalysis.h`)
+- `FaultLocation` — qubit index + gate index + error type
+- `FaultPath` — sequence of correlated faults
+- `FaultPathAnalysis` — DFS enumeration up to weight $t = \lfloor(d-1)/2\rfloor$
+
+</div>
+</div>
+
+---
+
+## Project Architecture
+
+```
+qftc/
+├── include/FTQC/
+│   ├── Dialect/
+│   │   ├── FTQCOps.td       ← Op definitions (ODS)
+│   │   ├── FTQCTypes.td     ← Type definitions
+│   │   └── FTQCAttrs.td     ← ECCKind, MagicKind, PauliKind
+│   ├── Analysis/
+│   │   ├── FaultPathAnalysis.h    ← fault enumeration
+│   │   ├── ResourceEstimation.h   ← T/CNOT/EC counts
+│   │   └── ThresholdAnalysis.h    ← below-threshold check
+│   └── Utils/
+│       ├── PauliUtils.h     ← symplectic Pauli algebra
+│       ├── StabilizerUtils.h← CSS code matrices
+│       └── SyndromeDecoder.h← decoder hierarchy
+├── lib/Transforms/
+│   ├── SteaneEncoding.cpp   SurfaceCodeEncoding.cpp  ColorCodeEncoding.cpp
+│   ├── SyndromeExtraction.cpp  TransversalGates.cpp
+│   ├── MagicStateDistillation.cpp  ErrorCorrection.cpp
+│   └── Passes.cpp           ← pass registration
+└── test/                    ← 79 lit tests (all pass)
+    ├── Dialect/  Analysis/  Transforms/  Integration/
+```
+
+---
+
+## Test Suite — 79 Tests, All Pass
+
+| Suite | Tests | Examples |
+|-------|-------|---------|
+| `Dialect/` | 17 | type round-trip, op parse/print, attribute syntax |
+| `Analysis/` | 6 | fault paths, threshold check, resource estimates |
+| `Transforms/` | 52 | syndrome insertion, gate decomposition, EC rounds |
+| `Integration/` | 4 | Bell state, GHZ-4, Grover, 3-qubit QFT |
+
+```bash
+# Run all tests
+llvm-lit build.cmake/test/Transforms \
+         build.cmake/test/Dialect \
+         build.cmake/test/Analysis \
+         build.cmake/test/Integration
+
+# Testing Time: 0.13s   Passed: 79 (100.00%)
+```
+
+Key test patterns validated:
+- Type printer abbreviations (`<<steane, 3>>`, `<6>`, `<CCZ>`)
+- Full pipeline end-to-end on non-trivial circuits
+- Syndrome insertion after every logical gate
+- Pauli frame deferred correction
+
+---
+
+## Current Limitations & Future Work
+
+| Feature | Status |
+|---------|--------|
+| Steane `[[7,1,3]]` full pipeline | ✅ Complete |
+| Surface code (any distance) | ✅ Complete |
+| Color code transversal S | ✅ Parsed; lowering is stub |
+| Fault path analysis | ✅ Weight-1/2 enumeration |
+| Resource estimation | ✅ T / CNOT / EC / physical qubits |
+| 15-to-1 distillation pass | 🚧 Infrastructure present; hangs on large circuits |
+| H·H / X·X canonicalization | ❌ Not implemented |
+| Flag-qubit syndrome extraction | ❌ Pass inserts Steane syndrome only |
+| Shor cat-state extraction | ❌ Same |
+| `--ftqc-lower-to-quantum` | 🚧 Lowering to physical gates |
+| Threshold-aware scheduling | ❌ Future work |
+
+---
+
+<!-- _class: lead -->
+
+## Summary
+
+**FTQC** is a full MLIR dialect for fault-tolerant quantum computing:
+
+- **Types**: logical qubits with ECC annotations, syndromes, magic states
+- **Ops**: Clifford + T gate set, syndrome extraction, error correction, distillation
+- **Passes**: encode → insert-syndrome → transversal-gates → resource-estimate
+- **Analysis**: fault paths, threshold check, physical qubit resource report
+- **79 lit tests**, all passing on LLVM/MLIR 22.0.0git
+
+**Built with**: MLIR ODS (TableGen), C++17, LLVM 22, lit + FileCheck
+
+```bash
+# Try it:
+ftqc-opt --ftqc-insert-syndrome \
+         --ftqc-transversal-gates \
+         --ftqc-resource-estimate \
+         test/Integration/qft3-steane.mlir
+```
