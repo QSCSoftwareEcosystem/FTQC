@@ -26,7 +26,7 @@ MLIR_DIR="${MLIR_DIR:-${LLVM_INSTALL}/lib/cmake/mlir}"
 LLVM_DIR="${LLVM_DIR:-${LLVM_INSTALL}/lib/cmake/llvm}"
 LIT="${LIT:-${LLVM_INSTALL}/../build/bin/llvm-lit}"
 PREFIX="${PREFIX:-${SCRIPT_DIR}/install}"
-BUILD_DIR="${BUILD_DIR:-${PWD}}"
+BUILD_DIR="${BUILD_DIR:-${PWD}/build}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 BUILD_TESTS="${BUILD_TESTS:-ON}"
@@ -78,8 +78,8 @@ echo "==> Building with ${JOBS} jobs"
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
 echo ""
-echo "Binary: ${BUILD_DIR}/src/ftqc-opt"
-"${BUILD_DIR}/src/ftqc-opt" --version 2>&1 | head -1 || true
+echo "Binary: ${BUILD_DIR}/bin/ftqc-opt"
+"${BUILD_DIR}/bin/ftqc-opt" --version 2>&1 | head -1 || true
 
 # ── Install ───────────────────────────────────────────────────────────────────
 if [[ $INSTALL -eq 1 ]]; then
