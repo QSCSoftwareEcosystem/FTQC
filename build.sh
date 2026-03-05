@@ -139,11 +139,7 @@ if [[ -z "${LIT}" ]]; then
   fi
 fi
 PREFIX="${PREFIX:-${SCRIPT_DIR}/install}"
-<<<<<<< HEAD
 BUILD_DIR="${BUILD_DIR:-${SCRIPT_DIR}/build}"
-=======
-BUILD_DIR="${BUILD_DIR:-${PWD}/build}"
->>>>>>> dfa54da783719ec499bb798bf2d6303e2e4cabe5
 JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 BUILD_TESTS="${BUILD_TESTS:-ON}"
