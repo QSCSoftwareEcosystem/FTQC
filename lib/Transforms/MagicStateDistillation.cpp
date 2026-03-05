@@ -265,7 +265,7 @@ struct FTQCMagicDistillPassImpl
     RewritePatternSet patterns(ctx);
     populateMagicDistillPatterns(patterns, protocol_, levels_, targetError_);
 
-    if (failed(applyPatternsGreedily(func, std::move(patterns)))) {
+      if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
       func.emitError("magic state distillation pass failed");
       signalPassFailure();
     }
