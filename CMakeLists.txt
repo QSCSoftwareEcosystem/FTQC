@@ -94,10 +94,19 @@ message(STATUS "LLVM tools binary dir: ${LLVM_TOOLS_BINARY_DIR}")
 #=======================================================================
 option(FTQC_BUILD_TESTS     "Build the test suite"     ON)
 option(FTQC_ENABLE_WARNINGS "Enable extra warnings"    ON)
+option(FTQC_SUPPRESS_UNUSED_WARNINGS "Suppress noisy -Wunused-* warnings" ON)
 
 if(FTQC_ENABLE_WARNINGS)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+    add_compile_options(-Wall -Wextra)
+    if(FTQC_SUPPRESS_UNUSED_WARNINGS)
+      add_compile_options(
+        -Wno-unused-parameter
+        -Wno-unused-variable
+        -Wno-unused-but-set-variable
+        -Wno-unused-function
+      )
+    endif()
   endif()
 endif()
 
