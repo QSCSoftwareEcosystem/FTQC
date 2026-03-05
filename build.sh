@@ -79,7 +79,7 @@ cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
 echo ""
 echo "Binary: ${BUILD_DIR}/bin/ftqc-opt"
-"${BUILD_DIR}/bin/ftqc-opt" --version 2>&1 | head -1 || true
+"${BUILD_DIR}/src/ftqc-opt" --version 2>&1 | head -1 || true
 
 # ── Install ───────────────────────────────────────────────────────────────────
 if [[ $INSTALL -eq 1 ]]; then
