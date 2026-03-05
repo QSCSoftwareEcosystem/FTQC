@@ -18,8 +18,6 @@ target_link_libraries(ftqc-opt PRIVATE
   FTQCUtils
   ${dialect_libs}
   ${conversion_libs}
-  MLIRRegisterAllDialects
-  MLIRRegisterAllPasses
   MLIROptLib
   MLIRIR
   MLIRPass
