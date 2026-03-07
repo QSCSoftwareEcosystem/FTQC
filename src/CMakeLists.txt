@@ -30,4 +30,12 @@ target_link_libraries(ftqc-opt PRIVATE
   MLIRBytecodeWriter
 )
 
+set(REFERENCE_LLVM_VERSION "22.0.0")
+if("${LLVM_PACKAGE_VERSION}" VERSION_GREATER_EQUAL "${REFERENCE_LLVM_VERSION}")
+	target_link_libraries(ftqc-opt PRIVATE
+	  MLIRRegisterAllDialects
+	  MLIRRegisterAllPasses
+	)
+endif()
+
 install(TARGETS ftqc-opt DESTINATION bin)
