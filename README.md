@@ -211,13 +211,13 @@ After each logical gate, syndrome rounds detect errors before they propagate.
 Raw $|T\rangle$ states have high error rate; distillation protocols purify them.
 
 ```
-        ┌───┐        ┌────────────┐
-|T⟩  ──┤   │        │            │
-|T⟩  ──┤   │        │  15-to-1   │──▶  |T⟩_clean
-  ⋮    ──┤ EC├───────┤ distillation│     (error ε² for input error ε)
-|T⟩  ──┤   │        │ (Reed-Muller│
-|T⟩  ──┤   │        │  7-to-1)   │
-        └───┘        └────────────┘
+        ┌───┐        ┌─────────────┐
+ |T⟩  ──┤   │        │             │
+ |T⟩  ──┤   │        │  15-to-1    │──▶  |T⟩_clean
+  ⋮   ──┤ EC├────────┤ distillation│     (error ε² for input error ε)
+ |T⟩  ──┤   │        │ (Reed-Muller│
+ |T⟩  ──┤   │        │  7-to-1)    │
+        └───┘        └─────────────┘
 ```
 
 ### Distillation Ops

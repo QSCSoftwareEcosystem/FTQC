@@ -117,7 +117,7 @@ double ECCAttr::getFTThreshold() const {
 unsigned PauliErrorAttr::getWeight() const {
   unsigned w = 0;
   for (auto a : getPaulis()) {
-    if (auto pa = dyn_cast<IntegerAttr>(a)) {
+    if (auto pa = mlir::dyn_cast<IntegerAttr>(a)) {
       if (pa.getInt() != 0)  // 0 = I
         ++w;
     }

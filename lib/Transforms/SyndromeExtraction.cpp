@@ -143,7 +143,7 @@ struct FTQCInsertSyndromePassImpl
     patterns.add<InsertSyndromeAfterGate<LogicalCNOTOp>>(ctx, method_, rounds_);
     patterns.add<InsertSyndromeAfterGate<LogicalTOp>>(ctx, method_, rounds_);
 
-    if (failed(applyPatternsGreedily(func, std::move(patterns))))
+    if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns))))
       signalPassFailure();
   }
 

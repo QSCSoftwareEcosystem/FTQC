@@ -133,7 +133,7 @@ struct FTQCInsertCorrectionPassImpl
     auto func = getOperation();
     RewritePatternSet pats(&getContext());
     populateCorrectionPatterns(pats);
-    if (failed(applyPatternsGreedily(func, std::move(pats))))
+    if (failed(applyPatternsAndFoldGreedily(func, std::move(pats))))
       signalPassFailure();
   }
 };
@@ -147,7 +147,7 @@ struct FTQCPauliFrameOptPassImpl
     auto func = getOperation();
     RewritePatternSet pats(&getContext());
     populatePauliFramePatterns(pats);
-    if (failed(applyPatternsGreedily(func, std::move(pats))))
+    if (failed(applyPatternsAndFoldGreedily(func, std::move(pats))))
       signalPassFailure();
   }
 };

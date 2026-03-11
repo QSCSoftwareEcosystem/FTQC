@@ -142,7 +142,7 @@ struct FTQCTransversalGatePassImpl
       patterns.add<DecomposeNonTransversalS>(ctx);
     patterns.add<VerifyTransversalT>(ctx, decompose_);
 
-    if (failed(applyPatternsGreedily(func, std::move(patterns))))
+    if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns))))
       signalPassFailure();
   }
 

@@ -279,8 +279,8 @@ struct FTQCSteaneEncodePassImpl
       mlir::RewritePatternSet patterns(ctx);
       populateSteaneEncodePatterns(patterns, distance_, insertEC_);
 
-      if (mlir::failed(
-              mlir::applyPatternsGreedily(func, std::move(patterns)))) {
+            if (mlir::failed(
+              mlir::applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
         func.emitError("Steane encoding pass failed");
         signalPassFailure();
       }

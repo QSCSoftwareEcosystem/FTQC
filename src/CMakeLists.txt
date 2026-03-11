@@ -18,8 +18,6 @@ target_link_libraries(ftqc-opt PRIVATE
   FTQCUtils
   ${dialect_libs}
   ${conversion_libs}
-  MLIRRegisterAllDialects
-  MLIRRegisterAllPasses
   MLIROptLib
   MLIRIR
   MLIRPass
@@ -31,5 +29,13 @@ target_link_libraries(ftqc-opt PRIVATE
   MLIRParser
   MLIRBytecodeWriter
 )
+
+set(REFERENCE_LLVM_VERSION "22.0.0")
+if("${LLVM_PACKAGE_VERSION}" VERSION_GREATER_EQUAL "${REFERENCE_LLVM_VERSION}")
+	target_link_libraries(ftqc-opt PRIVATE
+	  MLIRRegisterAllDialects
+	  MLIRRegisterAllPasses
+	)
+endif()
 
 install(TARGETS ftqc-opt DESTINATION bin)

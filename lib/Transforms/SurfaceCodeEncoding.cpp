@@ -167,7 +167,7 @@ struct FTQCSurfaceEncodePassImpl
     mod.walk([&](func::FuncOp func) {
       RewritePatternSet patterns(ctx);
       populateSurfaceEncodePatterns(patterns, distance_, useLattice_);
-      if (failed(applyPatternsGreedily(func, std::move(patterns)))) {
+      if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
         func.emitError("surface code encoding failed");
         signalPassFailure();
       }
