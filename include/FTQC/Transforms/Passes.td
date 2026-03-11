@@ -241,4 +241,47 @@ def FTQCThresholdAnalysisPass : Pass<"ftqc-threshold", "mlir::ModuleOp"> {
   ];
 }
 
+
+//===----------------------------------------------------------------------===//
+// QASM 3.0 Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToQASM3Pass : Pass<"ftqc-lower-to-qasm3", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to OpenQASM 3.0";
+  let description = [{
+    Walks all `func.func` operations in the module and emits an OpenQASM 3.0
+    representation of each circuit.
+
+    Logical gate ops map directly to standard QASM gates:
+      - `init_zero`       → `qubit qN;`
+      - `init_plus`       → `qubit qN; h qN;`
+      - `logical_h/x/y/z/s` → `h/x/y/z/s qN;`
+      - `logical_t`       → `t qN;`  (magic state consumed silently)
+      - `logical_cnot`    → `cx qA, qB;`
+      - `logical_cz`      → `cz qA, qB;`
+      - `logical_toffoli` → `ccx qA, qB, qC;`
+      - `logical_measure` → `bit bN = measure qN;`
+
+    Fault-tolerant infrastructure ops (syndrome extraction, error correction,
+    Pauli-frame updates) emit QASM line comments when `include-comments=true`.
+
+    The generated QASM string is written to the file path given by `output-file`
+    (or to stderr if empty).  It is also attached to the module as the string
+    attribute `ftqc.qasm3` so that FileCheck tests can verify it via the MLIR
+    IR output (stdout).
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write QASM 3.0 output to this path (empty = write to stderr)">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit QASM comments for FT-only ops (syndrome, correction, frame)">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
 #endif // FTQC_PASSES_TD

@@ -7,6 +7,7 @@ add_mlir_library(FTQCTransforms
   ErrorCorrection.cpp
   TransversalGates.cpp
   LowerToQuantum.cpp
+  LowerToQASM3.cpp
   Passes.cpp
 
   DEPENDS

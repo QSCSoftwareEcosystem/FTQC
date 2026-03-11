@@ -18,45 +18,154 @@ using namespace mlir;
 using namespace mlir::ftqc;
 
 //===----------------------------------------------------------------------===//
+// ECC physical parameter tables
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Physical qubit parameters derived from ECC kind and code distance.
+struct ECCPhysicalParams {
+  unsigned physPerLogical;    ///< Data qubits per logical qubit.
+  unsigned ancillaPerLogical; ///< Ancilla qubits per logical qubit (reused each round).
+  double   threshold;         ///< Fault-tolerance threshold p_th.
+};
+
+/// Return physical qubit parameters for the given ECC family and distance.
+///
+/// Formulas:
+///   Steane [[7,1,3]]:
+///     data = 7  (fixed; Hamming code structure)
+///     ancilla = 6  (3 X-stabiliser + 3 Z-stabiliser measurement qubits)
+///     threshold ≈ 1 %
+///
+///   Rotated surface code, distance d:
+///     data    = d²          (physical data qubits on the d×d lattice)
+///     ancilla = d² − 1      (X + Z check qubits, reused each round)
+///     threshold ≈ 1 %
+///
+///   Triangular 2D color code, distance d:
+///     data    = (3d² + 1) / 4   (approximately half the surface overhead)
+///     ancilla = d²  / 2
+///     threshold ≈ 0.3 %  (more noise-sensitive than surface code)
+ECCPhysicalParams eccPhysicalParams(ECCKind kind, unsigned d) {
+  switch (kind) {
+  case ECCKind::Steane:
+    return {7u, 6u, 0.01};
+
+  case ECCKind::Surface:
+    return {d * d, d * d > 0 ? d * d - 1 : 0, 0.01};
+
+  case ECCKind::ColorCode:
+    return {(3u * d * d + 1u) / 4u, d * d / 2u, 0.003};
+
+  case ECCKind::Concatenated:
+    // Concatenated code level-k: each level squares the suppression.
+    // Approx: n = 7^k, ancilla = 6^k  (Steane base code, k = distance param)
+    // Use 'd' as concatenation level here.
+    return {1u << (3u * d), (1u << (3u * d)) - 1u, 0.01};
+
+  case ECCKind::Repetition:
+    // Classical repetition code on d qubits: only corrects bit-flip errors.
+    return {d, d - 1u, 0.5}; // threshold 50% (only bit-flip protection)
+
+  case ECCKind::Compass:
+    // Compass codes interpolate between repetition and surface code.
+    // Approximate as a sub-optimal surface code: d² data, (d²-1)/2 ancilla.
+    return {d * d, (d * d - 1u) / 2u, 0.005};
+  }
+  return {7u, 6u, 0.01}; // unreachable
+}
+
+/// Human-readable string for an ECC family.
+llvm::StringRef eccName(ECCKind kind) {
+  switch (kind) {
+  case ECCKind::Steane:       return "Steane [[7,1,3]]";
+  case ECCKind::Surface:      return "surface code";
+  case ECCKind::ColorCode:    return "2D color code";
+  case ECCKind::Concatenated: return "concatenated code";
+  case ECCKind::Repetition:   return "repetition code";
+  case ECCKind::Compass:      return "compass code";
+  }
+  return "unknown";
+}
+
+} // anonymous namespace
+
+//===----------------------------------------------------------------------===//
 // ResourceReport::toString
 //===----------------------------------------------------------------------===//
 
 std::string ResourceReport::toString() const {
   std::ostringstream ss;
   ss << "=== FTQC Resource Report ===\n";
-  ss << "Logical qubits      : " << logicalQubits << "\n";
-  ss << "Logical T gates     : " << logicalTGates  << "\n";
-  ss << "Logical CNOT gates  : " << logicalCnotGates << "\n";
-  ss << "Logical Clifford    : " << logicalCliffordGates << "\n";
-  ss << "EC rounds           : " << ecRounds << "\n";
-  ss << "Distillation rounds : " << distillationRounds << "\n";
+
+  // ── ECC metadata ──────────────────────────────────────────────────────────
+  if (eccDetected) {
+    ss << "ECC code              : " << eccName(eccKind).str()
+       << "  d=" << eccDistance << "\n";
+  } else {
+    ss << "ECC code              : (not detected — no logical qubits found)\n";
+  }
+
+  // ── Logical resources ─────────────────────────────────────────────────────
+  ss << "Logical qubits        : " << logicalQubits << "\n";
+  ss << "Logical T gates       : " << logicalTGates  << "\n";
+  ss << "Logical CNOT gates    : " << logicalCnotGates << "\n";
+  ss << "Logical Clifford gates: " << logicalCliffordGates << "\n";
+  ss << "EC rounds             : " << ecRounds << "\n";
+  ss << "Distillation rounds   : " << distillationRounds << "\n";
+
+  // ── Physical resources ────────────────────────────────────────────────────
   ss << "---\n";
   ss << "Physical data qubits  : " << physicalDataQubits << "\n";
   ss << "Physical ancilla      : " << physicalAncillaQubits << "\n";
   ss << "Physical total        : " << physicalTotalQubits << "\n";
   ss << "Distillation qubits   : " << distillationQubits << "\n";
+
+  // ── Error estimates ───────────────────────────────────────────────────────
   ss << "---\n";
   ss << "Physical error rate   : " << physicalErrorRate << "\n";
-  ss << "Est. logical error    : " << estimatedLogicalError << "\n";
+  ss << "Est. logical error    : ";
+  if (physicalErrorRate == 0.0) {
+    ss << "(set --phys-error to compute)\n";
+  } else {
+    // Format as scientific notation for small values
+    std::ostringstream val;
+    val << std::scientific << estimatedLogicalError;
+    ss << val.str() << "\n";
+  }
   return ss.str();
 }
+
+//===----------------------------------------------------------------------===//
+// ResourceReport::computePhysical
+//===----------------------------------------------------------------------===//
 
 void ResourceReport::computePhysical(unsigned physPerLogical,
                                       unsigned ancillaPerLogical,
                                       double physError,
-                                      double threshold) {
+                                      double threshold,
+                                      unsigned distance) {
   physicalErrorRate      = physError;
   physicalDataQubits     = logicalQubits * physPerLogical;
   physicalAncillaQubits  = logicalQubits * ancillaPerLogical;
   physicalTotalQubits    = physicalDataQubits + physicalAncillaQubits
                          + distillationQubits;
 
-  // Leading order estimate: p_L ≈ (p/p_th)^(d+1)/2
+  // Leading-order logical error rate:
+  //   p_L ≈ 0.1 × (p / p_th)^⌈(d+1)/2⌉   per syndrome round per logical qubit
+  //   p_total = p_L × ecRounds × logicalQubits
+  //
+  // Above threshold: errors accumulate faster than they are corrected → p_L = 1.
   if (threshold > 0.0 && physError < threshold) {
-    double ratio = physError / threshold;
-    estimatedLogicalError = std::pow(ratio, 2.0) * logicalTGates;
+    unsigned t = (distance + 1u) / 2u;          // exponent ⌈(d+1)/2⌉
+    double pL  = 0.1 * std::pow(physError / threshold, static_cast<double>(t));
+    estimatedLogicalError = pL * static_cast<double>(ecRounds)
+                               * static_cast<double>(logicalQubits);
+    if (estimatedLogicalError > 1.0)
+      estimatedLogicalError = 1.0;
   } else {
-    estimatedLogicalError = 1.0;   // above threshold
+    estimatedLogicalError = 1.0; // above threshold: uncorrectable
   }
 }
 
@@ -66,10 +175,7 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
 
 ResourceReport ResourceEstimator::estimate(func::FuncOp func) {
   report_ = ResourceReport{};
-
-  // Walk the function and count operations.
   func.walk([this](Operation *op) { visitOp(op); });
-
   return report_;
 }
 
@@ -79,10 +185,32 @@ ResourceReport ResourceEstimator::estimateModule(ModuleOp mod) {
   return report_;
 }
 
+/// Try to detect ECC info from a LogicalQubitType; store in report_ if found.
+void ResourceEstimator::tryDetectECC(mlir::Type t) {
+  if (report_.eccDetected)
+    return;
+  if (auto qt = mlir::dyn_cast<LogicalQubitType>(t)) {
+    report_.eccKind     = qt.getCode().getKind();
+    report_.eccDistance = qt.getCode().getDistance();
+    report_.eccDetected = true;
+  }
+}
+
 void ResourceEstimator::visitOp(Operation *op) {
   llvm::TypeSwitch<Operation*, void>(op)
-    .Case<InitZeroOp, InitPlusOp>([&](auto) {
+    // Scan function argument types — handles circuits like QFT-3 where
+    // logical qubits arrive as function arguments rather than init_zero ops.
+    .Case<func::FuncOp>([&](func::FuncOp func) {
+      for (auto argType : func.getFunctionType().getInputs()) {
+        if (auto qt = mlir::dyn_cast<LogicalQubitType>(argType)) {
+          ++report_.logicalQubits;
+          tryDetectECC(argType);
+        }
+      }
+    })
+    .Case<InitZeroOp, InitPlusOp>([&](Operation *initOp) {
       ++report_.logicalQubits;
+      tryDetectECC(initOp->getResult(0).getType());
     })
     .Case<EncodeOp>([&](auto) {
       ++report_.logicalQubits;
@@ -138,7 +266,17 @@ struct FTQCResourceEstimatePassImpl
     ResourceEstimator est;
     auto report = est.estimateModule(mod);
 
-    // Annotate each function.
+    // Derive physical qubit counts and logical error rate from the ECC
+    // detected in the IR.  physError = 1e-3 is a typical superconducting
+    // qubit gate error rate; adjust via future pass option if needed.
+    if (report.eccDetected) {
+      auto params = eccPhysicalParams(report.eccKind, report.eccDistance);
+      constexpr double physError = 1e-3;
+      report.computePhysical(params.physPerLogical, params.ancillaPerLogical,
+                             physError, params.threshold, report.eccDistance);
+    }
+
+    // Annotate each function with the computed totals.
     mod.walk([&](func::FuncOp func) {
       OpBuilder builder(func.getBody().front().getTerminator());
       builder.setInsertionPointToStart(&func.getBody().front());

@@ -31,6 +31,7 @@
 #ifndef FTQC_ANALYSIS_RESOURCEESTIMATION_H
 #define FTQC_ANALYSIS_RESOURCEESTIMATION_H
 
+#include "FTQC/Dialect/FTQCAttrs.h"   // ECCKind
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
@@ -80,7 +81,14 @@ struct ResourceReport {
   // Error estimates
   //------------------------------------------------------------------------
   double physicalErrorRate     = 0.0; ///< Assumed physical gate error rate (per gate).
-  double estimatedLogicalError = 0.0; ///< Estimated logical error rate per logical gate.
+  double estimatedLogicalError = 0.0; ///< Estimated logical error rate for full circuit.
+
+  //------------------------------------------------------------------------
+  // ECC metadata (detected from IR qubit types)
+  //------------------------------------------------------------------------
+  ECCKind  eccKind     = ECCKind::Steane; ///< ECC family detected from logical qubit types.
+  uint32_t eccDistance = 3;              ///< Code distance detected from logical qubit types.
+  bool     eccDetected = false;          ///< True once ECC info has been read from IR.
 
   //------------------------------------------------------------------------
   // Circuit depth
@@ -96,12 +104,18 @@ struct ResourceReport {
   /// Sets `physicalDataQubits`, `physicalAncillaQubits`, `physicalTotalQubits`,
   /// and `estimatedLogicalError` using leading-order fault-tolerance formulae.
   ///
-  /// @param physicalPerLogical  Physical data qubits per logical qubit (e.g. 7 for Steane).
-  /// @param ancillaPerLogical   Ancilla qubits per logical qubit per syndrome round.
-  /// @param physicalError       Physical gate error rate p.
+  /// Logical error rate formula (leading order):
+  ///   p_L ≈ 0.1 × (p / p_th)^⌈(d+1)/2⌉  per syndrome round per logical qubit
+  ///   p_total ≈ p_L × ecRounds × logicalQubits
+  ///
+  /// @param physicalPerLogical  Physical data qubits per logical qubit.
+  /// @param ancillaPerLogical   Ancilla qubits per logical qubit (reused each round).
+  /// @param physicalError       Assumed physical gate error rate p.
   /// @param threshold           Code-specific fault-tolerance threshold p_th.
+  /// @param distance            Code distance d (used in error-rate exponent).
   void computePhysical(unsigned physicalPerLogical, unsigned ancillaPerLogical,
-                       double physicalError, double threshold);
+                       double physicalError, double threshold,
+                       unsigned distance = 3);
 };
 
 //===----------------------------------------------------------------------===//
@@ -139,6 +153,7 @@ private:
   ResourceReport report_;
 
   void visitOp(mlir::Operation *op);          ///< Dispatch to specialised visitor.
+  void tryDetectECC(mlir::Type t);            ///< Extract ECC info from a logical qubit type.
   void visitEncode(mlir::Operation *op);      ///< Handle ftqc.init_zero / encode ops.
   void visitLogicalGate(mlir::Operation *op); ///< Handle logical gate ops.
   void visitSyndrome(mlir::Operation *op);    ///< Handle syndrome extraction ops.

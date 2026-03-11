@@ -168,6 +168,21 @@ std::unique_ptr<mlir::Pass> createMagicDistillPass(const std::string &protocol,
 /// @brief Create the lowering pass to a generic `quantum` dialect.
 std::unique_ptr<mlir::Pass> createLowerToQuantumPass();
 
+/// @brief Create the QASM 3.0 translation pass with default options
+///        (`output-file=""` writes to stderr, `include-comments=true`).
+///
+/// The pass walks every `func.func` in the module and emits an OpenQASM 3.0
+/// string mapping logical gates to standard QASM gates (h, x, y, z, s, t,
+/// cx, cz, ccx, measure).  FT-infrastructure ops (syndrome extraction,
+/// error correction, Pauli-frame updates) emit QASM line comments.
+///
+/// The QASM string is also attached to the module as the `ftqc.qasm3`
+/// attribute so that FileCheck tests can verify it from the MLIR IR text.
+std::unique_ptr<mlir::Pass> createLowerToQASM3Pass();
+
+/// Options are set on the command line:
+///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
+
 /// @brief Create the transversal-gate pass with default options
 ///        (non-transversal gates emit a warning but are not decomposed).
 std::unique_ptr<mlir::Pass> createTransversalGatePass();
