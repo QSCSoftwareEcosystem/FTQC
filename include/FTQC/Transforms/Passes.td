@@ -243,6 +243,56 @@ def FTQCThresholdAnalysisPass : Pass<"ftqc-threshold", "mlir::ModuleOp"> {
 
 
 //===----------------------------------------------------------------------===//
+// QIR Base Profile Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToQIRPass : Pass<"ftqc-lower-to-qir", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to QIR Base Profile LLVM IR (.ll)";
+  let description = [{
+    Walks all `func.func` operations in the module and emits a QIR Base
+    Profile LLVM IR representation of each circuit.
+
+    Logical gate ops map to QIR runtime calls:
+      - `init_zero`          → qubit index (no gate emitted)
+      - `init_plus`          → qubit index + `__quantum__qis__h__body`
+      - `logical_h/x/y/z/s`  → `__quantum__qis__{h,x,y,z,s}__body`
+      - `logical_t`          → `__quantum__qis__t__body`
+      - `logical_cnot`       → `__quantum__qis__cnot__body`
+      - `logical_cz`         → `__quantum__qis__cz__body`
+      - `logical_toffoli`    → `__quantum__qis__ccx__body`
+      - `logical_measure`    → `__quantum__qis__mz__body`
+
+    Fault-tolerant infrastructure ops (syndrome extraction, error correction,
+    Pauli-frame updates) emit LLVM IR line comments when `include-comments=true`.
+
+    Qubits and results follow the QIR Base Profile opaque-pointer convention:
+      qubit/result 0  →  ptr null
+      qubit/result N  →  ptr inttoptr (i64 N to ptr)
+
+    All measurement results are recorded at function exit via
+    `__quantum__rt__result_record_output`.  The emitted function carries
+    the `entry_point` and `qir_profiles="base"` attributes required by
+    QIR-aware toolchains (e.g. pyqir, QIR Runner).
+
+    The generated IR string is written to the file path given by `output-file`
+    (or to stderr if empty).  It is also attached to the module as the string
+    attribute `ftqc.qir` for downstream passes and FileCheck tests.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write QIR .ll output to this path (empty = write to stderr)">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit IR comments for FT-only ops (syndrome, correction, frame)">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // QASM 3.0 Translation Pass
 //===----------------------------------------------------------------------===//
 
