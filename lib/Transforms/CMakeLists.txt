@@ -9,6 +9,7 @@ add_mlir_library(FTQCTransforms
   LowerToQuantum.cpp
   LowerToQASM3.cpp
   LowerToSTIM.cpp
+  LowerToQIR.cpp
   Passes.cpp
 
   DEPENDS

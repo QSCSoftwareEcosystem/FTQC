@@ -177,6 +177,16 @@ std::unique_ptr<mlir::Pass> createLowerToQuantumPass();
 /// string is also attached as the `ftqc.stim` module attribute.
 std::unique_ptr<mlir::Pass> createLowerToSTIMPass();
 
+/// @brief Create the QIR Base Profile translation pass with default options
+///        (`output-file=""` writes to stderr, `include-comments=true`).
+///
+/// The pass walks every `func.func` in the module and emits a QIR Base Profile
+/// LLVM IR string mapping logical gates to `__quantum__qis__*` runtime calls.
+/// Qubit and result indices follow the Base Profile opaque-pointer convention.
+/// All measurement results are recorded via `__quantum__rt__result_record_output`
+/// at function exit.  The IR is conformant with QIR Base Profile v1.0.
+std::unique_ptr<mlir::Pass> createLowerToQIRPass();
+
 /// @brief Create the QASM 3.0 translation pass with default options
 ///        (`output-file=""` writes to stderr, `include-comments=true`).
 ///
