@@ -6,3 +6,4 @@ CMakeCache.txt
 .cache/
 docs/html/
 install/
+out/
