@@ -284,4 +284,67 @@ def FTQCLowerToQASM3Pass : Pass<"ftqc-lower-to-qasm3", "mlir::ModuleOp"> {
   ];
 }
 
+
+//===----------------------------------------------------------------------===//
+// STIM Physical Circuit Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToSTIMPass : Pass<"ftqc-lower-to-stim", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to a STIM stabilizer circuit for QEC simulation";
+  let description = [{
+    Expands each logical qubit in the FTQC IR into a physical qubit block for
+    the specified error-correcting code and emits a STIM stabilizer circuit
+    suitable for Monte Carlo QEC simulation.
+
+    Qubit layout for Steane [[7,1,3]] per logical qubit (base index B):
+      - Data qubits    : B+0 .. B+6
+      - X ancilla      : B+7  (Sx1), B+8  (Sx2), B+9  (Sx3)
+      - Z ancilla      : B+10 (Sz1), B+11 (Sz2), B+12 (Sz3)
+
+    Stabilizers (Sx = Sz, CSS property):
+      - Stab 1 : qubits {0,2,4,6}
+      - Stab 2 : qubits {1,2,5,6}
+      - Stab 3 : qubits {3,4,5,6}
+
+    Logical gate mapping:
+      - `init_zero`           → RESET + encoding (H + CX cascade)
+      - `init_plus`           → init_zero + H on all data qubits
+      - `logical_{h,x,y,z,s}` → transversal gate on all 7 data qubits
+      - `logical_cnot`        → transversal CX (ctrl_i, tgt_i) i=0..6
+      - `logical_cz`          → transversal CZ (qubit0_i, qubit1_i) i=0..6
+      - `logical_t`           → approximated as S (comment emitted; STIM is Clifford-only)
+      - `logical_measure`     → M all data qubits + OBSERVABLE_INCLUDE
+
+    Syndrome extraction (emitted after each logical gate):
+      - X syndrome: RESET anc, H anc, CX anc→data, H anc, M anc
+      - Z syndrome: RESET anc, CX data→anc, M anc
+      - DETECTOR records compare consecutive syndrome rounds
+
+    Noise model (when physical-error-rate > 0):
+      - After single-qubit gates : DEPOLARIZE1(p)
+      - After two-qubit gates    : DEPOLARIZE2(p)
+      - After RESET              : X_ERROR(p)
+      - Before M                 : X_ERROR(p)
+
+    The generated STIM string is written to `output-file` (or stderr if empty)
+    and attached to the module as the `ftqc.stim` string attribute.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write STIM output to this path (empty = write to stderr)">,
+    Option<"physErrorRate", "physical-error-rate", "double", "1e-3",
+           "Physical gate depolarizing error rate p (0 = noiseless)">,
+    Option<"syndromeRounds", "syndrome-rounds", "unsigned", "1",
+           "Number of syndrome extraction rounds after each logical gate">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit # comments for FT-only ops in the STIM output">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
 #endif // FTQC_PASSES_TD

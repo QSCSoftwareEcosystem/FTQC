@@ -168,6 +168,15 @@ std::unique_ptr<mlir::Pass> createMagicDistillPass(const std::string &protocol,
 /// @brief Create the lowering pass to a generic `quantum` dialect.
 std::unique_ptr<mlir::Pass> createLowerToQuantumPass();
 
+/// @brief Create the STIM physical circuit translation pass with default options
+///        (`output-file=""` writes to stderr, `physical-error-rate=1e-3`,
+///         `syndrome-rounds=1`, `include-comments=true`).
+///
+/// Expands each logical FTQC qubit into a Steane [[7,1,3]] physical block and
+/// emits a STIM stabilizer circuit for QEC Monte Carlo simulation.  The STIM
+/// string is also attached as the `ftqc.stim` module attribute.
+std::unique_ptr<mlir::Pass> createLowerToSTIMPass();
+
 /// @brief Create the QASM 3.0 translation pass with default options
 ///        (`output-file=""` writes to stderr, `include-comments=true`).
 ///
