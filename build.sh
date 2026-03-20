@@ -16,9 +16,13 @@
 #   PREFIX     installation prefix  (default: ./install)
 #   BUILD_DIR  build directory      (default: ./build)
 #   JOBS       parallel jobs        (default: nproc)
+#   TRACE      set to 1 to enable shell command tracing (default: 0)
 
 set -euo pipefail
-set -x
+TRACE="${TRACE:-0}"
+if [[ "${TRACE}" == "1" ]]; then
+  set -x
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 LLVM_INSTALL="${LLVM_INSTALL:-${SCRIPT_DIR}/../llvm-project.c014/install}"
