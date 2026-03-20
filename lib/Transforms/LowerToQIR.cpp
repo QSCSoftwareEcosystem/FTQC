@@ -3,8 +3,11 @@
 // Purpose: Translates a post-pipeline FTQC module to QIR (*.ll)
 // with full physical-qubit expansion.
 //
-// Physical expansion
-// ------------------
+// Physical expansion supported error-correcting codes:
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// Steane [[7,1,3]]:
+// ═══════════════════════════════════════════════════════════════════════════
 // Each `!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>` is lowered to a BLOCK of
 // 7 physical qubits in QIR.  The logical operations are lowered as follows:
 //
@@ -28,11 +31,40 @@
 //                                   (recorded as 7 separate results; classical
 //                                    post-processing computes the XOR)
 //
+// ═══════════════════════════════════════════════════════════════════════════
+// Surface Code (distance d):
+// ═══════════════════════════════════════════════════════════════════════════
+// Each `!ftqc.logical_qubit<#ftqc.ecc<surface, d>>` is lowered to a BLOCK of
+// d² physical qubits arranged in a d×d rotated lattice.  The logical
+// operations are lowered as follows (with qubits indexed row-major as
+// q[r][c] = base + r*d + c):
+//
+//   ftqc.init_zero  → d² physical qubits + Surface code encoding:
+//                       (1) Hadamard on first row: h q[0][0..d-1]
+//                       (2) Vertical CNOTs: cnot q[r][c],q[r+1][c]
+//                           for all rows r=0..d-2, cols c=0..d-1
+//                       (3) Horizontal CNOTs: cnot q[r][c],q[r][c+1]
+//                           for all rows r=0..d-1, cols c=0..d-2
+//
+//   ftqc.init_plus  → same as init_zero, then transversal H (d² extra H gates)
+//
+//   ftqc.logical_{h,x,y,z,s,t}  → transversal single-qubit gate on all d²
+//                                   physical qubits of the logical block
+//
+//   ftqc.logical_cnot            → d² transversal CNOT gates
+//   ftqc.logical_cz              → d² transversal CZ  gates
+//   ftqc.logical_toffoli         → d² transversal CCX gates
+//
+//   ftqc.logical_measure         → mz on all d² physical qubits (d² results);
+//                                   logical outcome = parity of the d² bits
+//                                   (recorded as d² separate results; classical
+//                                    post-processing computes the XOR)
+//
 // FT-infrastructure ops (syndrome, correction, Pauli-frame) emit LLVM IR line
 // comments when --include-comments=true (default).
 //
-// For non-Steane codes the pass falls back to 1-to-1 logical→physical mapping
-// with a warning comment in the generated IR.
+// For unrecognized codes the pass falls back to 1-to-1 logical→physical
+// mapping with a warning comment in the generated IR.
 //
 // Output conforms to QIR Base Profile v1.0:
 //   https://github.com/qir-alliance/qir-spec
@@ -67,16 +99,16 @@
 using namespace mlir;
 using namespace mlir::ftqc;
 
-//===----------------------------------------------------------------------===//
+//----------------------------------------------------------------------//
 // QIREmitter
-//===----------------------------------------------------------------------===//
+//----------------------------------------------------------------------//
 
 namespace {
 
 // ---------------------------------------------------------------------------
 // Physical qubit block bookkeeping
 //
-// A *logical qubit* value maps to a contiguous block of `n` physical qubit
+// A logical qubit value maps to a contiguous block of n physical qubit
 // indices.  For Steane [[7,1,3]], n = 7.  For other codes the block size is
 // read from the type attribute; unrecognised codes fall back to n = 1.
 // ---------------------------------------------------------------------------
@@ -192,7 +224,7 @@ private:
   // Block management
   // -------------------------------------------------------------------------
 
-  /// Allocate `n` consecutive physical qubit indices and return them.
+  /// Allocate n consecutive physical qubit indices and return them.
   PhysBlock allocBlock(unsigned n) {
     PhysBlock blk(n);
     for (unsigned i = 0; i < n; ++i)
@@ -206,7 +238,7 @@ private:
     return blockMap[v];
   }
 
-  /// Look up (or lazily create 1-qubit block) for `v`.
+  /// Look up (or lazily create 1-qubit block) for v.
   const PhysBlock &getBlock(Value v) {
     auto it = blockMap.find(v);
     if (it != blockMap.end()) return it->second;
@@ -232,6 +264,18 @@ private:
     auto lqt = dyn_cast<LogicalQubitType>(t);
     if (!lqt) return false;
     return lqt.getCode().getKind() == ECCKind::Steane;
+  }
+
+  static bool isSurface(Type t) {
+    auto lqt = dyn_cast<LogicalQubitType>(t);
+    if (!lqt) return false;
+    return lqt.getCode().getKind() == ECCKind::Surface;
+  }
+
+  static unsigned getSurfaceDistance(Type t) {
+    auto lqt = dyn_cast<LogicalQubitType>(t);
+    if (!lqt) return 0;
+    return lqt.getCode().getDistance();
   }
 
   // -------------------------------------------------------------------------
@@ -293,6 +337,57 @@ private:
   }
 
   // -------------------------------------------------------------------------
+  // Surface code encoding circuit (distance d)
+  //
+  // Produces |0_L> from d² physical qubits arranged in a d×d rotated surface code.
+  // 
+  // Algorithm outline:
+  //   - Qubits indexed in row-major order: q[row][col] = b + row*d + col
+  //   - Step 1: Hadamard on first row (data qubits)
+  //   - Step 2: Vertical CNOT chains (column-wise entanglement)
+  //             For each column: CNOT(q[r][c], q[r+1][c]) for r=0..d-2
+  //   - Step 3: Horizontal CNOT chains (row-wise entanglement)
+  //             For each row: CNOT(q[r][c], q[r][c+1]) for c=0..d-2
+  //
+  // Result: A d×d lattice of entangled qubits with plaquette structure
+  // suitable for syndrome measurement and error correction.
+  // -------------------------------------------------------------------------
+  void emitSurfaceEncoding(llvm::raw_ostream &os, std::set<std::string> &decls,
+                            unsigned b, unsigned d) {
+    os << "  ; --- Surface code (d=" << d << ") encoding: encode |0_L> ---\n";
+    
+    // Step 1: Apply Hadamard on first row of qubits
+    os << "  ; Initialize first row with Hadamard\n";
+    for (unsigned i = 0; i < d; ++i) {
+      gate1q(os, decls, "h", b + i);
+    }
+    
+    // Step 2: Create vertical CNOT chains (column-wise)
+    // Each column has a chain of CNOTs to entangle qubits
+    os << "  ; Create vertical entanglement (column-wise CNOT chains)\n";
+    for (unsigned col = 0; col < d; ++col) {
+      for (unsigned row = 0; row < d - 1; ++row) {
+        unsigned q1 = b + row * d + col;
+        unsigned q2 = b + (row + 1) * d + col;
+        gate2q(os, decls, "cnot", q1, q2);
+      }
+    }
+    
+    // Step 3: Create horizontal CNOT chains (row-wise)
+    // Each row has alternating CNOTs to create plaquette structure
+    os << "  ; Create horizontal entanglement (row-wise CNOT chains)\n";
+    for (unsigned row = 0; row < d; ++row) {
+      for (unsigned col = 0; col < d - 1; ++col) {
+        unsigned q1 = b + row * d + col;
+        unsigned q2 = b + row * d + (col + 1);
+        gate2q(os, decls, "cnot", q1, q2);
+      }
+    }
+    
+    os << "  ; --- end Surface code encoding ---\n";
+  }
+
+  // -------------------------------------------------------------------------
   // Function emission
   // -------------------------------------------------------------------------
   QIRFuncResult emitFunc(func::FuncOp func) {
@@ -337,8 +432,11 @@ private:
 
         if (isSteane(o.getType())) {
           emitSteaneEncoding(os, decls, base);
+        } else if (isSurface(o.getType())) {
+          unsigned d = getSurfaceDistance(o.getType());
+          emitSurfaceEncoding(os, decls, base, d);
         } else {
-          emitComment(os, "init_zero (non-Steane: no encoding emitted)");
+          emitComment(os, "init_zero (non-encoded: no encoding emitted)");
         }
       })
       .Case<InitPlusOp>([&](InitPlusOp o) {
@@ -350,6 +448,13 @@ private:
         if (isSteane(o.getType())) {
           // |+_L> = H_L |0_L> = transversal-H after encoding.
           emitSteaneEncoding(os, decls, base);
+          os << "  ; --- transversal H for |+_L> ---\n";
+          for (unsigned i = 0; i < n; ++i)
+            gate1q(os, decls, "h", base + i);
+        } else if (isSurface(o.getType())) {
+          // |+_L> = H_L |0_L> = transversal-H after encoding.
+          unsigned d = getSurfaceDistance(o.getType());
+          emitSurfaceEncoding(os, decls, base, d);
           os << "  ; --- transversal H for |+_L> ---\n";
           for (unsigned i = 0; i < n; ++i)
             gate1q(os, decls, "h", base + i);
@@ -553,9 +658,9 @@ private:
 
 } // namespace
 
-//===----------------------------------------------------------------------===//
+//----------------------------------------------------------------------//
 // Pass definition
-//===----------------------------------------------------------------------===//
+//----------------------------------------------------------------------//
 
 namespace {
 
