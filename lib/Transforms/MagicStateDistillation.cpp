@@ -262,13 +262,77 @@ struct FTQCMagicDistillPassImpl
     auto func = getOperation();
     auto *ctx = &getContext();
 
-    RewritePatternSet patterns(ctx);
-    populateMagicDistillPatterns(patterns, protocol_, levels_, targetError_);
+    // Collect every PrepareMagicTOp that exists *before* any rewrite.
+    //
+    // We must NOT use applyPatternsAndFoldGreedily here.  Both distillation
+    // patterns create new PrepareMagicTOp ops (the raw noisy inputs to the
+    // distillation circuit) and then return success().  The greedy driver
+    // immediately re-queues those new ops, fires the pattern again, creates
+    // yet more PrepareMagicTOp ops, and so on — infinite loop.
+    //
+    // By snapshotting the original ops first and processing each exactly once
+    // with a plain IRRewriter, the freshly created "noisy input" ops are
+    // simply left in place as-is (they represent the unrefined ancillae that
+    // feed the distillation hardware and are not further distilled).
+    SmallVector<PrepareMagicTOp, 8> toDistill;
+    func.walk([&](PrepareMagicTOp op) { toDistill.push_back(op); });
 
-      if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
-      func.emitError("magic state distillation pass failed");
-      signalPassFailure();
+    if (toDistill.empty())
+      return;
+
+    IRRewriter rewriter(ctx);
+    bool anyFailed = false;
+
+    for (PrepareMagicTOp op : toDistill) {
+      rewriter.setInsertionPoint(op);
+      Location loc  = op.getLoc();
+      auto msType   = MagicStateType::get(ctx, MagicKind::T);
+      Value distilled;
+
+      if (protocol_ == "15to1" || protocol_ == "auto") {
+        uint64_t needed = totalInputsRequired(levels_);
+        SmallVector<Value> noisyInputs;
+        noisyInputs.reserve(needed);
+        for (uint64_t i = 0; i < needed; ++i)
+          noisyInputs.push_back(rewriter.create<PrepareMagicTOp>(loc, msType));
+
+        if (levels_ == 1) {
+          auto dr = build15to1Circuit(rewriter, loc,
+                                     ArrayRef<Value>(noisyInputs).take_front(15));
+          distilled = dr.outputState;
+        } else {
+          SmallVector<Value> cur(noisyInputs);
+          for (unsigned lvl = 0; lvl < levels_; ++lvl) {
+            SmallVector<Value> next;
+            for (size_t i = 0; i + 14 < cur.size(); i += 15) {
+              auto batch = ArrayRef<Value>(cur).slice(i, 15);
+              auto dr    = build15to1Circuit(rewriter, loc, batch);
+              next.push_back(dr.outputState);
+            }
+            cur = next;
+          }
+          distilled = cur.empty() ? Value{} : cur[0];
+        }
+
+      } else if (protocol_ == "7to1") {
+        SmallVector<Value> inputs;
+        inputs.reserve(7);
+        for (unsigned i = 0; i < 7; ++i)
+          inputs.push_back(rewriter.create<PrepareMagicTOp>(loc, msType));
+        auto dr = build7to1Circuit(rewriter, loc, inputs);
+        distilled = dr.outputState;
+      }
+
+      if (!distilled) {
+        op.emitError("magic-distill: unsupported protocol or empty output");
+        anyFailed = true;
+        continue;
+      }
+      rewriter.replaceOp(op, distilled);
     }
+
+    if (anyFailed)
+      signalPassFailure();
   }
 
   std::string protocol_    = "15to1";

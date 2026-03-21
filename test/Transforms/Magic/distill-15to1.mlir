@@ -1,15 +1,16 @@
-// RUN: ftqc-opt %s | FileCheck %s
-// Test: 15-to-1 T state distillation (parse + operand check). (test 43)
-// Note: --ftqc-magic-distill pass is a stub and hangs on this circuit;
-//       this test validates the source IR is parseable and well-formed.
+// RUN: ftqc-opt --ftqc-magic-distill %s | FileCheck %s
+// Test: --ftqc-magic-distill expands each prepare_magic_t into a 15-to-1
+// distillation circuit (15 noisy inputs → one distill_15to1 op). (test 43)
 
 // CHECK-LABEL: func @t_gate_with_distill
 func.func @t_gate_with_distill(
     %lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
     -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
-  // CHECK: ftqc.prepare_magic_t
   %ms = ftqc.prepare_magic_t : !ftqc.magic_state
-  // CHECK: ftqc.logical_t
+  // After distillation: 15 raw noisy states + one distill_15to1 op.
+  // CHECK-COUNT-15: ftqc.prepare_magic_t
+  // CHECK:          ftqc.distill_15to1
+  // CHECK:          ftqc.logical_t
   %out = ftqc.logical_t %lq, %ms
       : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
       -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>

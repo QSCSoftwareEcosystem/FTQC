@@ -173,15 +173,27 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
 // ResourceEstimator
 //===----------------------------------------------------------------------===//
 
+/// Post-walk fixup: if no explicit Distill15to1Op / Distill7to1Op were seen
+/// (i.e. --ftqc-magic-distill has NOT yet run), infer distillation overhead
+/// from the logical T gate count (one 15-to-1 round per T gate).
+static void inferDistillationIfAbsent(ResourceReport &r) {
+  if (r.distillationRounds == 0 && r.logicalTGates > 0) {
+    r.distillationRounds = r.logicalTGates;
+    r.distillationQubits = std::max(r.distillationQubits, (uint64_t)105);
+  }
+}
+
 ResourceReport ResourceEstimator::estimate(func::FuncOp func) {
   report_ = ResourceReport{};
   func.walk([this](Operation *op) { visitOp(op); });
+  inferDistillationIfAbsent(report_);
   return report_;
 }
 
 ResourceReport ResourceEstimator::estimateModule(ModuleOp mod) {
   report_ = ResourceReport{};
   mod.walk([this](Operation *op) { visitOp(op); });
+  inferDistillationIfAbsent(report_);
   return report_;
 }
 
@@ -217,10 +229,9 @@ void ResourceEstimator::visitOp(Operation *op) {
     })
     .Case<LogicalTOp>([&](auto) {
       ++report_.logicalTGates;
-      // 15-to-1 distillation: 15 noisy states per T gate.
-      report_.distillationRounds += 1;
-      report_.distillationQubits  = std::max(
-          report_.distillationQubits, (uint64_t)105);  // 7 logical blocks × 15
+      // Distillation rounds are counted from explicit Distill15to1Op /
+      // Distill7to1Op when --ftqc-magic-distill has already run.
+      // If those ops are absent we infer the cost post-walk (see below).
     })
     .Case<LogicalCNOTOp, LatticeSurgeryOp>([&](auto) {
       ++report_.logicalCnotGates;
@@ -234,10 +245,15 @@ void ResourceEstimator::visitOp(Operation *op) {
       ++report_.ecRounds;
     })
     .Case<Distill15to1Op>([&](auto) {
+      // Explicit distillation op inserted by --ftqc-magic-distill.
       report_.distillationRounds += 1;
+      report_.distillationQubits =
+          std::max(report_.distillationQubits, (uint64_t)105);
     })
     .Case<Distill7to1Op>([&](auto) {
       report_.distillationRounds += 1;
+      report_.distillationQubits =
+          std::max(report_.distillationQubits, (uint64_t)49); // 7 × 7
     })
     .Case<LogicalMeasureOp>([&](auto) {
       ++report_.logicalMeasurements;
