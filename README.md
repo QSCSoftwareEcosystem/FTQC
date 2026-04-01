@@ -368,6 +368,33 @@ ftqc.resource_annotation {
 }
 ```
 
+Example resource estimation for Grover-FT. 
+```command
+$ ftqc-opt.    test/Integration/grover-ft.mlir \
+    --ftqc-surface-pipeline  \
+    --ftqc-transversal-gates  \
+    --ftqc-resource-estimate  \
+    --ftqc-lower-to-qasm3
+```
+
+```output
+=== FTQC Resource Report ===
+ECC code              : surface code  d=5
+Logical qubits        : 2
+Logical T gates       : 0
+Logical CNOT gates    : 0
+Logical Clifford gates: 12
+EC rounds             : 20
+Distillation rounds   : 0
+---
+Physical data qubits  : 50
+Physical ancilla      : 48
+Physical total        : 98
+Distillation qubits   : 0
+---
+Physical error rate   : 0.001
+Est. logical error    : 4.000000e-03
+```
 ---
 
 ## Full Pipeline Example — 3-qubit QFT
