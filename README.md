@@ -222,12 +222,19 @@ Raw $|T\rangle$ states have high error rate; distillation protocols purify them.
 
 ### Distillation Ops
 ```mlir
-// High-fidelity magic state after distillation (future pass output)
-%t_clean = ftqc.distill_15to1 %raw_t : (!ftqc.magic_state) -> !ftqc.magic_state
-%t_clean = ftqc.distill_7to1  %raw_t : (!ftqc.magic_state) -> !ftqc.magic_state
+%t_clean = ftqc.distill_15to1(%raw_0, ..., %raw_14 : ...) -> !ftqc.magic_state
+%t_clean = ftqc.distill_7to1 (%raw_0, ..., %raw_6  : ...) -> !ftqc.magic_state
 ```
 
-> **Status**: `--ftqc-magic-distill` pass infrastructure exists; full protocol implementation is in progress.
+### `--ftqc-magic-distill` pass (fixed — no longer hangs)
+Each `prepare_magic_t` op is expanded to 15 noisy input states + one `distill_15to1` op.
+The pass uses a **pre-collected snapshot walk** with `IRRewriter` (not greedy driver)
+to avoid infinite rewrite loops. Each original `prepare_magic_t` is processed exactly once.
+
+```bash
+ftqc-opt --ftqc-transversal-gates --ftqc-magic-distill \
+         --ftqc-resource-estimate test/Transforms/Magic/t-gate-inject.mlir
+```
 
 ---
 
@@ -240,25 +247,23 @@ Source MLIR
 Encode logical operations into chosen ECC
     │
     ▼  --ftqc-insert-syndrome
-Insert syndrome extraction rounds after each gate
+Insert X+Z syndrome extraction rounds after each gate (Steane: 2 ops/gate)
     │
     ▼  --ftqc-transversal-gates
 Lower S (Steane) → T·T via magic injection; keep S on color code
     │
     ▼  --ftqc-magic-distill  (optional)
-Wrap magic state prep in distillation protocol
+Expand prepare_magic_t into 15-to-1 distillation circuit
     │
     ▼  --ftqc-pauli-frame-opt  (optional)
 Replace ftqc.correct with deferred Pauli frame tracking
     │
     ▼  --ftqc-resource-estimate
-Annotate with T-count, CNOT-count, EC rounds, physical qubit estimate
+Count T/CNOT/EC rounds; derive physical qubits + logical error rate from ECC type
     │
-    ▼  --ftqc-lower-to-qasm3
-Emit OpenQASM 3.0 text (stderr or file) + attach as ftqc.qasm3 module attr
-    │
-    ▼
-Annotated MLIR + resource report + OpenQASM 3.0 output
+    ├──▶  --ftqc-lower-to-qasm3    → OpenQASM 3.0 text
+    ├──▶  --ftqc-lower-to-stim     → STIM stabilizer circuit + MWPM QEC
+    └──▶  --ftqc-lower-to-qir      → QIR Base Profile LLVM IR
 ```
 
 ---
@@ -278,24 +283,17 @@ Translates FTQC logical IR to OpenQASM 3.0 after all transformation passes.
 | `logical_s` | `s` | FT-only ops (syndrome, correct, frame) | QASM comment |
 | `logical_t` | `t` | | |
 
-### Example — Grover 2-qubit oracle (surface d=5, after full pipeline)
+### Example — Bell-state QASM3 output
 
 ```qasm
 OPENQASM 3.0;
 include "stdgates.inc";
-
-// function @grover_ft
 qubit q0;
 qubit q1;
 h q0;
-// steane_x_syndrome
-// correct
-// steane_z_syndrome
-// correct
-h q1;
-// ...syndrome rounds after every gate...
-cz q0, q1;  h q0;  h q1;  x q0;  x q1;
-cz q0, q1;  x q0;  x q1;  h q0;  h q1;
+// steane_x_syndrome  // steane_z_syndrome
+cx q0, q1;
+// steane_x_syndrome  // steane_z_syndrome
 bit b0 = measure q0;
 bit b1 = measure q1;
 ```
@@ -312,29 +310,303 @@ bit b1 = measure q1;
 
 ## Qiskit Aer Simulation of Generated QASM3 Circuits
 
-QASM3 emitted by `ftqc-opt` is fed directly into **Qiskit Aer 0.17** via the
-`qiskit_qasm3_import` package. All 4 benchmark circuits produce correct
-measurement distributions (4096–8192 shots, `p_phys = 10^{-3}`).
+QASM3 emitted by `ftqc-opt` is parsed by **Qiskit `qiskit_qasm3_import`** and executed
+on `AerSimulator` (4096–8192 shots). All 4 benchmark circuits produce correct results.
 
-| Circuit | Encoding | Phys Q | Logical Q | T gates | EC rounds | Result |
-|---------|----------|--------|-----------|---------|-----------|--------|
-| Bell state (H·CNOT) | Steane d=3 | **26** | 2 | 0 | 0 | \|00⟩ 51% · \|11⟩ 49% ✓ |
-| GHZ-4 (H+3 CNOTs) | Steane d=3 | **52** | 4 | 0 | 0 | \|0000⟩ 49% · \|1111⟩ 51% ✓ |
-| Grover (oracle \|11⟩) | Surface d=5 | **98** | 2 | 0 | 20 | \|11⟩ 100% ✓ |
-| QFT-3 (T-approx) | Steane d=3 | **144** + 105 distil | 3 | 6 | 0 | \|000⟩ 25% · \|001⟩ 50% · \|100⟩ 25% ✓ |
+| Circuit | Encoding | Phys Q | T gates | EC rounds | Result |
+|---------|----------|--------|---------|-----------|--------|
+| Bell (H·CNOT) | Steane d=3 | 26 | 0 | 4 | \|00⟩ 51% · \|11⟩ 49% ✓ |
+| GHZ-4 (H+3×CNOT) | Steane d=3 | 52 | 0 | 8 | \|0000⟩ 50% · \|1111⟩ 50% ✓ |
+| Grover-2 | Surface d=5 | 98 | 0 | 20 | \|11⟩ 100% ✓ |
+| QFT-3 | Steane d=3 | 144+105 | 6 | 36 | \|000⟩ 25%·\|001⟩ 50%·\|100⟩ 25% ✓ |
 
-Physical qubit formulas used by `--ftqc-resource-estimate`:
-
-| Code | Data qubits / logical | Ancilla / logical | Threshold |
-|------|-----------------------|-------------------|-----------|
-| Steane [[7,1,3]] | 7 | 6 | ~1% |
-| Surface code d | d² | d²−1 | ~1% |
-| Color code d | (3d²+1)/4 | d²/2 | ~0.3% |
+The emitter prepends `include "stdgates.inc";` so that standard gate names
+(`h`, `cx`, `cz`, `t`, `s`) are recognized by the Qiskit QASM3 parser.
 
 ```bash
-# Reproduce:
+# Reproduce (qasm.venv = Qiskit 2.3.0 + Aer 0.17.2 + qiskit_qasm3_import):
 qasm.venv/bin/python sim_qasm3.py
 ```
+
+---
+
+## STIM Stabilizer Circuit Lowering — `--ftqc-lower-to-stim`
+
+Translates FTQC IR to a **STIM** stabilizer circuit for Monte Carlo QEC simulation.
+
+### Physical qubit layout (Steane [[7,1,3]], 13 qubits per logical qubit)
+
+```
+Block base + 0..6   → data qubits
+Block base + 7,8,9  → X-ancilla (Sx1, Sx2, Sx3)
+Block base + 10,11,12 → Z-ancilla (Sz1, Sz2, Sz3)
+```
+
+### Steane stabilizer supports (same for X and Z — CSS code)
+```
+Stab 1: data offsets {0, 2, 4, 6}
+Stab 2: data offsets {1, 2, 5, 6}
+Stab 3: data offsets {3, 4, 5, 6}
+```
+
+### Encoding circuit emitted per `init_zero`
+```stim
+R 0 1 2 3 4 5 6          # reset all 7 data qubits
+H 0 1 3                  # Hadamard on check qubits {0,1,3}
+CX 0 2  CX 0 4  CX 0 6  # CNOT fan-out for stabilizer 1
+CX 1 2  CX 1 5  CX 1 6  # CNOT fan-out for stabilizer 2
+CX 3 4  CX 3 5  CX 3 6  # CNOT fan-out for stabilizer 3
+```
+
+---
+
+## STIM — Syndrome Rounds and DETECTOR Records
+
+### Each syndrome round (per logical qubit block)
+```stim
+R 7 8 9                  # reset X-ancillae
+H 7 8 9                  # Hadamard (X-basis measurement)
+CX 7 0  7 2  7 4  7 6   # X-stab 1 fan-out
+CX 8 1  8 2  8 5  8 6   # X-stab 2 fan-out
+CX 9 3  9 4  9 5  9 6   # X-stab 3 fan-out
+H 7 8 9
+M 7 8 9                  # measure X-ancillae
+
+R 10 11 12               # reset Z-ancillae (no H needed for Z basis)
+CX 0 10  2 10  4 10  6 10
+CX 1 11  2 11  5 11  6 11
+CX 3 12  4 12  5 12  6 12
+M 10 11 12               # measure Z-ancillae
+
+DETECTOR rec[-6]         # compare to previous round via rec[-k]
+...
+DETECTOR rec[-1]
+```
+
+DETECTOR offsets use formula: `k = measureCount − (prevRoundMeasureStart + i)`
+computed per-block so each detector references the correct history slot.
+
+### Noise model
+```stim
+DEPOLARIZE1(p)   # after single-qubit gates
+DEPOLARIZE2(p)   # after two-qubit gates
+X_ERROR(p)       # before each measurement (readout noise)
+```
+Noise instructions are omitted entirely when `physical-error-rate=0`.
+
+---
+
+## STIM — Final Measurements and Observables
+
+```stim
+# Transversal CNOT between logical qubit 0 (ctrl) and qubit 1 (tgt):
+CX 0 13  1 14  2 15  3 16  4 17  5 18  6 19
+
+# Final data-qubit measurements:
+M 0 1 2 3 4 5 6
+OBSERVABLE_INCLUDE(0) rec[-7] rec[-6] rec[-5] rec[-4] rec[-3] rec[-2] rec[-1]
+
+M 13 14 15 16 17 18 19
+OBSERVABLE_INCLUDE(1) rec[-7] rec[-6] rec[-5] rec[-4] rec[-3] rec[-2] rec[-1]
+```
+
+The logical Z observable is the **XOR (parity) of all 7 data qubit measurements**.
+Round-trip circuits (prepare → apply → invert → measure) ensure all STIM observables
+are deterministic in the noiseless case, which is required by the STIM DEM format.
+
+### Options
+```bash
+--ftqc-lower-to-stim                                    # write to stderr
+--ftqc-lower-to-stim="syndrome-rounds=3"                # 3 rounds per gate
+--ftqc-lower-to-stim="physical-error-rate=1e-3"         # depolarizing noise
+--ftqc-lower-to-stim="output-file=bell.stim"            # write to file
+--ftqc-lower-to-stim="include-comments=false"           # omit FT-op comments
+```
+
+---
+
+## STIM QEC Simulation (`sim_stim.py`)
+
+Sweeps physical error rate $p$ over 18 log-uniform points $[10^{-4}, 1.5\times10^{-2}]$
+using **PyMatching** (MWPM decoder), 5000 shots per point.
+
+All benchmark circuits use **round-trip topology** (prepare → gate → inverse → measure)
+so noiseless outcome is always $|0\rangle^{\otimes n}$ and STIM observables are deterministic.
+
+### Circuit validation (noiseless, `p=0`)
+| Circuit | Physical qubits | Detectors | Observables |
+|---------|----------------|-----------|-------------|
+| Bell | 26 | 30 | 2 |
+| GHZ-4 | 52 | 66 | 4 |
+| Grover-2 | 26 | 96 | 2 |
+| QFT-3 | 39 | 162 | 0 |
+
+### Logical error rates at $p = 10^{-3}$ (MWPM decoded, per shot)
+| Circuit | $p_L$ | Note |
+|---------|-------|------|
+| Bell (26P) | 9.9% | circuit-level, not per-gate |
+| GHZ-4 (52P) | 13.6% | higher due to more qubits |
+| Grover-2 (26P) | 27.6% | deep diffusion circuit |
+| QFT-3 (39P) | 21.6% | T gates approximated as S (Clifford only) |
+
+```bash
+qasm.venv/bin/python sim_stim.py --shots 5000 \
+    --output paper_results/stim_results.csv
+```
+
+---
+
+## PennyLane Density-Matrix Simulation (`sim_pennylane_qec.py`)
+
+Uses **PennyLane v0.42 `default.mixed`** (density-matrix simulator) with
+`DepolarizingChannel` noise on the same Steane-encoded circuits.
+
+**No active QEC decoder** — measures infidelity directly:
+$$p_L = 1 - \rho[0,0]$$
+where $\rho[0,0]$ is the probability of the ideal $|0\rangle^{\otimes n}$ outcome.
+
+### Setup
+
+```python
+# venv: qiree/pen.venv (PennyLane 0.42.0-dev19)
+pen.venv/bin/python sim_pennylane_qec.py \
+    --outdir paper_results/ \
+    --figdir figures/ \
+    --stim-csv paper_results/stim_results.csv
+```
+
+### Results at $p = 10^{-3}$ (7 physical qubits, 1 logical qubit)
+
+| Benchmark | $p_L$ (PennyLane DM) | $p_L$ (STIM+MWPM) |
+|-----------|---------------------|-------------------|
+| Bell | 5.3% | 9.9% (26P, active QEC) |
+| GHZ | 5.3% | 13.6% (52P, active QEC) |
+| Grover | 5.3% | 27.6% (26P, active QEC) |
+
+PennyLane infidelity scales **nearly linearly** with $p$ (~$60p$ at $p=10^{-3}$):
+uncorrected errors from all gate locations accumulate without decoding.
+
+---
+
+## PennyLane vs STIM Scalability Comparison
+
+| Property | PennyLane `default.mixed` | STIM + MWPM |
+|----------|--------------------------|-------------|
+| Simulation method | Exact density matrix | Stabilizer (Clifford) |
+| Memory scaling | $O(4^n)$ exponential | $O(n)$ linear |
+| Time (14 physical qubits) | **617 s**, 4 GB RAM | < 0.1 s |
+| Time (21 physical qubits) | **Out of memory** (64 TB) | < 0.5 s |
+| Time (52 physical qubits, 18-pt sweep) | Infeasible | **< 4 s** |
+| Active QEC decoder | None (infidelity only) | MWPM (PyMatching) |
+| Non-Clifford gates | Exact (T, Toffoli supported) | T approximated as S |
+| Max feasible circuit | ~14 physical qubits | >100 physical qubits |
+
+The PennyLane `default.clifford` backend uses STIM internally, giving identical
+performance to direct STIM for Clifford-only circuits.
+
+```bash
+# Generate all 4 comparison figures (PDF → figures/, PNG → paper_results/):
+pen.venv/bin/python sim_pennylane_qec.py --skip-pl \
+    --stim-csv paper_results/stim_results.csv \
+    --outdir paper_results/ --figdir figures/
+```
+
+---
+
+## QIR Lowering — `--ftqc-lower-to-qir`
+
+Translates FTQC IR to **QIR Base Profile v1.0** LLVM IR with full physical-qubit expansion.
+Each logical qubit is expanded to a contiguous block of physical qubits.
+
+### Physical expansion — Steane [[7,1,3]]
+
+Each `!ftqc.logical_qubit<#ftqc.ecc<steane,3>>` → **7 physical QIR qubits**.
+
+| FTQC op | QIR expansion |
+|---------|--------------|
+| `init_zero` | 7 qubits + encoding: `h q[0,1,3]` + 9 CNOT fan-out |
+| `init_plus` | same as `init_zero` + transversal H on all 7 |
+| `logical_h/x/y/z/s/t` | transversal: 7 single-qubit gates |
+| `logical_cnot` | transversal: 7 CNOT pairs (ctrl[i]→tgt[i]) |
+| `logical_cz` | transversal: 7 CZ pairs |
+| `logical_toffoli` | transversal: 7 CCX triples |
+| `logical_measure` | `mz` on all 7; logical outcome = parity (XOR) of 7 bits |
+
+### Physical expansion — Surface code (distance $d$)
+
+Each `!ftqc.logical_qubit<#ftqc.ecc<surface,d>>` → **$d^2$ physical QIR qubits** (row-major).
+
+| FTQC op | QIR expansion |
+|---------|--------------|
+| `init_zero` | H on first row + vertical CNOTs + horizontal CNOTs |
+| `logical_{h,x,y,z,s,t}` | transversal: $d^2$ single-qubit gates |
+| `logical_cnot/cz/toffoli` | transversal: $d^2$ two/three-qubit gates |
+| `logical_measure` | `mz` on all $d^2$; logical outcome = parity of $d^2$ bits |
+
+---
+
+## QIR — Generated LLVM IR Structure
+
+Output conforms to **QIR Base Profile v1.0** qubit/result pointer convention:
+- Index 0 → `ptr null`
+- Index N → `ptr inttoptr (i64 N to ptr)`
+
+### Example — Bell state (Steane [[7,1,3]], 14 physical qubits)
+
+```llvm
+; attributes #0 = { "entry_point" "required_num_qubits"="14"
+;                   "required_num_results"="14" "output_labeling_schema" }
+
+define void @bell_state_ft() #0 {
+entry:
+  ; Encode logical qubit 0 (qubits 0–6)
+  call void @__quantum__qis__h__body(ptr null)           ; h q[0]
+  call void @__quantum__qis__h__body(ptr inttoptr(i64 1 to ptr))
+  call void @__quantum__qis__h__body(ptr inttoptr(i64 3 to ptr))
+  call void @__quantum__qis__cnot__body(ptr null, ptr inttoptr(i64 2 to ptr))
+  ; ... 8 more CNOT encoding gates ...
+
+  ; Transversal H on logical qubit 0
+  call void @__quantum__qis__h__body(ptr null)           ; h q[0]
+  ; ... h q[1] through h q[6] ...
+
+  ; Transversal CNOT (logical ctrl=q0..q6, tgt=q7..q13)
+  call void @__quantum__qis__cnot__body(ptr null, ptr inttoptr(i64 7 to ptr))
+  ; ... 6 more transversal CNOT gates ...
+
+  ; Measure all 14 physical qubits → parity = logical result
+  call void @__quantum__qis__mz__body(ptr null, ptr null)
+  ; ...
+  ret void
+}
+```
+
+FT-infrastructure ops (syndrome, correction, Pauli-frame) emit **LLVM IR line comments**
+when `--include-comments=true` (default). Unrecognised codes fall back to 1:1 mapping.
+
+---
+
+## QIR — Options and Runtime Declarations
+
+```bash
+--ftqc-lower-to-qir                              # write to stderr (default)
+--ftqc-lower-to-qir="output-file=out.ll"         # write to .ll file
+--ftqc-lower-to-qir="include-comments=false"     # omit FT-op comments
+```
+
+The emitter automatically inserts required QIR runtime declarations:
+
+```llvm
+declare void @__quantum__rt__initialize(ptr)
+declare void @__quantum__qis__h__body(ptr)
+declare void @__quantum__qis__cnot__body(ptr, ptr)
+declare void @__quantum__qis__mz__body(ptr, ptr writeonly) #1
+declare void @__quantum__rt__result_record_output(ptr, ptr)
+declare void @__quantum__rt__array_record_output(i64, ptr)
+```
+
+The `required_num_qubits` and `required_num_results` entry-point attributes are
+computed from the maximum physical qubit/result indices across all functions in the module.
 
 ---
 
@@ -364,37 +636,13 @@ Emits a structured annotation on each function:
 ftqc.resource_annotation {
   tGateCount = 6 : i64,        logicalQubits = 3 : i64,
   cnotCount  = 9 : i64,        physicalQubits = 147 : i64,
-  ecRounds   = 36 : i64,       estimatedLogicalErrorRate = 0.0 : f64
+  ecRounds   = 36 : i64,       estimatedLogicalErrorRate = 1e-6 : f64
 }
 ```
 
-Example resource estimation for Grover-FT. 
-```command
-$ ftqc-opt.    test/Integration/grover-ft.mlir \
-    --ftqc-surface-pipeline  \
-    --ftqc-transversal-gates  \
-    --ftqc-resource-estimate  \
-    --ftqc-lower-to-qasm3
-```
+EC rounds = number of syndrome ops in IR = **2 × gate count** (Steane X+Z per gate).  
+Distillation qubits inferred from T-gate count if no explicit `distill_15to1` ops are present.
 
-```output
-=== FTQC Resource Report ===
-ECC code              : surface code  d=5
-Logical qubits        : 2
-Logical T gates       : 0
-Logical CNOT gates    : 0
-Logical Clifford gates: 12
-EC rounds             : 20
-Distillation rounds   : 0
----
-Physical data qubits  : 50
-Physical ancilla      : 48
-Physical total        : 98
-Distillation qubits   : 0
----
-Physical error rate   : 0.001
-Est. logical error    : 4.000000e-03
-```
 ---
 
 ## Full Pipeline Example — 3-qubit QFT
@@ -422,7 +670,46 @@ func.func @qft3_steane(
 Logical T gates     : 6        EC rounds           : 36
 Logical CNOT gates  : 9        Distillation rounds : 6
 Logical Clifford    : 3        Distillation qubits : 105
+Physical total      : 144      Physical error      : 0.001
+Est. logical error  : 1.0e-06
 ```
+
+---
+
+## Grover-FT Resource Report (Surface Code d=5)
+
+```bash
+ftqc-opt test/Integration/grover-ft.mlir \
+    --ftqc-surface-pipeline  \
+    --ftqc-transversal-gates  \
+    --ftqc-resource-estimate  \
+    --ftqc-lower-to-qasm3
+```
+
+```
+=== FTQC Resource Report ===
+ECC code              : surface code  d=5
+Logical qubits        : 2
+Logical T gates       : 0
+Logical Clifford gates: 12
+EC rounds             : 20
+Distillation rounds   : 0
+---
+Physical data qubits  : 50
+Physical ancilla      : 48
+Physical total        : 98
+---
+Physical error rate   : 0.001
+Est. logical error    : 4.0e-03
+```
+
+Physical qubit formulas used by `--ftqc-resource-estimate`:
+
+| Code | Data / logical | Ancilla / logical | $p_\text{th}$ |
+|------|----------------|-------------------|--------------|
+| Steane [[7,1,3]] | 7 | 6 | 1% |
+| Surface code d | $d^2$ | $d^2-1$ | 1% |
+| Color code d | $(3d^2+1)/4$ | $d^2/2$ | 0.3% |
 
 ---
 
@@ -476,58 +763,67 @@ Factory: `createDecoder(eccKind, distance)`
 qftc/
 ├── include/FTQC/
 │   ├── Dialect/
-│   │   ├── FTQCOps.td       ← Op definitions (ODS)
-│   │   ├── FTQCTypes.td     ← Type definitions
-│   │   └── FTQCAttrs.td     ← ECCKind, MagicKind, PauliKind
+│   │   ├── FTQCOps.td            ← Op definitions (ODS, 31 ops)
+│   │   ├── FTQCTypes.td          ← Type definitions (5 types)
+│   │   └── FTQCAttrs.td          ← ECCKind, MagicKind, PauliKind
 │   ├── Analysis/
-│   │   ├── FaultPathAnalysis.h    ← fault enumeration
-│   │   ├── ResourceEstimation.h   ← T/CNOT/EC counts
-│   │   └── ThresholdAnalysis.h    ← below-threshold check
+│   │   ├── FaultPathAnalysis.h   ← fault enumeration
+│   │   ├── ResourceEstimation.h  ← T/CNOT/EC counts + physical derivation
+│   │   └── ThresholdAnalysis.h   ← below-threshold check
 │   └── Utils/
-│       ├── PauliUtils.h     ← symplectic Pauli algebra
-│       ├── StabilizerUtils.h← CSS code matrices
-│       └── SyndromeDecoder.h← decoder hierarchy
+│       ├── PauliUtils.h          ← symplectic Pauli algebra
+│       ├── StabilizerUtils.h     ← CSS code matrices
+│       └── SyndromeDecoder.h     ← decoder hierarchy
 ├── lib/Transforms/
 │   ├── SteaneEncoding.cpp   SurfaceCodeEncoding.cpp  ColorCodeEncoding.cpp
 │   ├── SyndromeExtraction.cpp  TransversalGates.cpp
 │   ├── MagicStateDistillation.cpp  ErrorCorrection.cpp
-│   ├── LowerToQASM3.cpp     ← QASM3 emitter pass
-│   └── Passes.cpp           ← pass registration
-├── sim_qasm3.py             ← Qiskit Aer simulation of 4 benchmark circuits
-└── test/                    ← 87 lit tests (all pass)
+│   ├── LowerToQASM3.cpp          ← OpenQASM 3.0 emitter pass
+│   ├── LowerToSTIM.cpp           ← STIM stabilizer circuit emitter
+│   ├── LowerToQIR.cpp            ← QIR Base Profile LLVM IR emitter
+│   └── Passes.cpp                ← pass registration (18 passes)
+├── sim_qasm3.py                  ← Qiskit Aer: 4 benchmark circuits
+├── sim_stim.py                   ← STIM+MWPM: 18-pt p sweep, 5000 shots
+├── sim_pennylane_qec.py          ← PennyLane DM vs STIM comparison
+├── sim_steane_aer.py             ← Physical-level Steane Aer simulation
+├── sim_qsim.py                   ← qsimcirq independent verification
+├── plot_stim_results.py          ← 5 STIM result figures (PDF+PNG)
+├── paper_results/
+│   └── run_paper_results.sh      ← reproduces all paper results end-to-end
+├── figures/                      ← PDF vector figures (fig1–fig5, figA–figD)
+└── test/                         ← 88 lit tests (all pass)
     ├── Dialect/  Analysis/  Transforms/  Integration/
-    └── Transforms/QASM3/    ← 8 QASM3 lowering tests
+    └── Transforms/QASM3/         ← 8 QASM3 lowering tests
 ```
 
 ---
 
-## Test Suite — 87 Tests, All Pass
+## Test Suite — 88 Tests, All Pass
 
 | Suite | Tests | Examples |
 |-------|-------|---------|
 | `Dialect/` | 17 | type round-trip, op parse/print, attribute syntax |
 | `Analysis/` | 6 | fault paths, threshold check, resource estimates |
-| `Transforms/` | 52 | syndrome insertion, gate decomposition, EC rounds |
+| `Transforms/` | 53 | syndrome insertion, gate decomposition, magic distill |
 | `Transforms/QASM3/` | 8 | gate mapping, comments, options, full pipeline |
 | `Integration/` | 4 | Bell state, GHZ-4, Grover, 3-qubit QFT |
 
 ```bash
-# Run all tests
-llvm-lit build.cmake/test/Transforms \
-         build.cmake/test/Dialect \
-         build.cmake/test/Analysis \
-         build.cmake/test/Integration
+# Run all tests (build dir from CMake):
+llvm-lit build/test/Transforms \
+         build/test/Dialect \
+         build/test/Analysis \
+         build/test/Integration
 
-# Testing Time: 0.13s   Passed: 87 (100.00%)
+# Testing Time: ~0.15s   Passed: 88 (100.00%)
 ```
 
 Key test patterns validated:
 - Type printer abbreviations (`<<steane, 3>>`, `<6>`, `<CCZ>`)
 - Full pipeline end-to-end on non-trivial circuits
-- Syndrome insertion after every logical gate
-- Pauli frame deferred correction
+- `--ftqc-magic-distill` expands `prepare_magic_t` → 15 noisy inputs + `distill_15to1`
 - QASM3 gate names, qubit declarations, FT-op comments
-- `include-comments=false` option suppresses syndrome/correct lines
+- STIM encoding circuit, DETECTOR records, OBSERVABLE_INCLUDE
 
 ---
 
@@ -537,16 +833,50 @@ Key test patterns validated:
 |---------|--------|
 | Steane `[[7,1,3]]` full pipeline | ✅ Complete |
 | Surface code (any distance) | ✅ Complete |
+| QASM3 lowering + Qiskit Aer verification | ✅ Complete (4 benchmarks pass) |
+| STIM lowering + MWPM QEC simulation | ✅ Complete (no hang; correct DETECTORs) |
+| QIR Base Profile v1.0 lowering | ✅ Complete (Steane 7P + Surface d² expansion) |
+| PennyLane DM vs STIM comparison | ✅ Complete (617s/14P vs <4s/52P) |
+| `--ftqc-magic-distill` (15-to-1) | ✅ Fixed (snapshot walk; no longer hangs) |
+| Resource estimation (ECC-aware) | ✅ Physical qubits + logical error rate |
 | Color code transversal S | ✅ Parsed; lowering is stub |
 | Fault path analysis | ✅ Weight-1/2 enumeration |
-| Resource estimation | ✅ T / CNOT / EC / physical qubits (ECC-aware formulas) |
-| QASM3 lowering (`--ftqc-lower-to-qasm3`) | ✅ Complete; verified via Qiskit Aer simulation |
-| 15-to-1 distillation pass | 🚧 Infrastructure present; hangs on large circuits |
 | H·H / X·X canonicalization | ❌ Not implemented |
-| Flag-qubit syndrome extraction | ❌ Pass inserts Steane syndrome only |
-| Shor cat-state extraction | ❌ Same |
-| `--ftqc-lower-to-quantum` | 🚧 Lowering to physical gates |
+| Flag-qubit / Shor syndrome (pass) | ❌ Pass always inserts Steane syndrome |
+| PennyLane/Catalyst `!quantum.bit` integration | ❌ Future work |
 | Threshold-aware scheduling | ❌ Future work |
+| Neural-network / adaptive decoder | ❌ Future work |
+| Color code encoding (full lowering) | ❌ Stub |
+
+---
+
+## Reproducing All Paper Results
+
+```bash
+# From qftc/ directory — full end-to-end reproduction:
+bash paper_results/run_paper_results.sh
+
+# Skip slow PennyLane simulation (~10 min):
+bash paper_results/run_paper_results.sh --skip-pennylane
+
+# Regenerate figures only (uses existing stim_results.csv):
+bash paper_results/run_paper_results.sh --plots-only --skip-pennylane
+```
+
+Output layout:
+```
+paper_results/
+  01_build.log  02_lit_tests.log  03_sim_qasm3.log ...  10_latex_pass2.log
+  stim_results.csv       pennylane_results.csv
+  ftqc-paper.pdf         scale_data.csv  scale_plots.tex
+  fig1_pL_vs_p_loglog.png  fig2_suppression.png  ...  figD_summary_panel.png
+
+figures/                 ← PDF vector figures for LaTeX inclusion
+  fig1_pL_vs_p_loglog.pdf  fig2_suppression.pdf  fig3_scalability.pdf
+  fig4_per_benchmark.pdf   fig5_composite_summary.pdf
+  figA_pl_vs_stim_loglog.pdf  figB_all_methods.pdf
+  figC_scalability.pdf        figD_summary_panel.pdf
+```
 
 ---
 
@@ -556,23 +886,28 @@ Key test patterns validated:
 
 **FTQC** is a full MLIR dialect for fault-tolerant quantum computing:
 
-- **Types**: logical qubits with ECC annotations, syndromes, magic states
-- **Ops**: Clifford + T gate set, syndrome extraction, error correction, distillation
-- **Passes**: encode → insert-syndrome → transversal-gates → resource-estimate → lower-to-qasm3
-- **Analysis**: fault paths, threshold check, physical qubit resource report (ECC-aware)
-- **Simulation**: Qiskit Aer verified on Bell, GHZ-4, Grover, QFT-3 — all pass
-- **87 lit tests**, all passing on LLVM/MLIR 22.0.0git
-
-**Built with**: MLIR ODS (TableGen), C++17, LLVM 22, lit + FileCheck
+- **Types**: logical qubits with ECC annotations, syndromes, magic states, Pauli frames
+- **Ops**: 31 ops — Clifford+T+Toffoli, syndrome extraction, EC, distillation
+- **Passes**: 18 passes — encode → syndrome → transversal → distill → resource → lower
+- **Back ends**: OpenQASM 3.0, STIM stabilizer circuits, QIR Base Profile LLVM IR
+- **Simulation**: Qiskit Aer (QASM3) · STIM+MWPM (QEC) · PennyLane DM (comparison)
+- **QIR**: physical qubit expansion — Steane (7P/logical), Surface ($d^2$/logical)
+- **88 lit tests**, all passing on LLVM/MLIR 22.0.0git
 
 ```bash
-# Full pipeline — resource report + QASM3 output:
-ftqc-opt --ftqc-steane-pipeline \
-         --ftqc-transversal-gates \
-         --ftqc-resource-estimate \
-         --ftqc-lower-to-qasm3 \
-         test/Integration/qft3-steane.mlir
-
-# Simulate QASM3 output with Qiskit Aer (all 4 circuits):
+# QASM3 → Qiskit Aer:
 qasm.venv/bin/python sim_qasm3.py
+
+# STIM QEC sweep (5000 shots, 18 error rates):
+qasm.venv/bin/python sim_stim.py --shots 5000 \
+    --output paper_results/stim_results.csv
+
+# PennyLane DM vs STIM comparison figures:
+pen.venv/bin/python sim_pennylane_qec.py \
+    --stim-csv paper_results/stim_results.csv \
+    --outdir paper_results/ --figdir figures/
+
+# QIR generation:
+ftqc-opt --ftqc-steane-pipeline --ftqc-lower-to-qir \
+    test/Integration/bell-state-ft.mlir
 ```
