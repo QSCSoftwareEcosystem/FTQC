@@ -825,6 +825,14 @@ Key test patterns validated:
 - QASM3 gate names, qubit declarations, FT-op comments
 - STIM encoding circuit, DETECTOR records, OBSERVABLE_INCLUDE
 
+## Full pipeline — resource report + QASM3 output:
+```
+ftqc-opt --ftqc-steane-pipeline \
+         --ftqc-transversal-gates \
+         --ftqc-resource-estimate \
+         --ftqc-lower-to-qasm3 \
+         test/Integration/qft3-steane.mlir
+```
 ---
 
 ## Current Limitations & Future Work
