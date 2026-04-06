@@ -149,6 +149,15 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
   physicalErrorRate      = physError;
   physicalDataQubits     = logicalQubits * physPerLogical;
   physicalAncillaQubits  = logicalQubits * ancillaPerLogical;
+
+  // Distillation factory: one 15-to-1 factory services all T gates
+  // sequentially.  Each of the 15 input magic states is encoded in the same
+  // ECC block (physPerLogical data + ancillaPerLogical ancilla qubits), so:
+  //   distillationQubits = 15 × (physPerLogical + ancillaPerLogical)
+  // For Steane [[7,1,3]]: 15 × (7+6) = 15 × 13 = 195.
+  if (distillationRounds > 0)
+    distillationQubits = 15u * (physPerLogical + ancillaPerLogical);
+
   physicalTotalQubits    = physicalDataQubits + physicalAncillaQubits
                          + distillationQubits;
 
@@ -176,10 +185,12 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
 /// Post-walk fixup: if no explicit Distill15to1Op / Distill7to1Op were seen
 /// (i.e. --ftqc-magic-distill has NOT yet run), infer distillation overhead
 /// from the logical T gate count (one 15-to-1 round per T gate).
+/// Note: distillationQubits is left at 0 here; computePhysical() calculates
+/// the correct count as 15 × (physPerLogical + ancillaPerLogical) once ECC
+/// parameters are known.
 static void inferDistillationIfAbsent(ResourceReport &r) {
   if (r.distillationRounds == 0 && r.logicalTGates > 0) {
     r.distillationRounds = r.logicalTGates;
-    r.distillationQubits = std::max(r.distillationQubits, (uint64_t)105);
   }
 }
 
@@ -246,14 +257,13 @@ void ResourceEstimator::visitOp(Operation *op) {
     })
     .Case<Distill15to1Op>([&](auto) {
       // Explicit distillation op inserted by --ftqc-magic-distill.
+      // qubit count is deferred to computePhysical() where ECC params are
+      // known: 15 × (physPerLogical + ancillaPerLogical).
       report_.distillationRounds += 1;
-      report_.distillationQubits =
-          std::max(report_.distillationQubits, (uint64_t)105);
     })
     .Case<Distill7to1Op>([&](auto) {
+      // 7-to-1 factory; qubit count deferred to computePhysical().
       report_.distillationRounds += 1;
-      report_.distillationQubits =
-          std::max(report_.distillationQubits, (uint64_t)49); // 7 × 7
     })
     .Case<LogicalMeasureOp>([&](auto) {
       ++report_.logicalMeasurements;
