@@ -194,6 +194,15 @@ fi
 if [[ ! -f "${BUILD_DIR}/build.ninja" && ! -f "${BUILD_DIR}/Makefile" ]]; then
   echo "==> Configuring (${BUILD_TYPE})"
 #-G Ninja \
+  echo "cmake -S $SCRIPT_DIR -B $BUILD_DIR \
+    -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+    -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+    -DMLIR_DIR=${MLIR_DIR} \
+    -DLLVM_DIR=${LLVM_DIR} \
+    -DFTQC_BUILD_TESTS=${BUILD_TESTS} \
+    -DFTQC_SUPPRESS_UNUSED_WARNINGS=${SUPPRESS_UNUSED_WARNINGS} \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+
   cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_INSTALL_PREFIX="${PREFIX}" \

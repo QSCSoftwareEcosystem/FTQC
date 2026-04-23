@@ -802,11 +802,10 @@ qftc/
 
 | Suite | Tests | Examples |
 |-------|-------|---------|
-| `Dialect/` | 17 | type round-trip, op parse/print, attribute syntax |
-| `Analysis/` | 6 | fault paths, threshold check, resource estimates |
-| `Transforms/` | 53 | syndrome insertion, gate decomposition, magic distill |
-| `Transforms/QASM3/` | 8 | gate mapping, comments, options, full pipeline |
-| `Integration/` | 4 | Bell state, GHZ-4, Grover, 3-qubit QFT |
+| `Dialect/` | 18 | type round-trip, op parse/print, attribute syntax |
+| `Analysis/` | 5 | fault paths, threshold check, resource estimates |
+| `Transforms/` | 60 | syndrome insertion, gate decomposition, magic distill |
+| `Integration/` | 5 | Bell state, GHZ-4, Grover, 3-qubit QFT |
 
 ```bash
 # Run all tests (build dir from CMake):
