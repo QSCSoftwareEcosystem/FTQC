@@ -35,6 +35,7 @@ func.func @qft3_steane(
 
   // Controlled-S (Rz(π/2)) from q1 → q0: implemented as CNOT + T + CNOT + T†
   // Decomposition: CRz(π/2) = CNOT · (I⊗T†) · CNOT · (I⊗T) · (T†⊗I)
+  // [DEBUG] Actual implementation: (I⊗T) · CNOT · (I⊗T) · CNOT
   %magic_t_0 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0a = ftqc.logical_t %h0, %magic_t_0
       : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
