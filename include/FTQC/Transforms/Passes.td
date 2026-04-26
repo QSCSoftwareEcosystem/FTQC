@@ -292,6 +292,39 @@ def FTQCLowerToQIRPass : Pass<"ftqc-lower-to-qir", "mlir::ModuleOp"> {
   ];
 }
 
+def FTQCLowerToQIRnsPass : Pass<"ftqc-lower-to-qir-ns", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to QIR Base Profile LLVM IR (no ECC expansion)";
+  let description = [{
+    Walks all `func.func` operations in the module and emits a QIR Base
+    Profile LLVM IR representation without physical ECC block expansion.
+
+    This pass intentionally mirrors `ftqc-lower-to-qasm3` semantics:
+      - each logical qubit is mapped 1:1 to one QIR qubit pointer;
+      - logical gates emit a single corresponding QIR QIS call;
+      - `init_plus` emits an `h` after allocation;
+      - `logical_measure` emits a single `mz` per logical qubit.
+
+    Fault-tolerant infrastructure ops (syndrome extraction, error correction,
+    Pauli-frame updates) emit LLVM IR line comments when `include-comments=true`.
+
+    The generated IR string is written to the file path given by `output-file`
+    (or to stderr if empty).  It is also attached to the module as the string
+    attribute `ftqc.qir` for downstream passes and FileCheck tests.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write QIR .ll output to this path (empty = write to stderr)">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit IR comments for FT-only ops (syndrome, correction, frame)">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // QASM 3.0 Translation Pass
 //===----------------------------------------------------------------------===//

@@ -187,6 +187,15 @@ std::unique_ptr<mlir::Pass> createLowerToSTIMPass();
 /// at function exit.  The IR is conformant with QIR Base Profile v1.0.
 std::unique_ptr<mlir::Pass> createLowerToQIRPass();
 
+/// @brief Create the QIR Base Profile translation pass with no ECC expansion
+///        and QASM-like 1:1 logical lowering semantics.
+///
+/// This pass emits one QIR qubit per logical qubit (no Steane/surface/color
+/// physical block expansion), mapping each logical gate to exactly one QIS
+/// call.  It is useful for direct algorithm-level IR export comparable to
+/// `ftqc-lower-to-qasm3`, while still targeting QIR.
+std::unique_ptr<mlir::Pass> createLowerToQIRnsPass();
+
 /// @brief Create the QASM 3.0 translation pass with default options
 ///        (`output-file=""` writes to stderr, `include-comments=true`).
 ///
