@@ -50,7 +50,9 @@ func.func @qft3_steane(
       -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
   %z0 = ftqc.logical_z %t1a
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %s0 = ftqc.logical_s %z0
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %magic_t_2 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0c = ftqc.logical_t %s0, %magic_t_2
       : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
@@ -77,7 +79,9 @@ func.func @qft3_steane(
       -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
   %z1 = ftqc.logical_z %t1c
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %s1 = ftqc.logical_s %z1
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %magic_t_5 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0f = ftqc.logical_t %s1, %magic_t_5
       : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
@@ -107,7 +111,9 @@ func.func @qft3_steane(
       -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
   %z2 = ftqc.logical_z %t1e
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %s2 = ftqc.logical_s %z2
+      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   %magic_t_8 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0i = ftqc.logical_t %s2, %magic_t_8
       : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
