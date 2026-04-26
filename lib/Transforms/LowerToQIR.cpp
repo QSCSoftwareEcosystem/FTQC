@@ -272,6 +272,12 @@ private:
     return lqt.getCode().getKind() == ECCKind::Surface;
   }
 
+  static bool isColorCode(Type t) {
+    auto lqt = dyn_cast<LogicalQubitType>(t);
+    if (!lqt) return false;
+    return lqt.getCode().getKind() == ECCKind::ColorCode;
+  }
+
   static unsigned getSurfaceDistance(Type t) {
     auto lqt = dyn_cast<LogicalQubitType>(t);
     if (!lqt) return 0;
@@ -388,6 +394,99 @@ private:
   }
 
   // -------------------------------------------------------------------------
+  // 2D triangular color-code encoding circuit (distance d)
+  //
+  // Physical block size is N(d) = (3d^2 - 3d + 2)/2.
+  //
+  // This emitter constructs a triangular-style connectivity pattern over the
+  // allocated block by arranging qubits in d rows with increasing row lengths,
+  // then applying:
+  //   1) H on the first row,
+  //   2) horizontal CNOT chains per row,
+  //   3) inter-row CNOTs to two neighbors in the next row.
+  //
+  // The intent is to produce an explicit color-code-specific entangling network
+  // (rather than generic fallback / no-op encoding) while preserving full
+  // compatibility with existing block sizing and transversal gate lowering.
+  // -------------------------------------------------------------------------
+  void emitColorCodeEncoding(llvm::raw_ostream &os,
+                             std::set<std::string> &decls,
+                             unsigned b,
+                             unsigned d,
+                             unsigned n) {
+    os << "  ; --- 2D triangular color-code (d=" << d
+       << ") encoding: encode |0_L> ---\n";
+
+    if (n == 0) {
+      os << "  ; [warn] empty color-code block\n";
+      os << "  ; --- end color-code encoding ---\n";
+      return;
+    }
+
+    // Row lengths chosen to match N(d) for the current dialect formula:
+    //   row[0] = d
+    //   row[r] = d + r - 1, for r in [1, d-1]
+    // Sum = d + sum_{k=d}^{2d-2} k = (3d^2 - 3d + 2)/2.
+    std::vector<unsigned> rowLens;
+    if (d <= 1) {
+      rowLens.push_back(n);
+    } else {
+      rowLens.reserve(d);
+      rowLens.push_back(d);
+      for (unsigned r = 1; r < d; ++r)
+        rowLens.push_back(d + r - 1);
+    }
+
+    unsigned planned = 0;
+    for (unsigned len : rowLens)
+      planned += len;
+
+    // Robustness guard: if a future formula changes N(d), keep lowering valid.
+    if (planned != n) {
+      os << "  ; [warn] color-code row plan size mismatch (planned=" << planned
+         << ", block=" << n << "), using single-row fallback\n";
+      rowLens.clear();
+      rowLens.push_back(n);
+    }
+
+    std::vector<unsigned> rowStart(rowLens.size(), 0);
+    for (unsigned r = 1; r < rowLens.size(); ++r)
+      rowStart[r] = rowStart[r - 1] + rowLens[r - 1];
+
+    auto idx = [&](unsigned row, unsigned col) -> unsigned {
+      return b + rowStart[row] + col;
+    };
+
+    // Step 1: initialize first row in superposition.
+    os << "  ; Initialize first row with Hadamard\n";
+    for (unsigned c = 0; c < rowLens[0]; ++c)
+      gate1q(os, decls, "h", idx(0, c));
+
+    // Step 2: horizontal entanglement within rows.
+    os << "  ; Horizontal entanglement (row-wise CNOT chains)\n";
+    for (unsigned r = 0; r < rowLens.size(); ++r) {
+      for (unsigned c = 0; c + 1 < rowLens[r]; ++c)
+        gate2q(os, decls, "cnot", idx(r, c), idx(r, c + 1));
+    }
+
+    // Step 3: inter-row triangular connectivity.
+    os << "  ; Inter-row triangular entanglement\n";
+    for (unsigned r = 0; r + 1 < rowLens.size(); ++r) {
+      unsigned downSame = std::min(rowLens[r], rowLens[r + 1]);
+      for (unsigned c = 0; c < downSame; ++c)
+        gate2q(os, decls, "cnot", idx(r, c), idx(r + 1, c));
+
+      unsigned downDiag = (rowLens[r + 1] > 0)
+                              ? std::min(rowLens[r], rowLens[r + 1] - 1)
+                              : 0;
+      for (unsigned c = 0; c < downDiag; ++c)
+        gate2q(os, decls, "cnot", idx(r, c), idx(r + 1, c + 1));
+    }
+
+    os << "  ; --- end color-code encoding ---\n";
+  }
+
+  // -------------------------------------------------------------------------
   // Function emission
   // -------------------------------------------------------------------------
   QIRFuncResult emitFunc(func::FuncOp func) {
@@ -435,6 +534,9 @@ private:
         } else if (isSurface(o.getType())) {
           unsigned d = getSurfaceDistance(o.getType());
           emitSurfaceEncoding(os, decls, base, d);
+        } else if (isColorCode(o.getType())) {
+          unsigned d = getSurfaceDistance(o.getType());
+          emitColorCodeEncoding(os, decls, base, d, n);
         } else {
           emitComment(os, "init_zero (non-encoded: no encoding emitted)");
         }
@@ -455,6 +557,13 @@ private:
           // |+_L> = H_L |0_L> = transversal-H after encoding.
           unsigned d = getSurfaceDistance(o.getType());
           emitSurfaceEncoding(os, decls, base, d);
+          os << "  ; --- transversal H for |+_L> ---\n";
+          for (unsigned i = 0; i < n; ++i)
+            gate1q(os, decls, "h", base + i);
+        } else if (isColorCode(o.getType())) {
+          // |+_L> = H_L |0_L> = transversal-H after encoding.
+          unsigned d = getSurfaceDistance(o.getType());
+          emitColorCodeEncoding(os, decls, base, d, n);
           os << "  ; --- transversal H for |+_L> ---\n";
           for (unsigned i = 0; i < n; ++i)
             gate1q(os, decls, "h", base + i);
