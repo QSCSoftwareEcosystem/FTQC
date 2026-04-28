@@ -27,12 +27,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import os
 from pathlib import Path
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 REPO = Path(__file__).parent
 MLIR_EXAMPLES = REPO / "test" / "Integration"
-QIREE_BIN_DIR = Path.home() / "qiree" / "build" / "bin"  # Replace if qiree lives elsewhere
+env_var = os.getenv("QIREE")
+QIREE_BIN_DIR = Path(env_var) / "build" / "bin"
 LIGHTNING_EXE = QIREE_BIN_DIR / "qir-lightning"
 QSIM_EXE = QIREE_BIN_DIR / "qir-qsim"
 XACC_EXE = QIREE_BIN_DIR / "qir-xacc"
