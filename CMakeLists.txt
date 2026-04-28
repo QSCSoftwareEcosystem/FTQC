@@ -161,12 +161,12 @@ add_custom_command(
   COMMAND echo "    return" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
   COMMAND echo "fi" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
   COMMAND echo "SCRIPT=$(\$PYTHON_EXE -c \"import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))\" \${SCRIPT_FILE})" >> ${CMAKE_BINARY_DIR}/setup.source VERBATIM
-  COMMAND echo "export FTQC=$(dirname -- \${SCRIPT})" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "export PATH=.:\$FTQC/bin:\$PATH" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "export LD_LIBRARY_PATH=.:\$FTQC/lib:\$FTQC/lib64:\$LD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "export DYLD_LIBRARY_PATH=.:\$FTQC/default:\$FTQC/lib:\$DYLD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "export CPATH=\$FTQC/include:\$CPATH" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "export PYTHONPATH=\$FTQC:\$PYTHONPATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export FTQC_INSTALL=$(dirname -- \${SCRIPT})" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export PATH=.:\$FTQC_INSTALL/bin:\$PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export LD_LIBRARY_PATH=.:\$FTQC_INSTALL/lib:\$FTQC_INSTALL/lib64:\$LD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export DYLD_LIBRARY_PATH=.:\$FTQC_INSTALL/default:\$FTQC_INSTALL/lib:\$DYLD_LIBRARY_PATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export CPATH=\$FTQC_INSTALL/include:\$CPATH" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "export PYTHONPATH=\$FTQC_INSTALL:\$PYTHONPATH" >> ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "export SYSTEM=\$(hostname|cut -d . -f 1|sed 's/[0-9]*//g')" >>  ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "export MACHINE=$(echo \"\$SYSTEM\" | awk '{print toupper(substr(\$0,1,1)) tolower(substr(\$0,2))}')" >>  ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "echo \"*********************** FTQC Environent *********************\"" >> ${CMAKE_BINARY_DIR}/setup.source
