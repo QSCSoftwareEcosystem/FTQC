@@ -21,6 +21,7 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createMagicDistillPass(); });
   ::mlir::registerPass([] { return createLowerToQuantumPass(); });
   ::mlir::registerPass([] { return createLowerToQASM3Pass(); });
+  ::mlir::registerPass([] { return createLowerToIQMJSONPass(); });
   ::mlir::registerPass([] { return createLowerToSTIMPass(); });
   ::mlir::registerPass([] { return createLowerToQIRPass(); });
   ::mlir::registerPass([] { return createLowerToQIRnsPass(); });
@@ -28,6 +29,7 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createResourceEstimatePass(); });
   ::mlir::registerPass([] { return createFaultPathAnalysisPass(); });
   ::mlir::registerPass([] { return createThresholdAnalysisPass(); });
+  ::mlir::registerPass([] { return createLowerToLatticeSurgeryPass(); });
 }
 
 void mlir::ftqc::buildSteaneEncodePipeline(OpPassManager &pm,

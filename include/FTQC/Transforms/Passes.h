@@ -208,8 +208,28 @@ std::unique_ptr<mlir::Pass> createLowerToQIRnsPass();
 /// attribute so that FileCheck tests can verify it from the MLIR IR text.
 std::unique_ptr<mlir::Pass> createLowerToQASM3Pass();
 
+/// @brief Create the IQM JSON translation pass with default options
+///        (`output-file=""` writes to stderr, `include-comments=true`,
+///         `expand-syndromes=true`).
+///
+/// The pass walks every `func.func` in the module and emits an IQM JSON
+/// circuit string, decomposing logical gates into IQM native gates (prx, cz)
+/// and measure operations.  Syndrome ops are optionally expanded into
+/// physical ancilla circuits using CZ gates.
+///
+/// The JSON string is also attached to the module as the `ftqc.iqm_json`
+/// attribute so that FileCheck tests can verify it from the MLIR IR text.
+std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass();
+
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
+
+/// @brief Create the lattice-surgery surface-code STIM translation pass.
+///
+/// Expands each logical qubit into a rotated d=3 surface-code block (17 qubits)
+/// and emits a STIM circuit.  Two-qubit gates use lattice surgery joint
+/// measurements (MPP instruction).  Single-qubit Clifford gates are transversal.
+std::unique_ptr<mlir::Pass> createLowerToLatticeSurgeryPass();
 
 /// @brief Create the transversal-gate pass with default options
 ///        (non-transversal gates emit a warning but are not decomposed).

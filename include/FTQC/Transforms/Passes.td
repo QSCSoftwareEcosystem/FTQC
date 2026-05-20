@@ -369,6 +369,56 @@ def FTQCLowerToQASM3Pass : Pass<"ftqc-lower-to-qasm3", "mlir::ModuleOp"> {
 
 
 //===----------------------------------------------------------------------===//
+// IQM JSON Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToIQMJSONPass : Pass<"ftqc-lower-to-iqm-json", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to IQM JSON circuit format";
+  let description = [{
+    Walks all `func.func` operations in the module and emits an IQM JSON
+    circuit representation suitable for submission to IQM Resonance hardware
+    or the IQM emulator (`:mock` alias suffix).
+
+    Logical gate ops are decomposed into IQM native gates:
+      - `init_zero`       → (qubit allocated as QBn)
+      - `init_plus`       → qubit allocated + H decomposition
+      - `logical_x`       → prx(1.0, 0.0)
+      - `logical_y`       → prx(1.0, 0.25)
+      - `logical_h`       → prx(0.5, 0.25) + prx(1.0, 0.0)
+      - `logical_z`       → Euler Rz(π):   prx(0.5,0.0) prx(1.0,0.25) prx(1.5,0.0)
+      - `logical_s`       → Euler Rz(π/2): prx(0.5,0.0) prx(0.5,0.25) prx(1.5,0.0)
+      - `logical_t`       → Euler Rz(π/4): prx(0.5,0.0) prx(0.25,0.25) prx(1.5,0.0)
+      - `logical_cnot`    → H(target) + cz[ctrl,tgt] + H(target)
+      - `logical_cz`      → cz(QBa, QBb)
+      - `logical_toffoli` → standard 6-CZ Toffoli decomposition (Barenco et al.)
+      - `logical_measure` → measure with key "mQBn"
+
+    When `expand-syndromes=true` (default), syndrome ops are expanded into
+    physical ancilla circuits:
+      - `SteaneZSyndromeOp`: H(anc), cz[data,anc], H(anc), measure(anc)
+      - `SteaneXSyndromeOp`: H(anc), H(data), cz[anc,data], H(data), H(anc), measure(anc)
+
+    The generated JSON string is written to the file path given by `output-file`
+    (or to stderr if empty).  It is also attached to the module as the string
+    attribute `ftqc.iqm_json`.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write IQM JSON output to this path (empty = write to stderr)">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit JSON string fields for FT-only ops (syndrome, correction, frame)">,
+    Option<"expandSyndromes", "expand-syndromes", "bool", "true",
+           "Expand syndrome ops into physical ancilla CZ circuits">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // STIM Physical Circuit Translation Pass
 //===----------------------------------------------------------------------===//
 
@@ -422,6 +472,64 @@ def FTQCLowerToSTIMPass : Pass<"ftqc-lower-to-stim", "mlir::ModuleOp"> {
            "Number of syndrome extraction rounds after each logical gate">,
     Option<"includeComments", "include-comments", "bool", "true",
            "Emit # comments for FT-only ops in the STIM output">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
+
+//===----------------------------------------------------------------------===//
+// Lattice Surgery Surface-Code Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToLatticeSurgeryPass : Pass<"ftqc-lower-to-lattice-surgery", "mlir::ModuleOp"> {
+  let summary = "Translate FTQC dialect to a STIM surface-code circuit via lattice surgery";
+  let description = [{
+    Expands each logical FTQC qubit into a rotated surface-code (d=3) physical
+    block (17 qubits: 9 data + 4 X-ancilla + 4 Z-ancilla) and emits a STIM
+    stabilizer circuit.
+
+    Two-qubit gates (CNOT, CZ) are implemented via lattice surgery using
+    Stim's MPP (multi-Pauli product) instruction:
+      1. Joint XX measurement across the logical X representatives of ctrl/tgt.
+      2. Syndrome rounds on both patches.
+      3. Joint ZZ measurement across the logical Z representatives of ctrl/tgt.
+      4. Syndrome rounds on both patches.
+
+    Single-qubit Clifford gates use transversal implementations on all 9 data
+    qubits.  T gates are approximated as S (STIM is Clifford-only).
+
+    Physical layout per logical qubit (rotated d=3 surface code, 17 qubits):
+      Data qubits (9): base+0 .. base+8   (3×3 grid)
+      X-ancilla  (4):  base+9 .. base+12
+      Z-ancilla  (4):  base+13 .. base+16
+
+    Stabilizers (data-qubit offset sets within a block):
+      X-type: {0,1,3,4}, {2,5}, {3,6}, {4,5,7,8}
+      Z-type: {0,1}, {1,2,4,5}, {3,4,6,7}, {7,8}
+
+    Logical Z representative (left column): {0, 3, 6}
+    Logical X representative (top row):     {0, 1, 2}
+
+    OBSERVABLE_INCLUDE(i) tracks logical Z of logical qubit i via the XOR of
+    its left-column data measurements at final readout.
+
+    The generated STIM string is written to `output-file` (or stderr if empty)
+    and attached to the module as the `ftqc.stim_ls` string attribute.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write STIM output to this path (empty = write to stderr)">,
+    Option<"physErrorRate", "physical-error-rate", "double", "1e-3",
+           "Physical gate depolarizing error rate p">,
+    Option<"syndromeRounds", "syndrome-rounds", "unsigned", "1",
+           "Syndrome extraction rounds after each logical gate">,
+    Option<"includeComments", "include-comments", "bool", "true",
+           "Emit # comments in the STIM output">
   ];
 
   let dependentDialects = [
