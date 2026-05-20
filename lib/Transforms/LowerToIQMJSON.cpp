@@ -81,20 +81,17 @@ private:
   bool firstInst_ = true;
 
   DenseMap<Value, std::string> qubitMap_;
-  int qubitIdx_   = 0;
-  int ancIdx_     = 0;
+  int qubitIdx_   = 0;   // shared counter for ALL qubits (data + ancilla)
   int measureIdx_ = 0;
 
   //----------------------------------------------------------------------
   // Qubit name helpers
   //----------------------------------------------------------------------
 
-  std::string freshQubit() {
-    return "QB" + std::to_string(++qubitIdx_);
-  }
-  std::string freshAncilla() {
-    return "QBA" + std::to_string(++ancIdx_);
-  }
+  // All qubits — data and ancilla — share the same QB{n} counter so the
+  // locus names form a contiguous sequence QB1..QBn that IQM hardware expects.
+  std::string freshQubit()   { return "QB" + std::to_string(++qubitIdx_); }
+  std::string freshAncilla() { return freshQubit(); }
 
   void reg(Value v, const std::string &name) { qubitMap_[v] = name; }
 
@@ -214,7 +211,6 @@ private:
 
   void emitFunc(func::FuncOp func) {
     qubitIdx_   = 0;
-    ancIdx_     = 0;
     measureIdx_ = 0;
     instBuf_.clear();
     firstInst_ = true;
