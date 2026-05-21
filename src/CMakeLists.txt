@@ -7,7 +7,7 @@ set(LLVM_LINK_COMPONENTS
   AsmParser
 )
 
-add_llvm_executable(ftqc-opt ftqc-opt.cpp)
+add_llvm_executable(ftqc-opt PARTIAL_SOURCES_INTENDED ftqc-opt.cpp)
 
 llvm_update_compile_flags(ftqc-opt)
 
@@ -39,3 +39,14 @@ if("${LLVM_PACKAGE_VERSION}" VERSION_GREATER_EQUAL "${REFERENCE_LLVM_VERSION}")
 endif()
 
 install(TARGETS ftqc-opt DESTINATION bin)
+
+#=======================================================================
+# qasm3-import: standalone OpenQASM 2/3 → FTQC MLIR text converter.
+# No MLIR/LLVM library dependencies — pure C++17 stdlib.
+# Must use add_llvm_executable so LLVM's source-file checker accounts
+# for qasm3-import.cpp in this directory.
+#=======================================================================
+set(LLVM_LINK_COMPONENTS)   # no LLVM libs needed
+add_llvm_executable(qasm3-import qasm3-import.cpp)
+llvm_update_compile_flags(qasm3-import)
+install(TARGETS qasm3-import DESTINATION bin)
