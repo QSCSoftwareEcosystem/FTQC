@@ -33,8 +33,25 @@ from pathlib import Path
 # ── Paths ───────────────────────────────────────────────────────────────────
 REPO = Path(__file__).parent
 MLIR_EXAMPLES = REPO / "test" / "Integration"
-env_var = os.getenv("QIREE")
-QIREE_BIN_DIR = Path(env_var) / "build" / "bin"
+
+def resolve_qiree_bin_dir() -> Path:
+    """Resolve QIR-EE bin dir from $QIREE or fallback to ../qiree."""
+    env_var = os.getenv("QIREE")
+    if env_var:
+        return Path(env_var) / "build" / "bin"
+
+    fallback_root = REPO.parent / "qiree"
+    if fallback_root.exists():
+        return fallback_root / "build" / "bin"
+
+    print("  [ERROR] Could not resolve QIREE location.")
+    print("          Tried:")
+    print("            - $QIREE")
+    print(f"            - {fallback_root}")
+    print("          Set QIREE or ensure ../qiree exists.")
+    sys.exit(1)
+
+QIREE_BIN_DIR = resolve_qiree_bin_dir()
 LIGHTNING_EXE = QIREE_BIN_DIR / "qir-lightning"
 QSIM_EXE = QIREE_BIN_DIR / "qir-qsim"
 XACC_EXE = QIREE_BIN_DIR / "qir-xacc"
