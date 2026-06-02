@@ -16,6 +16,25 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 #=======================================================================
+# macOS: ensure C++ stdlib headers are found
+# macOS 26+ moved libc++ headers into the SDK; the CLT's c++/v1 dir
+# is incomplete (missing atomic, cassert, etc.), so add the SDK path.
+#=======================================================================
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --sdk macosx --show-sdk-path
+    OUTPUT_VARIABLE _macos_sdk
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(_macos_sdk AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/cassert")
+    add_compile_options(-I${_macos_sdk}/usr/include/c++/v1)
+    if(NOT CMAKE_OSX_SYSROOT)
+      set(CMAKE_OSX_SYSROOT "${_macos_sdk}" CACHE STRING "" FORCE)
+    endif()
+  endif()
+endif()
+
+#=======================================================================
 # Find MLIR / LLVM
 #
 # Priority:
