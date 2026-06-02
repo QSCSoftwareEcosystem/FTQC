@@ -8,17 +8,10 @@
 // Neither function touches the filesystem or the llvm::cl singleton, so they
 // are safe to call from multi-threaded IRIS task graphs.
 //
-// Pass pipeline parsing
-// ─────────────────────
-// argv entries that start with "--" and are not "--qasm-*" options are treated
-// as pass or pipeline names.  The leading "--" is stripped and the names are
-// joined with "," to form an mlir::parsePassPipeline-compatible string, e.g.:
-//
-//   argv = {"--ftqc-insert-syndrome", "--ftqc-resource-estimate"}
-//   → pipeline = "ftqc-insert-syndrome,ftqc-resource-estimate"
-//
-// Named pipelines registered at library init (ftqc-steane-pipeline, etc.) are
-// resolved the same way.
+// Configuration is passed via FTQCCfg.  NULL / zero fields fall back to
+// built-in defaults (ecc_kind="steane", ecc_dist=3, func_name="circuit").
+// cfg->pipeline is a comma-separated list of pass/pipeline names accepted by
+// mlir::parsePassPipeline, e.g. "ftqc-insert-syndrome,ftqc-resource-estimate".
 //
 //===----------------------------------------------------------------------===//
 
@@ -50,7 +43,6 @@
 #include <cstring>
 #include <mutex>
 #include <string>
-#include <vector>
 
 // ─── One-time global registration ────────────────────────────────────────────
 //
@@ -86,47 +78,24 @@ static void ensureRegistered() {
     });
 }
 
-// ─── Argument parsing ────────────────────────────────────────────────────────
+// ─── Configuration resolution ────────────────────────────────────────────────
+//
+// Apply defaults for NULL / zero fields in a FTQCCfg.
 
-struct ParsedArgs {
-    std::string eccKind  = "steane";
-    int         eccDist  = 3;
-    std::string funcName = "circuit";
-    std::string pipeline; // comma-separated pass/pipeline names
+struct ResolvedCfg {
+    std::string eccKind;
+    int         eccDist;
+    std::string funcName;
+    std::string pipeline;
 };
 
-static ParsedArgs parseArgs(int argc, const char *argv[]) {
-    ParsedArgs out;
-    std::vector<std::string> passes;
-
-    for (int i = 0; i < argc; ++i) {
-        if (!argv[i]) continue;
-        std::string a(argv[i]);
-
-        // QASM import options — consumed here, not forwarded to the pass manager.
-        if (a.substr(0, 11) == "--qasm-ecc=") {
-            out.eccKind = a.substr(11);
-            continue;
-        }
-        if (a.substr(0, 16) == "--qasm-distance=") {
-            out.eccDist = std::stoi(a.substr(16));
-            continue;
-        }
-        if (a.substr(0, 17) == "--qasm-func-name=") {
-            out.funcName = a.substr(17);
-            continue;
-        }
-
-        // Every other "--name" or "--name=value" entry is a pass/pipeline opt.
-        if (a.size() > 2 && a[0] == '-' && a[1] == '-')
-            passes.push_back(a.substr(2));
-    }
-
-    for (size_t i = 0; i < passes.size(); ++i) {
-        if (i) out.pipeline += ',';
-        out.pipeline += passes[i];
-    }
-    return out;
+static ResolvedCfg resolveCfg(const FTQCCfg *cfg) {
+    ResolvedCfg r;
+    r.eccKind  = (cfg && cfg->ecc_kind  && cfg->ecc_kind[0])  ? cfg->ecc_kind  : "steane";
+    r.eccDist  = (cfg && cfg->ecc_dist  > 0)                  ? cfg->ecc_dist  : 3;
+    r.funcName = (cfg && cfg->func_name && cfg->func_name[0]) ? cfg->func_name : "circuit";
+    r.pipeline = (cfg && cfg->pipeline  && cfg->pipeline[0])  ? cfg->pipeline  : "";
+    return r;
 }
 
 // ─── Core pipeline runner ─────────────────────────────────────────────────────
@@ -189,42 +158,55 @@ static int runPipeline(const std::string &mlirText,
 
 extern "C" {
 
-int ftqc_mlir_opt(const void  *mlir_data,
-                       size_t       mlir_size,
-                       int          argc,
-                       const char  *argv[],
-                       void       **out_data,
-                       size_t      *out_size) {
+int ftqc_mlir_opt(const void    *mlir_data,
+                  size_t         mlir_size,
+                  const FTQCCfg *cfg,
+                  void         **out_data,
+                  size_t        *out_size) {
     if (!mlir_data || !out_data || !out_size)
         return 1;
 
-    ParsedArgs args = parseArgs(argc, argv);
+    ResolvedCfg r = resolveCfg(cfg);
     std::string mlirText(static_cast<const char *>(mlir_data), mlir_size);
-    return runPipeline(mlirText, args.pipeline, out_data, out_size);
+    return runPipeline(mlirText, r.pipeline, out_data, out_size);
 }
 
-int ftqc_qasm_opt(const void  *qasm_data,
-                       size_t       qasm_size,
-                       int          argc,
-                       const char  *argv[],
-                       void       **out_data,
-                       size_t      *out_size) {
+int ftqc_qasm_opt(const void    *qasm_data,
+                  size_t         qasm_size,
+                  const FTQCCfg *cfg,
+                  void         **out_data,
+                  size_t        *out_size) {
     if (!qasm_data || !out_data || !out_size)
         return 1;
 
-    ParsedArgs args = parseArgs(argc, argv);
+    ResolvedCfg r = resolveCfg(cfg);
     std::string qasmText(static_cast<const char *>(qasm_data), qasm_size);
 
     // Validate ECC kind before running.
-    if (args.eccKind != "steane" &&
-        args.eccKind != "surface" &&
-        args.eccKind != "color_code")
+    if (r.eccKind != "steane" &&
+        r.eccKind != "surface" &&
+        r.eccKind != "color_code")
         return 1;
 
     std::string mlirText = qasm3import::importQASM3(
-        qasmText, args.eccKind, args.eccDist, args.funcName);
+        qasmText, r.eccKind, r.eccDist, r.funcName);
 
-    return runPipeline(mlirText, args.pipeline, out_data, out_size);
+    return runPipeline(mlirText, r.pipeline, out_data, out_size);
+}
+
+int ftqc_iris_mlir_opt(const void *spec, const void    *mlir_data,
+                  size_t         mlir_size,
+                  const FTQCCfg *cfg,
+                  void         **out_data,
+                  size_t        *out_size) {
+    return ftqc_mlir_opt(mlir_data, mlir_size, cfg, out_data, out_size);
+}
+int ftqc_iris_qasm_opt(const void *spec, const void    *qasm_data,
+                  size_t         qasm_size,
+                  const FTQCCfg *cfg,
+                  void         **out_data,
+                  size_t        *out_size) {
+    return ftqc_qasm_opt(qasm_data, qasm_size, cfg, out_data, out_size);
 }
 
 void ftqc_free(void *data) {
