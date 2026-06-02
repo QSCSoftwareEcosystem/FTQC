@@ -37,12 +37,25 @@ _IRIS_INSTALL = Path(os.environ.get("IRIS",
     "/Users/nqx/Development/iris.machq/install"))
 sys.path.insert(0, str(_IRIS_INSTALL))
 import iris
+import sysconfig
+
+def getlibwithext(lib_name):
+    # Detect the platform and apply the correct extension
+    if sys.platform == "darwin":
+        full_name = f"{lib_name}.dylib"
+    elif sys.platform.startswith("linux"):
+        full_name = f"{lib_name}.so"
+    elif sys.platform == "win32":
+        full_name = f"{lib_name}.dll"
+    else:
+        raise OSError(f"Unsupported operating system: {sys.platform}")
+
+    return full_name
+
 
 # ─── FTQC shared library ──────────────────────────────────────────────────────
-
 _HERE    = Path(__file__).parent
-_LIBFTQC = _HERE / "build" / "src" / "libftqc.dylib"
-
+_LIBFTQC = getlibwithext(os.path.join(_HERE, "install", "lib", "libftqc"))
 class FTQCCfg(Structure):
     _fields_ = [
         ("ecc_kind",  ctypes.c_char_p),
@@ -90,7 +103,7 @@ def _call_opt(fn, in_np, in_size, cfg, out_np, size_np):
 # FTQCCfg is captured via closure so it never enters the IRIS scalar pipeline
 # (iris.get_scalar_conv only handles numeric types and str).
 
-def make_qasm_kernel_i(cfg):
+def make_qasm_kernel_iris(cfg):
     """Return an @iris.kernel for ftqc_qasm_opt with cfg captured by closure."""
     @iris.kernel(in_=["qasm_in"], flush_=["mlir_out", "mlir_size"])
     def ftqc_iris_qasm_opt(spec, qasm_in, len_qasm_in, cfg, mlir_out, mlir_size):
