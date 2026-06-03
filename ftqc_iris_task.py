@@ -55,8 +55,7 @@ def getlibwithext(lib_name):
 
 # ─── FTQC shared library ──────────────────────────────────────────────────────
 _HERE    = Path(__file__).parent
-_LIBFTQC_NAME = os.path.join(_HERE, "install", "lib", "libftqc")
-_LIBFTQC = getlibwithext(os.path.join(_HERE, "install", "lib", "libftqc"))
+_LIBFTQC = os.path.join(_HERE, "install", "lib", "libftqc")
 
 class FTQCCfg(Structure):
     """Mirror of the C FTQCCfg struct — all fields are fixed-size (no pointers)
@@ -132,37 +131,7 @@ def cfg_as_np(cfg: FTQCCfg) -> np.ndarray:
         ctypes.string_at(ctypes.addressof(cfg), ctypes.sizeof(cfg)),
         dtype=np.uint8).copy()
 
-_lib = ctypes.CDLL(str(_LIBFTQC))
-_lib.ftqc_qasm_opt.argtypes = [c_void_p, c_size_t, POINTER(FTQCCfg),
-                                POINTER(c_void_p), POINTER(c_size_t)]
-_lib.ftqc_qasm_opt.restype  = c_int
-_lib.ftqc_mlir_opt.argtypes = [c_void_p, c_size_t, POINTER(FTQCCfg),
-                                POINTER(c_void_p), POINTER(c_size_t)]
-_lib.ftqc_mlir_opt.restype  = c_int
-_lib.ftqc_free.argtypes     = [c_void_p]
-_lib.ftqc_free.restype      = None
-
 _MAX_OUT = 1 << 19   # 512 KB pre-allocated output buffer
-
-# ─── C-API wrapper ────────────────────────────────────────────────────────────
-
-def _call_opt(fn, in_np, in_size, cfg, out_np, size_np):
-    """Call ftqc_qasm_opt or ftqc_mlir_opt into a pre-allocated numpy buffer.
-    cfg must be a FTQCCfg ctypes.Structure (not a numpy array)."""
-    out_data = c_void_p()
-    out_size = c_size_t()
-    rc = fn(in_np.ctypes.data_as(c_void_p), c_size_t(in_size),
-            ctypes.byref(cfg), ctypes.byref(out_data), ctypes.byref(out_size))
-    if rc != 0:
-        return rc
-    n = out_size.value
-    if n > len(out_np):
-        _lib.ftqc_free(out_data)
-        return -1   # buffer too small
-    out_np[:n] = np.frombuffer(ctypes.string_at(out_data, n), dtype=np.uint8)
-    size_np[0] = n
-    _lib.ftqc_free(out_data)
-    return 0
 
 # ─── @iris.kernel task factories ─────────────────────────────────────────────
 #
@@ -179,7 +148,7 @@ def make_qasm_kernel_iris(cfg_np):
     of a FTQCCfg struct.  Passing a numpy array (not a ctypes.Structure) lets
     iris.dmem() use ctypes.data_as() for the host pointer, which is correct.
     """
-    @iris.kernel(in_=["qasm_in", "cfg"], flush_=["mlir_out", "mlir_size"], library=_LIBFTQC_NAME)
+    @iris.kernel(in_=["qasm_in", "cfg"], flush_=["mlir_out", "mlir_size"], library=_LIBFTQC)
     def ftqc_iris_qasm_opt(spec, qasm_in, len_qasm_in, cfg, mlir_out, mlir_size):
         pass
     def call(mlir_out, mlir_size, qasm_in):
@@ -187,43 +156,15 @@ def make_qasm_kernel_iris(cfg_np):
                                   mlir_out, mlir_size, gws=[1])
     return call
 
-
-def make_qasm_kernel(cfg):
-    """Return an @iris.kernel for ftqc_qasm_opt with cfg captured by closure."""
-    @iris.kernel(in_=["qasm_in"], flush_=["mlir_out", "mlir_size"])
-    def ftqc_qasm_import(spec, mlir_out, mlir_size, qasm_in):
-        rc = _call_opt(_lib.ftqc_qasm_opt,
-                       qasm_in, len(qasm_in), cfg, mlir_out, mlir_size)
-        if rc != 0:
-            raise RuntimeError(f"ftqc_qasm_opt rc={rc}")
-        print(f"  [task1:qasm_import]  {len(qasm_in)} B  →"
-              f"  {int(mlir_size[0])} B  logical MLIR")
-    return ftqc_qasm_import
-
-
 def make_mlir_kernel_iris(cfg):
     """Return an @iris.kernel for ftqc_mlir_opt with cfg captured by closure."""
-    @iris.kernel(in_=["mlir_in", "cfg"], flush_=["mlir_out", "mlir_out_size"], library=_LIBFTQC_NAME)
+    @iris.kernel(in_=["mlir_in", "cfg"], flush_=["mlir_out", "mlir_out_size"], library=_LIBFTQC)
     def ftqc_iris_mlir_opt(spec, mlir_in, in_size, cfg, mlir_out, mlir_out_size):
         pass
     def call(mlir_out, mlir_out_size, mlir_in, mlir_in_size):
         return ftqc_iris_mlir_opt(mlir_in, np.int64(len(mlir_in)), cfg, mlir_out, mlir_out_size, gws=[1])
     return call
 
-def make_mlir_kernel(cfg):
-    """Return an @iris.kernel for ftqc_mlir_opt with cfg captured by closure."""
-    @iris.kernel(in_=["mlir_in", "mlir_in_size"], flush_=["mlir_out", "mlir_out_size"])
-    def ftqc_mlir_opt_fn(spec, mlir_out, mlir_out_size, mlir_in, mlir_in_size):
-        in_size = int(mlir_in_size[0])
-        rc = _call_opt(_lib.ftqc_mlir_opt,
-                       mlir_in, in_size, cfg, mlir_out, mlir_out_size)
-        if rc != 0:
-            raise RuntimeError(f"ftqc_mlir_opt rc={rc}")
-        print(f"  [task2:mlir_opt]     {in_size} B  →"
-              f"  {int(mlir_out_size[0])} B  physical MLIR")
-    return ftqc_mlir_opt_fn
-
-# ─── Pipeline ─────────────────────────────────────────────────────────────────
 
 def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         pipeline: str, out_file: Path) -> None:
