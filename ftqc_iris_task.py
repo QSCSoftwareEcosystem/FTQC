@@ -59,12 +59,78 @@ _LIBFTQC_NAME = os.path.join(_HERE, "install", "lib", "libftqc")
 _LIBFTQC = getlibwithext(os.path.join(_HERE, "install", "lib", "libftqc"))
 
 class FTQCCfg(Structure):
+    """Mirror of the C FTQCCfg struct — all fields are fixed-size (no pointers)
+    so the struct can be byte-copied into IRIS device memory safely."""
     _fields_ = [
-        ("ecc_kind",  ctypes.c_char_p),
-        ("ecc_dist",  c_int),
-        ("func_name", ctypes.c_char_p),
-        ("pipeline",  ctypes.c_char_p),
+        # Input / import
+        ("ecc_kind",   ctypes.c_char * 64),
+        ("ecc_dist",   c_int),
+        ("func_name",  ctypes.c_char * 64),
+        # Pre-built pipelines
+        ("run_steane_pipeline",   c_int),
+        ("run_surface_pipeline",  c_int),
+        ("run_distill_pipeline",  c_int),
+        # Encoding passes
+        ("steane_encode",  c_int),
+        ("surface_encode", c_int),
+        ("use_lattice",    c_int),
+        ("color_encode",   c_int),
+        # Syndrome & correction passes
+        ("insert_syndrome",   c_int),
+        ("syndrome_method",   ctypes.c_char * 32),
+        ("syndrome_rounds",   c_int),
+        ("insert_correction", c_int),
+        ("pauli_frame_opt",   c_int),
+        # Magic-state passes
+        ("magic_distill",        c_int),
+        ("distill_protocol",     ctypes.c_char * 32),
+        ("distill_levels",       c_int),
+        ("distill_target_error", ctypes.c_double),
+        # Lowering passes
+        ("transversal_gates",         c_int),
+        ("decompose_non_transversal", c_int),
+        ("lower_to_quantum",          c_int),
+        ("lower_to_stim",             c_int),
+        ("lower_to_qir",              c_int),
+        ("lower_to_qasm3",            c_int),
+        ("lower_to_iqm_json",         c_int),
+        ("lower_to_lattice_surgery",  c_int),
+        # Analysis passes
+        ("resource_estimate",    c_int),
+        ("print_report",         c_int),
+        ("fault_path",           c_int),
+        ("fault_path_max_order", c_int),
+        ("threshold_analysis",   c_int),
+        ("physical_error_rate",  ctypes.c_double),
+        ("target_error_rate",    ctypes.c_double),
     ]
+
+# Map pipeline name → which flag to set in FTQCCfg
+_PIPELINE_FLAGS = {
+    "ftqc-steane-pipeline":  "run_steane_pipeline",
+    "ftqc-surface-pipeline": "run_surface_pipeline",
+    "ftqc-distill-pipeline": "run_distill_pipeline",
+}
+
+def make_cfg(ecc_kind: str, ecc_dist: int, func_name: str,
+             pipeline: str = "") -> FTQCCfg:
+    """Build a FTQCCfg from high-level parameters."""
+    cfg = FTQCCfg()
+    cfg.ecc_kind  = ecc_kind.encode()
+    cfg.ecc_dist  = ecc_dist
+    cfg.func_name = func_name.encode()
+    flag = _PIPELINE_FLAGS.get(pipeline)
+    if flag:
+        setattr(cfg, flag, 1)
+    return cfg
+
+def cfg_as_np(cfg: FTQCCfg) -> np.ndarray:
+    """Return a numpy uint8 view of a FTQCCfg's raw bytes.
+    Since FTQCCfg contains no pointers (only fixed arrays and plain values)
+    the byte copy is self-contained and safe to pass to iris.dmem()."""
+    return np.frombuffer(
+        ctypes.string_at(ctypes.addressof(cfg), ctypes.sizeof(cfg)),
+        dtype=np.uint8).copy()
 
 _lib = ctypes.CDLL(str(_LIBFTQC))
 _lib.ftqc_qasm_opt.argtypes = [c_void_p, c_size_t, POINTER(FTQCCfg),
@@ -81,7 +147,8 @@ _MAX_OUT = 1 << 19   # 512 KB pre-allocated output buffer
 # ─── C-API wrapper ────────────────────────────────────────────────────────────
 
 def _call_opt(fn, in_np, in_size, cfg, out_np, size_np):
-    """Call ftqc_qasm_opt or ftqc_mlir_opt into a pre-allocated numpy buffer."""
+    """Call ftqc_qasm_opt or ftqc_mlir_opt into a pre-allocated numpy buffer.
+    cfg must be a FTQCCfg ctypes.Structure (not a numpy array)."""
     out_data = c_void_p()
     out_size = c_size_t()
     rc = fn(in_np.ctypes.data_as(c_void_p), c_size_t(in_size),
@@ -105,29 +172,21 @@ def _call_opt(fn, in_np, in_size, cfg, out_np, size_np):
 # FTQCCfg is captured via closure so it never enters the IRIS scalar pipeline
 # (iris.get_scalar_conv only handles numeric types and str).
 
-def make_qasm_kernel_iris(cfg):
-    """Return an @iris.kernel for ftqc_qasm_opt with cfg captured by closure."""
+def make_qasm_kernel_iris(cfg_np):
+    """Return an @iris.kernel for ftqc_iris_qasm_opt (native C via IRIS FFI).
+
+    cfg_np must be a numpy uint8 array produced by cfg_as_np() — the raw bytes
+    of a FTQCCfg struct.  Passing a numpy array (not a ctypes.Structure) lets
+    iris.dmem() use ctypes.data_as() for the host pointer, which is correct.
+    """
     @iris.kernel(in_=["qasm_in", "cfg"], flush_=["mlir_out", "mlir_size"], library=_LIBFTQC_NAME)
     def ftqc_iris_qasm_opt(spec, qasm_in, len_qasm_in, cfg, mlir_out, mlir_size):
         pass
     def call(mlir_out, mlir_size, qasm_in):
-        print("Len: ", len(qasm_in))
-        return ftqc_iris_qasm_opt(qasm_in, np.int64(len(qasm_in)), cfg, mlir_out, mlir_size, gws=[1])
+        return ftqc_iris_qasm_opt(qasm_in, np.int64(len(qasm_in)), cfg_np,
+                                  mlir_out, mlir_size, gws=[1])
     return call
 
-
-def make_mlir_kernel_i(cfg):
-    """Return an @iris.kernel for ftqc_mlir_opt with cfg captured by closure."""
-    @iris.kernel(in_=["mlir_in", "mlir_in_size"], flush_=["mlir_out", "mlir_out_size"])
-    def ftqc_mlir_opt_fn(spec, mlir_out, mlir_out_size, mlir_in, mlir_in_size):
-        in_size = int(mlir_in_size[0])
-        rc = _call_opt(_lib.ftqc_mlir_opt,
-                       mlir_in, in_size, cfg, mlir_out, mlir_out_size)
-        if rc != 0:
-            raise RuntimeError(f"ftqc_mlir_opt rc={rc}")
-        print(f"  [task2:mlir_opt]     {in_size} B  →"
-              f"  {int(mlir_out_size[0])} B  physical MLIR")
-    return ftqc_mlir_opt_fn
 
 def make_qasm_kernel(cfg):
     """Return an @iris.kernel for ftqc_qasm_opt with cfg captured by closure."""
@@ -141,6 +200,15 @@ def make_qasm_kernel(cfg):
               f"  {int(mlir_size[0])} B  logical MLIR")
     return ftqc_qasm_import
 
+
+def make_mlir_kernel_iris(cfg):
+    """Return an @iris.kernel for ftqc_mlir_opt with cfg captured by closure."""
+    @iris.kernel(in_=["mlir_in", "cfg"], flush_=["mlir_out", "mlir_out_size"], library=_LIBFTQC_NAME)
+    def ftqc_iris_mlir_opt(spec, mlir_in, in_size, cfg, mlir_out, mlir_out_size):
+        pass
+    def call(mlir_out, mlir_out_size, mlir_in, mlir_in_size):
+        return ftqc_iris_mlir_opt(mlir_in, np.int64(len(mlir_in)), cfg, mlir_out, mlir_out_size, gws=[1])
+    return call
 
 def make_mlir_kernel(cfg):
     """Return an @iris.kernel for ftqc_mlir_opt with cfg captured by closure."""
@@ -170,24 +238,22 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
     physical_size_np = np.zeros(2, dtype=np.uint64)  # [0]=size; [1] keeps nelems>1
 
     # ── FTQCCfg ───────────────────────────────────────────────────────────────
-    cfg_import = FTQCCfg(ecc_kind=ecc_kind.encode(), ecc_dist=ecc_dist,
-                         func_name=func_name.encode(), pipeline=b"")
-    cfg_opt    = FTQCCfg(ecc_kind=ecc_kind.encode(), ecc_dist=ecc_dist,
-                         func_name=func_name.encode(), pipeline=pipeline.encode())
+    # cfg_import: no pipeline (QASM → logical MLIR only, no passes)
+    # cfg_opt:    full pipeline for logical → physical conversion
+    cfg_import = make_cfg(ecc_kind, ecc_dist, func_name, pipeline="")
+    cfg_opt    = make_cfg(ecc_kind, ecc_dist, func_name, pipeline=pipeline)
+
+    # Convert to numpy bytes so iris.dmem() uses the correct host pointer.
+    # FTQCCfg has no pointer fields — all fields are inline values/arrays —
+    # so the byte copy is self-contained.
+    cfg_import_np = cfg_as_np(cfg_import)
+    cfg_opt_np    = cfg_as_np(cfg_opt)
 
     iris.init()
 
-    # ── Register buffers as iris.dmem (must be after iris.init) ──────────────
-    iris.dmem(cfg_import)
-    iris.dmem(qasm_np)
-    iris.dmem(logical_np)
-    iris.dmem(logical_size_np)
-    iris.dmem(physical_np)
-    iris.dmem(physical_size_np)
-
     # ── Build kernels (cfg captured by closure) ───────────────────────────────
-    k_qasm = make_qasm_kernel_iris(cfg_import)
-    k_mlir = make_mlir_kernel(cfg_opt)
+    k_qasm = make_qasm_kernel_iris(cfg_import_np)
+    k_mlir = make_mlir_kernel_iris(cfg_opt_np)
 
     # ── Task 1: QASM → logical MLIR ──────────────────────────────────────────
     t1 = k_qasm(logical_np, logical_size_np, qasm_np)
@@ -198,8 +264,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         raise RuntimeError("Task 1 produced no output")
 
     # ── Task 2: logical MLIR → physical circuit ───────────────────────────────
-    t2 = k_mlir(physical_np, physical_size_np, logical_np, logical_size_np,
-                 gws=[1])
+    t2 = k_mlir(physical_np, physical_size_np, logical_np, logical_size_np)
     t2.submit(iris.iris_cpu, sync=1)
 
     iris.finalize()

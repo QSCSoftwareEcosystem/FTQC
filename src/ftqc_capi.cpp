@@ -8,10 +8,9 @@
 // Neither function touches the filesystem or the llvm::cl singleton, so they
 // are safe to call from multi-threaded IRIS task graphs.
 //
-// Configuration is passed via FTQCCfg.  NULL / zero fields fall back to
-// built-in defaults (ecc_kind="steane", ecc_dist=3, func_name="circuit").
-// cfg->pipeline is a comma-separated list of pass/pipeline names accepted by
-// mlir::parsePassPipeline, e.g. "ftqc-insert-syndrome,ftqc-resource-estimate".
+// Configuration is passed via FTQCCfg.  All fields use fixed-size storage
+// (no pointers), making the struct safe to byte-copy into IRIS device memory.
+// Zero-initialised / empty fields fall back to built-in defaults.
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,10 +44,6 @@
 #include <string>
 
 // ─── One-time global registration ────────────────────────────────────────────
-//
-// mlir::registerAllPasses() and PassPipelineRegistration<> write to global
-// tables; calling them more than once is undefined.  A std::once_flag guards
-// the single init path.
 
 static std::once_flag gRegisterOnce;
 
@@ -78,37 +73,108 @@ static void ensureRegistered() {
     });
 }
 
-// ─── Configuration resolution ────────────────────────────────────────────────
+// ─── Helper: field-with-default ──────────────────────────────────────────────
+
+static std::string strOrDefault(const char *field, const char *def) {
+    return (field && field[0]) ? std::string(field) : std::string(def);
+}
+
+// ─── Build PassManager from FTQCCfg flags ────────────────────────────────────
 //
-// Apply defaults for NULL / zero fields in a FTQCCfg.
+// Checks pre-built pipeline flags first; if none set, adds individual passes
+// in a logical order based on the per-pass flags.
 
-struct ResolvedCfg {
-    std::string eccKind;
-    int         eccDist;
-    std::string funcName;
-    std::string pipeline;
-};
+static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
+    if (!cfg) return;
 
-static ResolvedCfg resolveCfg(const FTQCCfg *cfg) {
-    ResolvedCfg r;
-    r.eccKind  = (cfg && cfg->ecc_kind  && cfg->ecc_kind[0])  ? cfg->ecc_kind  : "steane";
-    r.eccDist  = (cfg && cfg->ecc_dist  > 0)                  ? cfg->ecc_dist  : 3;
-    r.funcName = (cfg && cfg->func_name && cfg->func_name[0]) ? cfg->func_name : "circuit";
-    r.pipeline = (cfg && cfg->pipeline  && cfg->pipeline[0])  ? cfg->pipeline  : "";
-    return r;
+    // Pre-built pipelines (mutually exclusive; first match wins)
+    if (cfg->run_steane_pipeline) {
+        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
+        mlir::ftqc::buildSteaneEncodePipeline(pm, dist);
+        return;
+    }
+    if (cfg->run_surface_pipeline) {
+        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
+        bool lattice = cfg->use_lattice != 0;
+        mlir::ftqc::buildSurfaceEncodePipeline(pm, dist, lattice);
+        return;
+    }
+    if (cfg->run_distill_pipeline) {
+        std::string proto = strOrDefault(cfg->distill_protocol, "15to1");
+        unsigned levels = cfg->distill_levels > 0 ? (unsigned)cfg->distill_levels : 1u;
+        mlir::ftqc::buildDistillationPipeline(pm, proto, levels);
+        return;
+    }
+
+    // Encoding passes
+    if (cfg->steane_encode) {
+        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
+        pm.addPass(mlir::ftqc::createSteaneEncodePass(dist, false, 3));
+    }
+    if (cfg->surface_encode) {
+        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
+        pm.addPass(mlir::ftqc::createSurfaceEncodePass(dist, cfg->use_lattice != 0));
+    }
+    if (cfg->color_encode) {
+        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
+        pm.addPass(mlir::ftqc::createColorCodeEncodePass(dist));
+    }
+
+    // Syndrome & correction passes
+    if (cfg->insert_syndrome) {
+        std::string method = strOrDefault(cfg->syndrome_method, "steane");
+        unsigned rounds = cfg->syndrome_rounds > 0 ? (unsigned)cfg->syndrome_rounds : 3u;
+        pm.addPass(mlir::ftqc::createInsertSyndromePass(method, rounds));
+    }
+    if (cfg->insert_correction)
+        pm.addPass(mlir::ftqc::createInsertCorrectionPass());
+    if (cfg->pauli_frame_opt)
+        pm.addPass(mlir::ftqc::createPauliFrameOptPass());
+
+    // Magic-state passes
+    if (cfg->magic_distill) {
+        std::string proto = strOrDefault(cfg->distill_protocol, "15to1");
+        unsigned levels = cfg->distill_levels > 0 ? (unsigned)cfg->distill_levels : 1u;
+        double terr = cfg->distill_target_error > 0.0 ? cfg->distill_target_error : 1e-10;
+        pm.addPass(mlir::ftqc::createMagicDistillPass(proto, levels, terr));
+    }
+
+    // Lowering passes
+    if (cfg->transversal_gates)
+        pm.addPass(mlir::ftqc::createTransversalGatePass(cfg->decompose_non_transversal != 0));
+    if (cfg->lower_to_quantum)
+        pm.addPass(mlir::ftqc::createLowerToQuantumPass());
+    if (cfg->lower_to_stim)
+        pm.addPass(mlir::ftqc::createLowerToSTIMPass());
+    if (cfg->lower_to_qir)
+        pm.addPass(mlir::ftqc::createLowerToQIRPass());
+    if (cfg->lower_to_qasm3)
+        pm.addPass(mlir::ftqc::createLowerToQASM3Pass());
+    if (cfg->lower_to_iqm_json)
+        pm.addPass(mlir::ftqc::createLowerToIQMJSONPass());
+    if (cfg->lower_to_lattice_surgery)
+        pm.addPass(mlir::ftqc::createLowerToLatticeSurgeryPass());
+
+    // Analysis passes
+    if (cfg->resource_estimate)
+        pm.addPass(mlir::ftqc::createResourceEstimatePass(cfg->print_report != 0));
+    if (cfg->fault_path) {
+        unsigned order = cfg->fault_path_max_order > 0 ? (unsigned)cfg->fault_path_max_order : 1u;
+        pm.addPass(mlir::ftqc::createFaultPathAnalysisPass(order));
+    }
+    if (cfg->threshold_analysis) {
+        double phys = cfg->physical_error_rate > 0.0 ? cfg->physical_error_rate : 1e-3;
+        double tgt  = cfg->target_error_rate  > 0.0 ? cfg->target_error_rate  : 1e-10;
+        pm.addPass(mlir::ftqc::createThresholdAnalysisPass(phys, tgt));
+    }
 }
 
 // ─── Core pipeline runner ─────────────────────────────────────────────────────
-//
-// Takes MLIR text, runs the given pass pipeline, and returns the output MLIR
-// text in a malloc'd, NUL-terminated buffer.
 
-static int runPipeline(const std::string &mlirText,
-                       const std::string &pipeline,
+static int runPipeline(const std::string &mlirText, const FTQCCfg *cfg,
                        void **out_data, size_t *out_size) {
     ensureRegistered();
 
-    // Build a per-call dialect registry and context.
     mlir::DialectRegistry registry;
     mlir::registerAllDialects(registry);
     registry.insert<mlir::ftqc::FTQCDialect>();
@@ -116,7 +182,6 @@ static int runPipeline(const std::string &mlirText,
     mlir::MLIRContext ctx(registry);
     ctx.loadAllAvailableDialects();
 
-    // Wrap the MLIR text in a MemoryBuffer and parse.
     auto memBuf =
         llvm::MemoryBuffer::getMemBufferCopy(mlirText, "<ftqc-iris-input>");
     llvm::SourceMgr srcMgr;
@@ -127,19 +192,12 @@ static int runPipeline(const std::string &mlirText,
     if (!module)
         return 1;
 
-    // Build the pass manager from the pipeline string.
     mlir::PassManager pm(&ctx);
-    if (!pipeline.empty()) {
-        std::string errMsg;
-        llvm::raw_string_ostream errOs(errMsg);
-        if (mlir::failed(mlir::parsePassPipeline(pipeline, pm, errOs)))
-            return 1;
-    }
+    buildPassManager(pm, cfg);
 
     if (mlir::failed(pm.run(*module)))
         return 1;
 
-    // Serialize the output module to a string.
     std::string result;
     llvm::raw_string_ostream os(result);
     module->print(os);
@@ -165,10 +223,8 @@ int ftqc_mlir_opt(const void    *mlir_data,
                   size_t        *out_size) {
     if (!mlir_data || !out_data || !out_size)
         return 1;
-
-    ResolvedCfg r = resolveCfg(cfg);
     std::string mlirText(static_cast<const char *>(mlir_data), mlir_size);
-    return runPipeline(mlirText, r.pipeline, out_data, out_size);
+    return runPipeline(mlirText, cfg, out_data, out_size);
 }
 
 int ftqc_qasm_opt(const void    *qasm_data,
@@ -179,42 +235,55 @@ int ftqc_qasm_opt(const void    *qasm_data,
     if (!qasm_data || !out_data || !out_size)
         return 1;
 
-    ResolvedCfg r = resolveCfg(cfg);
-    std::string qasmText(static_cast<const char *>(qasm_data), qasm_size);
+    std::string eccKind  = cfg ? strOrDefault(cfg->ecc_kind,  "steane")  : "steane";
+    int         eccDist  = (cfg && cfg->ecc_dist > 0) ? cfg->ecc_dist : 3;
+    std::string funcName = cfg ? strOrDefault(cfg->func_name, "circuit") : "circuit";
 
-    // Validate ECC kind before running.
-    if (r.eccKind != "steane" &&
-        r.eccKind != "surface" &&
-        r.eccKind != "color_code")
+    if (eccKind != "steane" && eccKind != "surface" && eccKind != "color_code")
         return 1;
 
-    std::string mlirText = qasm3import::importQASM3(
-        qasmText, r.eccKind, r.eccDist, r.funcName);
-
-    return runPipeline(mlirText, r.pipeline, out_data, out_size);
+    std::string qasmText(static_cast<const char *>(qasm_data), qasm_size);
+    std::string mlirText = qasm3import::importQASM3(qasmText, eccKind, eccDist, funcName);
+    return runPipeline(mlirText, cfg, out_data, out_size);
 }
 
-int ftqc_iris_mlir_opt(const void *spec, const void    *mlir_data,
-                  size_t         mlir_size,
-                  const FTQCCfg *cfg,
-                  void         **out_data,
-                  size_t        *out_size) {
-    return ftqc_mlir_opt(mlir_data, mlir_size, cfg, out_data, out_size);
+// ─── copy_to_buf ─────────────────────────────────────────────────────────────
+//
+// Shared helper for the IRIS kernel variants: runs the pipeline via the
+// standard (malloc) entry point, then copies the result into the caller-
+// supplied IRIS device buffer and frees the temporary allocation.
+
+static int copy_to_buf(void *tmp_data, size_t tmp_size,
+                       void *out_buf, size_t *out_size) {
+    if (!tmp_data) return 1;
+    std::memcpy(out_buf, tmp_data, tmp_size);
+    *out_size = tmp_size;
+    std::free(tmp_data);
+    return 0;
 }
-int ftqc_iris_qasm_opt(const void *spec, const void    *qasm_data,
-                  size_t         qasm_size,
-                  const FTQCCfg *cfg,
-                  void         **out_data,
-                  size_t        *out_size) {
-    fprintf(stderr, "[ftqc_iris_qasm_opt] spec=%p qasm_data=%p qasm_size=%zu cfg=%p\n",
-            spec, qasm_data, qasm_size, (void*)cfg);
-    if (cfg)
-        fprintf(stderr, "[ftqc_iris_qasm_opt] cfg->ecc_kind=%s ecc_dist=%d func_name=%s pipeline=%s\n",
-                cfg->ecc_kind ? cfg->ecc_kind : "(null)",
-                cfg->ecc_dist,
-                cfg->func_name ? cfg->func_name : "(null)",
-                cfg->pipeline ? cfg->pipeline : "(null)");
-    return ftqc_qasm_opt(qasm_data, qasm_size, cfg, out_data, out_size);
+
+int ftqc_iris_mlir_opt(const void    *spec,
+                       const void    *mlir_data,
+                       size_t         mlir_size,
+                       const FTQCCfg *cfg,
+                       void          *out_buf,
+                       size_t        *out_size) {
+    (void)spec;
+    void *tmp = NULL; size_t sz = 0;
+    if (ftqc_mlir_opt(mlir_data, mlir_size, cfg, &tmp, &sz) != 0) return 1;
+    return copy_to_buf(tmp, sz, out_buf, out_size);
+}
+
+int ftqc_iris_qasm_opt(const void    *spec,
+                       const void    *qasm_data,
+                       size_t         qasm_size,
+                       const FTQCCfg *cfg,
+                       void          *out_buf,
+                       size_t        *out_size) {
+    (void)spec;
+    void *tmp = NULL; size_t sz = 0;
+    if (ftqc_qasm_opt(qasm_data, qasm_size, cfg, &tmp, &sz) != 0) return 1;
+    return copy_to_buf(tmp, sz, out_buf, out_size);
 }
 
 void ftqc_free(void *data) {
