@@ -55,7 +55,9 @@ def getlibwithext(lib_name):
 
 # ─── FTQC shared library ──────────────────────────────────────────────────────
 _HERE    = Path(__file__).parent
+_LIBFTQC_NAME = os.path.join(_HERE, "install", "lib", "libftqc")
 _LIBFTQC = getlibwithext(os.path.join(_HERE, "install", "lib", "libftqc"))
+
 class FTQCCfg(Structure):
     _fields_ = [
         ("ecc_kind",  ctypes.c_char_p),
@@ -105,10 +107,11 @@ def _call_opt(fn, in_np, in_size, cfg, out_np, size_np):
 
 def make_qasm_kernel_iris(cfg):
     """Return an @iris.kernel for ftqc_qasm_opt with cfg captured by closure."""
-    @iris.kernel(in_=["qasm_in"], flush_=["mlir_out", "mlir_size"])
+    @iris.kernel(in_=["qasm_in", "cfg"], flush_=["mlir_out", "mlir_size"], library=_LIBFTQC_NAME)
     def ftqc_iris_qasm_opt(spec, qasm_in, len_qasm_in, cfg, mlir_out, mlir_size):
         pass
     def call(mlir_out, mlir_size, qasm_in):
+        print("Len: ", len(qasm_in))
         return ftqc_iris_qasm_opt(qasm_in, np.int64(len(qasm_in)), cfg, mlir_out, mlir_size, gws=[1])
     return call
 
@@ -175,6 +178,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
     iris.init()
 
     # ── Register buffers as iris.dmem (must be after iris.init) ──────────────
+    iris.dmem(cfg_import)
     iris.dmem(qasm_np)
     iris.dmem(logical_np)
     iris.dmem(logical_size_np)
@@ -182,7 +186,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
     iris.dmem(physical_size_np)
 
     # ── Build kernels (cfg captured by closure) ───────────────────────────────
-    k_qasm = make_qasm_kernel(cfg_import)
+    k_qasm = make_qasm_kernel_iris(cfg_import)
     k_mlir = make_mlir_kernel(cfg_opt)
 
     # ── Task 1: QASM → logical MLIR ──────────────────────────────────────────

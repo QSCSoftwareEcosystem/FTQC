@@ -206,6 +206,14 @@ int ftqc_iris_qasm_opt(const void *spec, const void    *qasm_data,
                   const FTQCCfg *cfg,
                   void         **out_data,
                   size_t        *out_size) {
+    fprintf(stderr, "[ftqc_iris_qasm_opt] spec=%p qasm_data=%p qasm_size=%zu cfg=%p\n",
+            spec, qasm_data, qasm_size, (void*)cfg);
+    if (cfg)
+        fprintf(stderr, "[ftqc_iris_qasm_opt] cfg->ecc_kind=%s ecc_dist=%d func_name=%s pipeline=%s\n",
+                cfg->ecc_kind ? cfg->ecc_kind : "(null)",
+                cfg->ecc_dist,
+                cfg->func_name ? cfg->func_name : "(null)",
+                cfg->pipeline ? cfg->pipeline : "(null)");
     return ftqc_qasm_opt(qasm_data, qasm_size, cfg, out_data, out_size);
 }
 
