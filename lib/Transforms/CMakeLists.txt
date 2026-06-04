@@ -13,6 +13,7 @@ add_mlir_library(FTQCTransforms
   LowerToLatticeSurgery.cpp
   LowerToQIR.cpp
   LowerToQIRns.cpp
+  LowerToIntelQSCpp.cpp
   Passes.cpp
 
   DEPENDS

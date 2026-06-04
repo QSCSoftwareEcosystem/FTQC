@@ -174,6 +174,53 @@ def FTQCLowerToQuantumPass : Pass<"ftqc-lower-to-quantum", "mlir::ModuleOp"> {
   ];
 }
 
+def FTQCLowerToIntelQSCppPass : Pass<"ftqc-lower-to-iqs-cpp", "mlir::ModuleOp"> {
+  let summary = "Emit a standalone C++ source file using the Intel-QS QubitRegister API";
+  let description = [{
+    Translates a FTQC logical circuit to a compilable C++ source file that uses
+    the Intel-QS (qHiPSTER) QubitRegister<ComplexDP> or NoisyQureg<ComplexDP>
+    API for state-vector simulation.
+
+    Gate mapping:
+      init_zero              → qubit index, initial |0⟩ from "base" init
+      init_plus              → qubit index + psi.ApplyHadamard()
+      logical_h/x/y/z       → psi.ApplyHadamard / ApplyPauliX/Y/Z
+      logical_s              → psi.Apply1QubitGate(S_matrix)
+      logical_t              → psi.ApplyT()
+      logical_cnot           → psi.ApplyCPauliX(ctrl, tgt)
+      logical_cz             → psi.ApplyCPauliZ(ctrl, tgt)
+      logical_toffoli        → psi.ApplyToffoli(c0, c1, tgt)
+      logical_measure        → Born-rule collapse + record result
+      syndrome / EC ops      → comment (stubs for ideal simulation)
+
+    Compile and run the emitted file:
+      g++ -std=c++17 -I${IQS_ROOT}/include circuit.cpp \
+          -L${IQS_ROOT}/build/lib -lintelqs_lib -lm -o sim
+      ./sim [shots]
+
+    With --with-noise the emitter uses NoisyQureg<ComplexDP> and inserts
+    ApplyNoiseGate() calls after each gate, parameterised by --t1 and --t2.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write emitted C++ to this path (default: stderr)">,
+    Option<"withNoise", "with-noise", "bool", "false",
+           "Use NoisyQureg<ComplexDP> with SSE noise model">,
+    Option<"t1Time", "t1", "double", "1000.0",
+           "T1 coherence time (used with --with-noise)">,
+    Option<"t2Time", "t2", "double", "500.0",
+           "T2 coherence time (used with --with-noise)">,
+    Option<"rngSeed", "rng-seed", "unsigned", "42",
+           "RNG seed for Born-rule measurement sampling">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
 def FTQCTransversalGatePass : Pass<"ftqc-transversal-gates", "mlir::func::FuncOp"> {
   let summary = "Verify and expand transversal gate implementations";
   let description = [{

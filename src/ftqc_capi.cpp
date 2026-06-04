@@ -34,6 +34,10 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LogicalResult.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -120,16 +124,19 @@ static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
         pm.addPass(mlir::ftqc::createColorCodeEncodePass(dist));
     }
 
-    // Syndrome & correction passes
-    if (cfg->insert_syndrome) {
-        std::string method = strOrDefault(cfg->syndrome_method, "steane");
-        unsigned rounds = cfg->syndrome_rounds > 0 ? (unsigned)cfg->syndrome_rounds : 3u;
-        pm.addPass(mlir::ftqc::createInsertSyndromePass(method, rounds));
+    // Syndrome & correction passes — registered for func::FuncOp, must be nested.
+    if (cfg->insert_syndrome || cfg->insert_correction || cfg->pauli_frame_opt) {
+        auto &fpm = pm.nest<mlir::func::FuncOp>();
+        if (cfg->insert_syndrome) {
+            std::string method = strOrDefault(cfg->syndrome_method, "steane");
+            unsigned rounds = cfg->syndrome_rounds > 0 ? (unsigned)cfg->syndrome_rounds : 3u;
+            fpm.addPass(mlir::ftqc::createInsertSyndromePass(method, rounds));
+        }
+        if (cfg->insert_correction)
+            fpm.addPass(mlir::ftqc::createInsertCorrectionPass());
+        if (cfg->pauli_frame_opt)
+            fpm.addPass(mlir::ftqc::createPauliFrameOptPass());
     }
-    if (cfg->insert_correction)
-        pm.addPass(mlir::ftqc::createInsertCorrectionPass());
-    if (cfg->pauli_frame_opt)
-        pm.addPass(mlir::ftqc::createPauliFrameOptPass());
 
     // Magic-state passes
     if (cfg->magic_distill) {
@@ -154,6 +161,8 @@ static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
         pm.addPass(mlir::ftqc::createLowerToIQMJSONPass());
     if (cfg->lower_to_lattice_surgery)
         pm.addPass(mlir::ftqc::createLowerToLatticeSurgeryPass());
+    if (cfg->lower_to_iqs)
+        pm.addPass(mlir::ftqc::createLowerToIntelQSCppPass());
 
     // Analysis passes
     if (cfg->resource_estimate)

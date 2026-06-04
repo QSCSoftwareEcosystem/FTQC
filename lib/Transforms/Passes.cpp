@@ -30,6 +30,7 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createFaultPathAnalysisPass(); });
   ::mlir::registerPass([] { return createThresholdAnalysisPass(); });
   ::mlir::registerPass([] { return createLowerToLatticeSurgeryPass(); });
+  ::mlir::registerPass([] { return createLowerToIntelQSCppPass(); });
 }
 
 void mlir::ftqc::buildSteaneEncodePipeline(OpPassManager &pm,

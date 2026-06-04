@@ -168,6 +168,17 @@ std::unique_ptr<mlir::Pass> createMagicDistillPass(const std::string &protocol,
 /// @brief Create the lowering pass to a generic `quantum` dialect.
 std::unique_ptr<mlir::Pass> createLowerToQuantumPass();
 
+/// @brief Create the Intel-QS C++ source emitter pass.
+///
+/// Emits a standalone, compilable C++ source file that simulates the logical
+/// FTQC circuit using the Intel-QS QubitRegister<ComplexDP> API (or
+/// NoisyQureg<ComplexDP> with the --with-noise option).
+///
+/// The emitted file can be compiled directly against the Intel-QS library:
+///   g++ -std=c++17 -I${IQS_ROOT}/include out.cpp \
+///       -L${IQS_ROOT}/build/lib -lintelqs_lib -lm -o sim && ./sim [shots]
+std::unique_ptr<mlir::Pass> createLowerToIntelQSCppPass();
+
 /// @brief Create the STIM physical circuit translation pass with default options
 ///        (`output-file=""` writes to stderr, `physical-error-rate=1e-3`,
 ///         `syndrome-rounds=1`, `include-comments=true`).

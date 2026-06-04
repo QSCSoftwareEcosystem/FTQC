@@ -104,6 +104,8 @@ typedef struct FTQCCfg {
     int lower_to_iqm_json;
     /** --ftqc-lower-to-lattice-surgery: lattice-surgery surface-code STIM */
     int lower_to_lattice_surgery;
+    /** --ftqc-lower-to-iqs : lower to Intel-QS __iqs__* runtime calls */
+    int lower_to_iqs;
 
     /* ── Analysis passes ─────────────────────────────────────────────────── */
     /** --ftqc-resource-estimate : annotate functions with resource counts */
@@ -213,6 +215,8 @@ int ftqc_iris_qasm_opt(const void    *spec,
  * Passing NULL is safe and has no effect.
  */
 void ftqc_free(void *data);
+
+
 
 #ifdef __cplusplus
 }
