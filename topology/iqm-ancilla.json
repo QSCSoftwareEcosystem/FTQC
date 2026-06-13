@@ -1,0 +1,22 @@
+{
+  "name": "zz_parity_with_ancilla",
+  "_comment": "data_0 and data_1 are prepared in |1>. ancilla_0 extracts their joint ZZ parity (even -> ancilla reads 0). Logical names are mapped to physical IQM qubits below; the data<->ancilla pairs (QB1-QB4, QB4-QB5) are real Garnet edges so no routing is needed.",
+  "qubit_mapping": {
+    "data_0":    "QB1",
+    "ancilla_0": "QB4",
+    "data_1":    "QB5"
+  },
+  "instructions": [
+    { "name": "prx", "qubits": ["data_0"],    "args": { "angle_t": 0.5,  "phase_t": 0.0  } },
+    { "name": "prx", "qubits": ["data_1"],    "args": { "angle_t": 0.5,  "phase_t": 0.0  } },
+
+    { "name": "prx", "qubits": ["ancilla_0"], "args": { "angle_t": 0.25, "phase_t": 0.25 } },
+    { "name": "cz",  "qubits": ["ancilla_0", "data_0"], "args": {} },
+    { "name": "cz",  "qubits": ["ancilla_0", "data_1"], "args": {} },
+    { "name": "prx", "qubits": ["ancilla_0"], "args": { "angle_t": 0.25, "phase_t": 0.75 } },
+
+    { "name": "measure", "qubits": ["ancilla_0"], "args": { "key": "parity" } },
+    { "name": "measure", "qubits": ["data_0"],    "args": { "key": "d0" } },
+    { "name": "measure", "qubits": ["data_1"],    "args": { "key": "d1" } }
+  ]
+}
