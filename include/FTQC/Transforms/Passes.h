@@ -168,6 +168,17 @@ std::unique_ptr<mlir::Pass> createMagicDistillPass(const std::string &protocol,
 /// @brief Create the lowering pass to a generic `quantum` dialect.
 std::unique_ptr<mlir::Pass> createLowerToQuantumPass();
 
+/// @brief Create the Intel-QS C++ source emitter pass.
+///
+/// Emits a standalone, compilable C++ source file that simulates the logical
+/// FTQC circuit using the Intel-QS QubitRegister<ComplexDP> API (or
+/// NoisyQureg<ComplexDP> with the --with-noise option).
+///
+/// The emitted file can be compiled directly against the Intel-QS library:
+///   g++ -std=c++17 -I${IQS_ROOT}/include out.cpp \
+///       -L${IQS_ROOT}/build/lib -lintelqs_lib -lm -o sim && ./sim [shots]
+std::unique_ptr<mlir::Pass> createLowerToIntelQSCppPass();
+
 /// @brief Create the STIM physical circuit translation pass with default options
 ///        (`output-file=""` writes to stderr, `physical-error-rate=1e-3`,
 ///         `syndrome-rounds=1`, `include-comments=true`).
@@ -208,8 +219,28 @@ std::unique_ptr<mlir::Pass> createLowerToQIRnsPass();
 /// attribute so that FileCheck tests can verify it from the MLIR IR text.
 std::unique_ptr<mlir::Pass> createLowerToQASM3Pass();
 
+/// @brief Create the IQM JSON translation pass with default options
+///        (`output-file=""` writes to stderr, `include-comments=true`,
+///         `expand-syndromes=true`).
+///
+/// The pass walks every `func.func` in the module and emits an IQM JSON
+/// circuit string, decomposing logical gates into IQM native gates (prx, cz)
+/// and measure operations.  Syndrome ops are optionally expanded into
+/// physical ancilla circuits using CZ gates.
+///
+/// The JSON string is also attached to the module as the `ftqc.iqm_json`
+/// attribute so that FileCheck tests can verify it from the MLIR IR text.
+std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass();
+
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
+
+/// @brief Create the lattice-surgery surface-code STIM translation pass.
+///
+/// Expands each logical qubit into a rotated d=3 surface-code block (17 qubits)
+/// and emits a STIM circuit.  Two-qubit gates use lattice surgery joint
+/// measurements (MPP instruction).  Single-qubit Clifford gates are transversal.
+std::unique_ptr<mlir::Pass> createLowerToLatticeSurgeryPass();
 
 /// @brief Create the transversal-gate pass with default options
 ///        (non-transversal gates emit a warning but are not decomposed).

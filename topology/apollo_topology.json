@@ -1,0 +1,693 @@
+{
+  "backend": "IQMFakeApolloBackend",
+  "calibration": "sample-chip",
+  "num_qubits": 20,
+  "qubits": [
+    "QB1",
+    "QB2",
+    "QB3",
+    "QB4",
+    "QB5",
+    "QB6",
+    "QB7",
+    "QB8",
+    "QB9",
+    "QB10",
+    "QB11",
+    "QB12",
+    "QB13",
+    "QB14",
+    "QB15",
+    "QB16",
+    "QB17",
+    "QB18",
+    "QB19",
+    "QB20"
+  ],
+  "native_gates": [
+    "delay",
+    "measure",
+    "id",
+    "r",
+    "cz"
+  ],
+  "gate_durations_ns": {
+    "prx": 42.0,
+    "cz": 130.0
+  },
+  "num_edges": 30,
+  "edges": [
+    {
+      "indices": [
+        0,
+        1
+      ],
+      "qubits": [
+        "QB1",
+        "QB2"
+      ],
+      "cz_error": 0.012
+    },
+    {
+      "indices": [
+        0,
+        3
+      ],
+      "qubits": [
+        "QB1",
+        "QB4"
+      ],
+      "cz_error": 0.0121
+    },
+    {
+      "indices": [
+        1,
+        4
+      ],
+      "qubits": [
+        "QB2",
+        "QB5"
+      ],
+      "cz_error": 0.0102
+    },
+    {
+      "indices": [
+        2,
+        3
+      ],
+      "qubits": [
+        "QB3",
+        "QB4"
+      ],
+      "cz_error": 0.015
+    },
+    {
+      "indices": [
+        2,
+        7
+      ],
+      "qubits": [
+        "QB3",
+        "QB8"
+      ],
+      "cz_error": 0.0103
+    },
+    {
+      "indices": [
+        3,
+        4
+      ],
+      "qubits": [
+        "QB4",
+        "QB5"
+      ],
+      "cz_error": 0.016
+    },
+    {
+      "indices": [
+        3,
+        8
+      ],
+      "qubits": [
+        "QB4",
+        "QB9"
+      ],
+      "cz_error": 0.0117
+    },
+    {
+      "indices": [
+        4,
+        5
+      ],
+      "qubits": [
+        "QB5",
+        "QB6"
+      ],
+      "cz_error": 0.0098
+    },
+    {
+      "indices": [
+        4,
+        9
+      ],
+      "qubits": [
+        "QB5",
+        "QB10"
+      ],
+      "cz_error": 0.021
+    },
+    {
+      "indices": [
+        5,
+        6
+      ],
+      "qubits": [
+        "QB6",
+        "QB7"
+      ],
+      "cz_error": 0.0187
+    },
+    {
+      "indices": [
+        5,
+        10
+      ],
+      "qubits": [
+        "QB6",
+        "QB11"
+      ],
+      "cz_error": 0.0135
+    },
+    {
+      "indices": [
+        6,
+        11
+      ],
+      "qubits": [
+        "QB7",
+        "QB12"
+      ],
+      "cz_error": 0.0141
+    },
+    {
+      "indices": [
+        7,
+        8
+      ],
+      "qubits": [
+        "QB8",
+        "QB9"
+      ],
+      "cz_error": 0.0192
+    },
+    {
+      "indices": [
+        7,
+        12
+      ],
+      "qubits": [
+        "QB8",
+        "QB13"
+      ],
+      "cz_error": 0.0183
+    },
+    {
+      "indices": [
+        8,
+        9
+      ],
+      "qubits": [
+        "QB9",
+        "QB10"
+      ],
+      "cz_error": 0.0133
+    },
+    {
+      "indices": [
+        8,
+        13
+      ],
+      "qubits": [
+        "QB9",
+        "QB14"
+      ],
+      "cz_error": 0.0109
+    },
+    {
+      "indices": [
+        9,
+        10
+      ],
+      "qubits": [
+        "QB10",
+        "QB11"
+      ],
+      "cz_error": 0.0134
+    },
+    {
+      "indices": [
+        9,
+        14
+      ],
+      "qubits": [
+        "QB10",
+        "QB15"
+      ],
+      "cz_error": 0.0122
+    },
+    {
+      "indices": [
+        10,
+        11
+      ],
+      "qubits": [
+        "QB11",
+        "QB12"
+      ],
+      "cz_error": 0.01
+    },
+    {
+      "indices": [
+        10,
+        15
+      ],
+      "qubits": [
+        "QB11",
+        "QB16"
+      ],
+      "cz_error": 0.0201
+    },
+    {
+      "indices": [
+        11,
+        16
+      ],
+      "qubits": [
+        "QB12",
+        "QB17"
+      ],
+      "cz_error": 0.018
+    },
+    {
+      "indices": [
+        12,
+        13
+      ],
+      "qubits": [
+        "QB13",
+        "QB14"
+      ],
+      "cz_error": 0.0127
+    },
+    {
+      "indices": [
+        13,
+        14
+      ],
+      "qubits": [
+        "QB14",
+        "QB15"
+      ],
+      "cz_error": 0.0142
+    },
+    {
+      "indices": [
+        13,
+        17
+      ],
+      "qubits": [
+        "QB14",
+        "QB18"
+      ],
+      "cz_error": 0.0191
+    },
+    {
+      "indices": [
+        14,
+        15
+      ],
+      "qubits": [
+        "QB15",
+        "QB16"
+      ],
+      "cz_error": 0.0146
+    },
+    {
+      "indices": [
+        14,
+        18
+      ],
+      "qubits": [
+        "QB15",
+        "QB19"
+      ],
+      "cz_error": 0.0162
+    },
+    {
+      "indices": [
+        15,
+        16
+      ],
+      "qubits": [
+        "QB16",
+        "QB17"
+      ],
+      "cz_error": 0.0133
+    },
+    {
+      "indices": [
+        15,
+        19
+      ],
+      "qubits": [
+        "QB16",
+        "QB20"
+      ],
+      "cz_error": 0.022
+    },
+    {
+      "indices": [
+        17,
+        18
+      ],
+      "qubits": [
+        "QB18",
+        "QB19"
+      ],
+      "cz_error": 0.019
+    },
+    {
+      "indices": [
+        18,
+        19
+      ],
+      "qubits": [
+        "QB19",
+        "QB20"
+      ],
+      "cz_error": 0.0114
+    }
+  ],
+  "neighbours": {
+    "QB1": {
+      "index": 0,
+      "degree": 2,
+      "neighbours": [
+        "QB2",
+        "QB4"
+      ],
+      "t1_ns": 49500.0,
+      "t2_ns": 9100.0,
+      "prx_error": 0.00116,
+      "readout_error": {
+        "0": 0.051,
+        "1": 0.052
+      }
+    },
+    "QB2": {
+      "index": 1,
+      "degree": 2,
+      "neighbours": [
+        "QB1",
+        "QB5"
+      ],
+      "t1_ns": 49400.0,
+      "t2_ns": 10100.0,
+      "prx_error": 0.00102,
+      "readout_error": {
+        "0": 0.049,
+        "1": 0.048
+      }
+    },
+    "QB3": {
+      "index": 2,
+      "degree": 2,
+      "neighbours": [
+        "QB4",
+        "QB8"
+      ],
+      "t1_ns": 41500.0,
+      "t2_ns": 10900.0,
+      "prx_error": 0.00182,
+      "readout_error": {
+        "0": 0.057,
+        "1": 0.049
+      }
+    },
+    "QB4": {
+      "index": 3,
+      "degree": 4,
+      "neighbours": [
+        "QB1",
+        "QB3",
+        "QB5",
+        "QB9"
+      ],
+      "t1_ns": 50300.0,
+      "t2_ns": 9600.0,
+      "prx_error": 0.001,
+      "readout_error": {
+        "0": 0.049,
+        "1": 0.048
+      }
+    },
+    "QB5": {
+      "index": 4,
+      "degree": 4,
+      "neighbours": [
+        "QB2",
+        "QB4",
+        "QB6",
+        "QB10"
+      ],
+      "t1_ns": 49100.0,
+      "t2_ns": 8900.0,
+      "prx_error": 0.00119,
+      "readout_error": {
+        "0": 0.05,
+        "1": 0.051
+      }
+    },
+    "QB6": {
+      "index": 5,
+      "degree": 3,
+      "neighbours": [
+        "QB5",
+        "QB7",
+        "QB11"
+      ],
+      "t1_ns": 48700.0,
+      "t2_ns": 10200.0,
+      "prx_error": 0.0011,
+      "readout_error": {
+        "0": 0.053,
+        "1": 0.055
+      }
+    },
+    "QB7": {
+      "index": 6,
+      "degree": 2,
+      "neighbours": [
+        "QB6",
+        "QB12"
+      ],
+      "t1_ns": 48800.0,
+      "t2_ns": 8500.0,
+      "prx_error": 0.00124,
+      "readout_error": {
+        "0": 0.051,
+        "1": 0.052
+      }
+    },
+    "QB8": {
+      "index": 7,
+      "degree": 3,
+      "neighbours": [
+        "QB3",
+        "QB9",
+        "QB13"
+      ],
+      "t1_ns": 49900.0,
+      "t2_ns": 9000.0,
+      "prx_error": 0.00109,
+      "readout_error": {
+        "0": 0.058,
+        "1": 0.05
+      }
+    },
+    "QB9": {
+      "index": 8,
+      "degree": 4,
+      "neighbours": [
+        "QB4",
+        "QB8",
+        "QB10",
+        "QB14"
+      ],
+      "t1_ns": 48200.0,
+      "t2_ns": 9300.0,
+      "prx_error": 0.00111,
+      "readout_error": {
+        "0": 0.052,
+        "1": 0.049
+      }
+    },
+    "QB10": {
+      "index": 9,
+      "degree": 4,
+      "neighbours": [
+        "QB5",
+        "QB9",
+        "QB11",
+        "QB15"
+      ],
+      "t1_ns": 49600.0,
+      "t2_ns": 9800.0,
+      "prx_error": 0.00132,
+      "readout_error": {
+        "0": 0.044,
+        "1": 0.049
+      }
+    },
+    "QB11": {
+      "index": 10,
+      "degree": 4,
+      "neighbours": [
+        "QB6",
+        "QB10",
+        "QB12",
+        "QB16"
+      ],
+      "t1_ns": 42700.0,
+      "t2_ns": 9400.0,
+      "prx_error": 0.00114,
+      "readout_error": {
+        "0": 0.056,
+        "1": 0.049
+      }
+    },
+    "QB12": {
+      "index": 11,
+      "degree": 3,
+      "neighbours": [
+        "QB7",
+        "QB11",
+        "QB17"
+      ],
+      "t1_ns": 50100.0,
+      "t2_ns": 9900.0,
+      "prx_error": 0.00116,
+      "readout_error": {
+        "0": 0.051,
+        "1": 0.05
+      }
+    },
+    "QB13": {
+      "index": 12,
+      "degree": 2,
+      "neighbours": [
+        "QB8",
+        "QB14"
+      ],
+      "t1_ns": 47500.0,
+      "t2_ns": 10000.0,
+      "prx_error": 0.00112,
+      "readout_error": {
+        "0": 0.053,
+        "1": 0.051
+      }
+    },
+    "QB14": {
+      "index": 13,
+      "degree": 4,
+      "neighbours": [
+        "QB9",
+        "QB13",
+        "QB15",
+        "QB18"
+      ],
+      "t1_ns": 48300.0,
+      "t2_ns": 9000.0,
+      "prx_error": 0.00107,
+      "readout_error": {
+        "0": 0.048,
+        "1": 0.049
+      }
+    },
+    "QB15": {
+      "index": 14,
+      "degree": 4,
+      "neighbours": [
+        "QB10",
+        "QB14",
+        "QB16",
+        "QB19"
+      ],
+      "t1_ns": 39200.0,
+      "t2_ns": 9500.0,
+      "prx_error": 0.00211,
+      "readout_error": {
+        "0": 0.046,
+        "1": 0.049
+      }
+    },
+    "QB16": {
+      "index": 15,
+      "degree": 4,
+      "neighbours": [
+        "QB11",
+        "QB15",
+        "QB17",
+        "QB20"
+      ],
+      "t1_ns": 49000.0,
+      "t2_ns": 9700.0,
+      "prx_error": 0.00119,
+      "readout_error": {
+        "0": 0.044,
+        "1": 0.051
+      }
+    },
+    "QB17": {
+      "index": 16,
+      "degree": 2,
+      "neighbours": [
+        "QB12",
+        "QB16"
+      ],
+      "t1_ns": 49100.0,
+      "t2_ns": 10100.0,
+      "prx_error": 0.00126,
+      "readout_error": {
+        "0": 0.048,
+        "1": 0.048
+      }
+    },
+    "QB18": {
+      "index": 17,
+      "degree": 2,
+      "neighbours": [
+        "QB14",
+        "QB19"
+      ],
+      "t1_ns": 49200.0,
+      "t2_ns": 9200.0,
+      "prx_error": 0.00133,
+      "readout_error": {
+        "0": 0.049,
+        "1": 0.052
+      }
+    },
+    "QB19": {
+      "index": 18,
+      "degree": 3,
+      "neighbours": [
+        "QB15",
+        "QB18",
+        "QB20"
+      ],
+      "t1_ns": 41600.0,
+      "t2_ns": 8200.0,
+      "prx_error": 0.0016,
+      "readout_error": {
+        "0": 0.05,
+        "1": 0.051
+      }
+    },
+    "QB20": {
+      "index": 19,
+      "degree": 2,
+      "neighbours": [
+        "QB16",
+        "QB19"
+      ],
+      "t1_ns": 41800.0,
+      "t2_ns": 12000.0,
+      "prx_error": 0.00115,
+      "readout_error": {
+        "0": 0.056,
+        "1": 0.057
+      }
+    }
+  }
+}

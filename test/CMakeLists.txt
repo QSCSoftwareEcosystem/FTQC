@@ -7,8 +7,8 @@ configure_lit_site_cfg(
 
 # In a standalone (installed LLVM) build the LLVM support tools
 # (FileCheck, count, not) are installed binaries, not CMake targets.
-# Only list ftqc-opt (which we do build) as a build dependency.
-set(FTQC_TEST_DEPENDS ftqc-opt)
+# List only the targets we build ourselves as build dependencies.
+set(FTQC_TEST_DEPENDS ftqc-opt qasm3-import)
 
 add_lit_testsuite(check-ftqc "Running FTQC regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}

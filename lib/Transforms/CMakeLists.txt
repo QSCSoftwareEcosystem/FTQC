@@ -8,9 +8,12 @@ add_mlir_library(FTQCTransforms
   TransversalGates.cpp
   LowerToQuantum.cpp
   LowerToQASM3.cpp
+  LowerToIQMJSON.cpp
   LowerToSTIM.cpp
+  LowerToLatticeSurgery.cpp
   LowerToQIR.cpp
   LowerToQIRns.cpp
+  LowerToIntelQSCpp.cpp
   Passes.cpp
 
   DEPENDS

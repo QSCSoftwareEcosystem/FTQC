@@ -1,0 +1,302 @@
+{
+  "backend": "IQMFakeDenebBackend",
+  "calibration": "Deneb",
+  "num_qubits": 6,
+  "qubits": [
+    "QB1",
+    "QB2",
+    "QB3",
+    "QB4",
+    "QB5",
+    "QB6"
+  ],
+  "native_gates": [
+    "delay",
+    "measure",
+    "id",
+    "r",
+    "cz"
+  ],
+  "gate_durations_ns": {
+    "prx": 40.0,
+    "cz": 120.0
+  },
+  "num_edges": 15,
+  "edges": [
+    {
+      "indices": [
+        0,
+        1
+      ],
+      "qubits": [
+        "QB1",
+        "QB2"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        0,
+        2
+      ],
+      "qubits": [
+        "QB1",
+        "QB3"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        0,
+        3
+      ],
+      "qubits": [
+        "QB1",
+        "QB4"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        0,
+        4
+      ],
+      "qubits": [
+        "QB1",
+        "QB5"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        0,
+        5
+      ],
+      "qubits": [
+        "QB1",
+        "QB6"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        1,
+        2
+      ],
+      "qubits": [
+        "QB2",
+        "QB3"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        1,
+        3
+      ],
+      "qubits": [
+        "QB2",
+        "QB4"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        1,
+        4
+      ],
+      "qubits": [
+        "QB2",
+        "QB5"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        1,
+        5
+      ],
+      "qubits": [
+        "QB2",
+        "QB6"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        2,
+        3
+      ],
+      "qubits": [
+        "QB3",
+        "QB4"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        2,
+        4
+      ],
+      "qubits": [
+        "QB3",
+        "QB5"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        2,
+        5
+      ],
+      "qubits": [
+        "QB3",
+        "QB6"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        3,
+        4
+      ],
+      "qubits": [
+        "QB4",
+        "QB5"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        3,
+        5
+      ],
+      "qubits": [
+        "QB4",
+        "QB6"
+      ],
+      "cz_error": null
+    },
+    {
+      "indices": [
+        4,
+        5
+      ],
+      "qubits": [
+        "QB5",
+        "QB6"
+      ],
+      "cz_error": null
+    }
+  ],
+  "neighbours": {
+    "QB1": {
+      "index": 0,
+      "degree": 5,
+      "neighbours": [
+        "QB2",
+        "QB3",
+        "QB4",
+        "QB5",
+        "QB6"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    },
+    "QB2": {
+      "index": 1,
+      "degree": 5,
+      "neighbours": [
+        "QB1",
+        "QB3",
+        "QB4",
+        "QB5",
+        "QB6"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    },
+    "QB3": {
+      "index": 2,
+      "degree": 5,
+      "neighbours": [
+        "QB1",
+        "QB2",
+        "QB4",
+        "QB5",
+        "QB6"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    },
+    "QB4": {
+      "index": 3,
+      "degree": 5,
+      "neighbours": [
+        "QB1",
+        "QB2",
+        "QB3",
+        "QB5",
+        "QB6"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    },
+    "QB5": {
+      "index": 4,
+      "degree": 5,
+      "neighbours": [
+        "QB1",
+        "QB2",
+        "QB3",
+        "QB4",
+        "QB6"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    },
+    "QB6": {
+      "index": 5,
+      "degree": 5,
+      "neighbours": [
+        "QB1",
+        "QB2",
+        "QB3",
+        "QB4",
+        "QB5"
+      ],
+      "t1_ns": 35000.0,
+      "t2_ns": 33000.0,
+      "prx_error": 0.0002,
+      "readout_error": {
+        "0": 0.02,
+        "1": 0.02
+      }
+    }
+  }
+}

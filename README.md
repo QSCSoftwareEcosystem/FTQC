@@ -263,8 +263,79 @@ Count T/CNOT/EC rounds; derive physical qubits + logical error rate from ECC typ
     │
     ├──▶  --ftqc-lower-to-qasm3    → OpenQASM 3.0 text
     ├──▶  --ftqc-lower-to-stim     → STIM stabilizer circuit + MWPM QEC
-    └──▶  --ftqc-lower-to-qir      → QIR Base Profile LLVM IR
+    ├──▶  --ftqc-lower-to-qir      → QIR Base Profile LLVM IR
+    └──▶  --ftqc-lower-to-iqm-json → IQM Resonance hardware JSON
 ```
+
+---
+
+## OpenQASM 2/3 Import — `qasm3-import`
+
+Standalone tool that converts OpenQASM 2/3 source to FTQC MLIR logical IR.
+All parsing lives in `src/QASM3Importer.h` (pure C++17, no MLIR dependencies).
+
+### Supported gate set
+
+| QASM gate | FTQC MLIR emission |
+|-----------|-------------------|
+| `h`, `x`, `y`, `z`, `s` | `ftqc.logical_h/x/y/z/s` |
+| `t` | `ftqc.prepare_magic_t` + `ftqc.logical_t` |
+| `sdg` | three `ftqc.logical_s` (S†= S³) |
+| `tdg` | three `ftqc.logical_s` + `ftqc.logical_t` (T†= S³·T) |
+| `cx` / `ccx` | `ftqc.logical_cnot` / `prepare_magic_ccz` + `ftqc.logical_toffoli` |
+| `cz` | `ftqc.logical_cz` |
+| `measure` | `ftqc.logical_measure` |
+| `reset` | `ftqc.init_zero` |
+
+### Usage
+```bash
+# Standalone converter — QASM → FTQC MLIR text on stdout
+qasm3-import bell.qasm
+qasm3-import --ecc=surface --distance=5 qft3.qasm
+qasm3-import --ecc=steane --func-name=my_bell bell.qasm | \
+    ftqc-opt --ftqc-insert-syndrome --ftqc-resource-estimate
+
+# Options
+qasm3-import [--ecc=<steane|surface|color_code>] [--distance=<N>] \
+             [--func-name=<name>] <input.qasm | ->
+```
+
+---
+
+## ftqc-opt Native QASM Import
+
+`ftqc-opt` auto-detects `.qasm` / `.qasm2` / `.qasm3` input and transparently runs
+the importer before applying the requested pass pipeline.
+
+### QASM-specific options
+```
+--import-qasm3            Force QASM import (even without .qasm extension)
+--qasm-ecc=<kind>         steane (default) | surface | color_code
+--qasm-distance=<N>       Code distance (default: 3)
+--qasm-func-name=<name>   MLIR function name (default: stem of input filename)
+```
+
+### Examples
+```bash
+# Auto-detect from extension — full FT pipeline on a QASM file:
+ftqc-opt bell.qasm --ftqc-insert-syndrome --ftqc-resource-estimate
+
+# Surface code d=5:
+ftqc-opt --qasm-ecc=surface --qasm-distance=5 qft3.qasm \
+         --ftqc-insert-syndrome --ftqc-resource-estimate
+
+# Force import (no .qasm extension):
+ftqc-opt --import-qasm3 --qasm-func-name=adder circuit.txt \
+         --ftqc-insert-syndrome
+
+# Full pipeline → IQM JSON:
+ftqc-opt bell.qasm \
+         --ftqc-insert-syndrome \
+         --ftqc-lower-to-iqm-json="output-file=bell.json"
+```
+
+All standard `ftqc-opt` passes (`--ftqc-insert-syndrome`, `--ftqc-resource-estimate`,
+`--ftqc-lower-to-qasm3`, `--ftqc-lower-to-stim`, etc.) work identically on QASM input.
 
 ---
 
@@ -610,6 +681,69 @@ computed from the maximum physical qubit/result indices across all functions in 
 
 ---
 
+## IQM JSON Lowering — `--ftqc-lower-to-iqm-json`
+
+Translates FTQC logical IR to **IQM Resonance** hardware JSON for direct submission
+to IQM quantum processors. Native gate set: `prx`, `cz`, `measure`.
+Angles are in **half-turns** (1 half-turn = π radians).
+
+### Gate decompositions
+
+| FTQC op | IQM native gates |
+|---------|-----------------|
+| `logical_h` | `prx(0.5, 0.25)` + `prx(1.0, 0.0)` |
+| `logical_x` | `prx(1.0, 0.0)` |
+| `logical_y` | `prx(1.0, 0.25)` |
+| `logical_z` | `prx(0.5, 0.0)` + `prx(1.0, 0.25)` + `prx(1.5, 0.0)` |
+| `logical_s` | `prx(0.5, 0.0)` + `prx(0.5, 0.25)` + `prx(1.5, 0.0)` |
+| `logical_t` | `prx(0.5, 0.0)` + `prx(0.25, 0.25)` + `prx(1.5, 0.0)` |
+| `logical_cnot` | H(tgt) + `cz[ctrl, tgt]` + H(tgt) |
+| `logical_toffoli` | 6-CZ Barenco decomposition (7 T/T† sub-gates) |
+| `logical_measure` | `measure` with key `"mQB{n}_{idx}"` |
+
+Qubit names: **QB1, QB2, …, QBN** (data and ancilla share a contiguous counter).
+
+---
+
+## IQM JSON — Syndrome Expansion and Output Format
+
+### Syndrome expansion (default: on)
+
+`steane_x_syndrome` and `steane_z_syndrome` ops are expanded to physical ancilla
+sequences (reset → H → CZ fan-out → H → measure) placed inline in the instruction list.
+Disable with `expand-syndromes=false` to emit syndrome ops as JSON comments only.
+
+### Example output structure
+```json
+{
+  "name": "bell_state_ft",
+  "instructions": [
+    {"name": "prx",     "qubits": ["QB1"], "args": {"angle_t": 0.5, "phase_t": 0.25}},
+    {"name": "prx",     "qubits": ["QB1"], "args": {"angle_t": 1.0, "phase_t": 0.0}},
+    {"name": "cz",      "qubits": ["QB1", "QB2"]},
+    {"name": "measure", "qubits": ["QB1"], "key": "mQB1_0"},
+    {"name": "measure", "qubits": ["QB2"], "key": "mQB2_0"}
+  ]
+}
+```
+
+The JSON is also stored as the `ftqc.iqm_json` string attribute on the MLIR module.
+
+### Options
+```bash
+--ftqc-lower-to-iqm-json                              # print JSON to stderr
+--ftqc-lower-to-iqm-json="output-file=out.json"       # write to file
+--ftqc-lower-to-iqm-json="include-comments=false"     # omit FT-op comments
+--ftqc-lower-to-iqm-json="expand-syndromes=false"     # skip syndrome expansion
+
+# Full pipeline: QASM → FT syndrome → IQM JSON
+ftqc-opt bell.qasm \
+         --ftqc-insert-syndrome \
+         --ftqc-lower-to-iqm-json="output-file=bell.json"
+```
+
+---
+
 ## Analysis Passes
 
 ### Fault Path Analysis (`--ftqc-fault-path`)
@@ -781,7 +915,12 @@ qftc/
 │   ├── LowerToQASM3.cpp          ← OpenQASM 3.0 emitter pass
 │   ├── LowerToSTIM.cpp           ← STIM stabilizer circuit emitter
 │   ├── LowerToQIR.cpp            ← QIR Base Profile LLVM IR emitter
-│   └── Passes.cpp                ← pass registration (18 passes)
+│   ├── LowerToIQMJSON.cpp        ← IQM Resonance hardware JSON emitter
+│   └── Passes.cpp                ← pass registration (19 passes)
+├── src/
+│   ├── QASM3Importer.h           ← shared OpenQASM 2/3 parser (pure C++17)
+│   ├── qasm3-import.cpp          ← standalone qasm3-import CLI tool
+│   └── ftqc-opt.cpp              ← ftqc-opt driver (native QASM import)
 ├── sim_qasm3.py                  ← Qiskit Aer: 4 benchmark circuits
 ├── sim_stim.py                   ← STIM+MWPM: 18-pt p sweep, 5000 shots
 ├── sim_pennylane_qec.py          ← PennyLane DM vs STIM comparison
@@ -791,21 +930,24 @@ qftc/
 ├── paper_results/
 │   └── run_paper_results.sh      ← reproduces all paper results end-to-end
 ├── figures/                      ← PDF vector figures (fig1–fig5, figA–figD)
-└── test/                         ← 88 lit tests (all pass)
+└── test/                         ← 95 lit tests (all pass)
     ├── Dialect/  Analysis/  Transforms/  Integration/
-    └── Transforms/QASM3/         ← 8 QASM3 lowering tests
+    ├── Transforms/QASM3/         ← 8 QASM3 lowering tests
+    └── Integration/              ← bell.qasm, qft3.qasm, adder.qasm + lit tests
 ```
 
 ---
 
-## Test Suite — 88 Tests, All Pass
+## Test Suite — 95 Tests, All Pass
 
 | Suite | Tests | Examples |
 |-------|-------|---------|
 | `Dialect/` | 18 | type round-trip, op parse/print, attribute syntax |
 | `Analysis/` | 5 | fault paths, threshold check, resource estimates |
 | `Transforms/` | 60 | syndrome insertion, gate decomposition, magic distill |
-| `Integration/` | 5 | Bell state, GHZ-4, Grover, 3-qubit QFT |
+| `Transforms/QASM3/` | 8 | QASM3 lowering gate names, qubit declarations |
+| `Integration/` | 4 | Bell state, GHZ-4, Grover, 3-qubit QFT |
+| `Integration/QASM3/` | 3 | bell.qasm, qft3.qasm, adder.qasm → FTQC MLIR |
 
 ```bash
 # Run all tests (build dir from CMake):
@@ -814,7 +956,7 @@ llvm-lit build/test/Transforms \
          build/test/Analysis \
          build/test/Integration
 
-# Testing Time: ~0.15s   Passed: 88 (100.00%)
+# Testing Time: ~0.15s   Passed: 95 (100.00%)
 ```
 
 Key test patterns validated:
@@ -840,7 +982,9 @@ ftqc-opt --ftqc-steane-pipeline \
 |---------|--------|
 | Steane `[[7,1,3]]` full pipeline | ✅ Complete |
 | Surface code (any distance) | ✅ Complete |
+| OpenQASM 2/3 import (`qasm3-import` + `ftqc-opt` native) | ✅ Complete (h/x/y/z/s/t/sdg/tdg/cx/cz/ccx/measure) |
 | QASM3 lowering + Qiskit Aer verification | ✅ Complete (4 benchmarks pass) |
+| IQM Resonance JSON lowering | ✅ Complete (prx/cz/measure; syndrome expansion) |
 | STIM lowering + MWPM QEC simulation | ✅ Complete (no hang; correct DETECTORs) |
 | QIR Base Profile v1.0 lowering | ✅ Complete (Steane 7P + Surface d² expansion) |
 | PennyLane DM vs STIM comparison | ✅ Complete (617s/14P vs <4s/52P) |
@@ -895,13 +1039,18 @@ figures/                 ← PDF vector figures for LaTeX inclusion
 
 - **Types**: logical qubits with ECC annotations, syndromes, magic states, Pauli frames
 - **Ops**: 31 ops — Clifford+T+Toffoli, syndrome extraction, EC, distillation
-- **Passes**: 18 passes — encode → syndrome → transversal → distill → resource → lower
-- **Back ends**: OpenQASM 3.0, STIM stabilizer circuits, QIR Base Profile LLVM IR
+- **Passes**: 19 passes — encode → syndrome → transversal → distill → resource → lower
+- **Input**: OpenQASM 2/3 via `qasm3-import` tool or native `ftqc-opt` `.qasm` support
+- **Back ends**: OpenQASM 3.0, STIM stabilizer circuits, QIR Base Profile LLVM IR, IQM Resonance JSON
 - **Simulation**: Qiskit Aer (QASM3) · STIM+MWPM (QEC) · PennyLane DM (comparison)
 - **QIR**: physical qubit expansion — Steane (7P/logical), Surface ($d^2$/logical)
-- **88 lit tests**, all passing on LLVM/MLIR 22.0.0git
+- **95 lit tests**, all passing on LLVM/MLIR 22.0.0git
 
 ```bash
+# QASM import (standalone or via ftqc-opt):
+qasm3-import bell.qasm | ftqc-opt --ftqc-insert-syndrome --ftqc-resource-estimate
+ftqc-opt bell.qasm --ftqc-insert-syndrome --ftqc-lower-to-iqm-json="output-file=bell.json"
+
 # QASM3 → Qiskit Aer:
 qasm.venv/bin/python sim_qasm3.py
 

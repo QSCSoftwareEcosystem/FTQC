@@ -16,6 +16,25 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 #=======================================================================
+# macOS: ensure C++ stdlib headers are found
+# macOS 26+ moved libc++ headers into the SDK; the CLT's c++/v1 dir
+# is incomplete (missing atomic, cassert, etc.), so add the SDK path.
+#=======================================================================
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --sdk macosx --show-sdk-path
+    OUTPUT_VARIABLE _macos_sdk
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(_macos_sdk AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/cassert")
+    add_compile_options(-I${_macos_sdk}/usr/include/c++/v1)
+    if(NOT CMAKE_OSX_SYSROOT)
+      set(CMAKE_OSX_SYSROOT "${_macos_sdk}" CACHE STRING "" FORCE)
+    endif()
+  endif()
+endif()
+
+#=======================================================================
 # Find MLIR / LLVM
 #
 # Priority:
@@ -170,7 +189,7 @@ add_custom_command(
   COMMAND echo "export SYSTEM=\$(hostname|cut -d . -f 1|sed 's/[0-9]*//g')" >>  ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "export MACHINE=$(echo \"\$SYSTEM\" | awk '{print toupper(substr(\$0,1,1)) tolower(substr(\$0,2))}')" >>  ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "echo \"*********************** FTQC Environent *********************\"" >> ${CMAKE_BINARY_DIR}/setup.source
-  COMMAND echo "echo \"FTQC: \$FTQC\"" >> ${CMAKE_BINARY_DIR}/setup.source
+  COMMAND echo "echo \"FTQC_INSTALL: \$FTQC_INSTALL\"" >> ${CMAKE_BINARY_DIR}/setup.source
   COMMAND echo "echo \"*************************************************************\"" >> ${CMAKE_BINARY_DIR}/setup.source
   )
 add_custom_target(setup_source ALL DEPENDS ${CMAKE_BINARY_DIR}/setup.source)

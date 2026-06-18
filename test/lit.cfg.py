@@ -31,6 +31,10 @@ if not _ftqc_tools or not os.path.isfile(os.path.join(_ftqc_tools, "ftqc-opt")):
 ftqc_opt_path = os.path.join(_ftqc_tools, "ftqc-opt") if _ftqc_tools else "ftqc-opt"
 config.substitutions.append(("%ftqc-opt", ftqc_opt_path))
 
+qasm3_import_path = (os.path.join(_ftqc_tools, "qasm3-import")
+                     if _ftqc_tools else "qasm3-import")
+config.substitutions.append(("%qasm3-import", qasm3_import_path))
+
 # ── Locate LLVM tools (FileCheck, not, count) ──────────────────────────────────
 # config.llvm_tools_dir may point to an install/bin that lacks FileCheck.
 # Fall back to the directory that contains the running llvm-lit executable,
