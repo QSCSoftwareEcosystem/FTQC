@@ -232,6 +232,12 @@ std::unique_ptr<mlir::Pass> createLowerToQASM3Pass();
 /// attribute so that FileCheck tests can verify it from the MLIR IR text.
 std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass();
 
+/// @brief Create the LightStim JSON descriptor lowering pass with default options.
+///
+/// Emits a compact experiment descriptor for the Python LightStim adapter,
+/// currently covering surface-code patches and `ftqc.lattice_surgery`.
+std::unique_ptr<mlir::Pass> createLowerToLightStimJSONPass();
+
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
 

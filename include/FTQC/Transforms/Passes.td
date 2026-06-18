@@ -466,6 +466,67 @@ def FTQCLowerToIQMJSONPass : Pass<"ftqc-lower-to-iqm-json", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// LightStim JSON Translation Pass
+//===----------------------------------------------------------------------===//
+
+def FTQCLowerToLightStimJSONPass : Pass<"ftqc-lower-to-lightstim-json", "mlir::ModuleOp"> {
+  let summary = "Lower to a LightStim experiment descriptor JSON";
+  let description = [{
+    Walks FTQC IR and emits a small JSON descriptor consumable by a
+    LightStim descriptor runner such as `run_lightstim_descriptor.py`.
+
+    The initial version supports surface-code logical qubits and
+    `ftqc.lattice_surgery` operations.  Logical qubit SSA values are assigned
+    stable `patch_N` ids; ids propagate through logical gates and lattice
+    surgery result values.  `ftqc.init_zero` maps to `initial_basis="Z"`,
+    `ftqc.init_plus` maps to `initial_basis="X"`, and `ftqc.logical_measure`
+    maps to `measurement_basis="Z"`.
+
+    Layout metadata is intentionally simple for now: patch 0 is placed at
+    `[0, 0]`, and the second patch in a surgery pair is placed at
+    `[0, patch-spacing]` for ZZ surgery or `[patch-spacing, 0]` for XX surgery.
+
+    The generated JSON string is written to `output-file` (or stderr if empty).
+    It can also be attached to the module as the `ftqc.lightstim_json` string
+    attribute with `attach-module-attr`.
+  }];
+
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write descriptor JSON to this path (empty = write to stderr)">,
+    Option<"lightstimCode", "lightstim-code", "std::string", "\"unrotated_surface_code\"",
+           "LightStim code name to emit for surface logical qubits">,
+    Option<"patchSpacing", "patch-spacing", "int", "10",
+           "Coordinate spacing between patches when no layout metadata exists">,
+    Option<"surgeryRounds", "surgery-rounds", "unsigned", "5",
+           "Syndrome extraction rounds to request for each lattice surgery op">,
+    Option<"physErrorRate", "physical-error-rate", "double", "1e-3",
+           "Circuit-level physical error rate assigned to all noise channels">,
+    Option<"decoderName", "decoder", "std::string", "\"pymatching\"",
+           "Decoder name for the LightStim simulation pipeline">,
+    Option<"decoderBackend", "decoder-backend", "std::string", "\"cpu\"",
+           "Decoder backend for the LightStim simulation pipeline">,
+    Option<"maxErrors", "max-errors", "unsigned", "100",
+           "Simulation max_errors stopping target">,
+    Option<"maxShots", "max-shots", "unsigned", "5000000",
+           "Simulation max_shots hard cap">,
+    Option<"batchSize", "batch-size", "unsigned", "10000",
+           "Simulation batch size">,
+    Option<"numWorkers", "num-workers", "unsigned", "4",
+           "Simulation worker count">,
+    Option<"noiselessCheckShots", "noiseless-check-shots", "unsigned", "100",
+           "Noiseless descriptor sanity-check shots">,
+    Option<"attachModuleAttr", "attach-module-attr", "bool", "false",
+           "Attach descriptor JSON as the ftqc.lightstim_json module attribute">
+  ];
+
+  let dependentDialects = [
+    "mlir::ftqc::FTQCDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // STIM Physical Circuit Translation Pass
 //===----------------------------------------------------------------------===//
 
