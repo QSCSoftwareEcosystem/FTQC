@@ -118,9 +118,13 @@ class Parser {
     while (!at(stop) && !at(Token::END)) consume();
     if (at(stop)) consume();
   }
-  void expect(Token::Kind k) {
-    if (!at(k)) throw std::runtime_error("unexpected '" + cur().text + "'");
+  bool expect(Token::Kind k) {
+    if (!at(k)) {
+      skipTo(Token::END);
+      return false;
+    }
     consume();
+    return true;
   }
   QRef qref() {
     QRef q; q.reg = consume().text;
@@ -215,8 +219,7 @@ inline Circuit parseQASM(const std::string &src) {
       if (e==std::string::npos) { line=line.substr(0,s); break; }
       line=line.substr(0,s)+" "+line.substr(e+2);
     }
-    try { auto toks=tokenize(line); Parser p(std::move(toks)); p.parseLine(c); }
-    catch (...) {}
+    auto toks=tokenize(line); Parser p(std::move(toks)); p.parseLine(c);
   }
   return c;
 }

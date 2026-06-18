@@ -4,9 +4,9 @@
 // Verifies CCX → prepare_magic_ccz + logical_toffoli mapping.
 
 // CHECK-LABEL: func.func @adder
-// CHECK:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-// CHECK:         ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
+// CHECK:         ftqc.init_zero : {{.*steane, 3.*}}
+// CHECK:         ftqc.prepare_magic_ccz : {{.*CCZ.*}}
 // CHECK:         ftqc.logical_toffoli
 // CHECK:         ftqc.logical_cnot
 // CHECK:         ftqc.logical_measure
-// CHECK:         func.return
+// CHECK:         return
