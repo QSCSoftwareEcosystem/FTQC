@@ -15,6 +15,7 @@
 ///
 /// This file provides:
 ///  - `Pauli` enum and type aliases (`PauliString`, `Syndrome`, `BinaryRow`)
+///  - `ClassicalCode` — classical linear binary [n,k,d] code
 ///  - `StabilizerCode` — general [[n,k,d]] code via its [Hx|Hz] parity-check matrix
 ///  - `steane::` namespace — constants for the [[7,1,3]] Steane code
 ///  - `surface::` namespace — plaquette geometry for rotated surface codes
@@ -67,6 +68,63 @@ using BinaryRow = llvm::SmallVector<uint8_t, 64>;
 
 /// @brief Syndrome bit vector (output of a round of stabiliser measurements).
 using Syndrome = llvm::SmallVector<uint8_t, 8>;
+
+//===----------------------------------------------------------------------===//
+// ClassicalCode
+//===----------------------------------------------------------------------===//
+
+/// @brief Represents an [n,k,d] classical linear binary code via its
+/// parity-check matrix.
+///
+/// For every [n,k,d] linear code with an r×n parity-check matrix H, we can
+/// define an [r,r-rank(H),dT] transpose code using the transposed parity-check
+/// matrix H^T.
+class ClassicalCode {
+public:
+  ClassicalCode() = default;
+
+  /// @brief Construct a linear code from an explicit parity-check matrix.
+  ///
+  /// @param n Total number of physical bits.
+  /// @param k Number of encoded logical bits.
+  /// @param d Code distance.
+  /// @param H Parity-check matrix, each row of length n.
+  /// @return Fully constructed `ClassicalCode`.
+  static ClassicalCode fromLinear(
+      unsigned n, unsigned k, unsigned d,
+      std::vector<BinaryRow> H);
+
+  /// @brief Construct the [d,1,d] repetition code.
+  ///
+  /// The repetition code encodes 1 logical bit as a block of d identical bits.
+  ///
+  /// @param d Code distance.
+  /// @return `ClassicalCode` representing the [d,1,d] repetition code.
+  static ClassicalCode makeRepetition(unsigned n);
+
+  //------------------------------------------------------------------------
+  // Accessors
+  //------------------------------------------------------------------------
+
+  unsigned getN() const { return n_; } ///< Total physical bit count.
+  unsigned getK() const { return k_; } ///< Logical bit count.
+  unsigned getD() const { return d_; } ///< Code distance.
+
+  unsigned getTransposeN() const; ///< Physical bit count of the transpose code.
+  unsigned getTransposeK() const; ///< Logical bit count of the transpose code.
+  unsigned getTransposeD() const; ///< Code distance of the transpose code.
+
+  llvm::ArrayRef<BinaryRow> getH() const { return H_; } ///< Parity-check matrix.
+
+  /// @brief Serialise the code to a human-readable description.
+  /// @param includeMatrix Whether to include the parity-check matrix.
+  /// @return String showing [n,k,d] parameters and parity-check matrix.
+  std::string toString(bool includeMatrix = false) const;
+
+private:
+  unsigned n_ = 0, k_ = 0, d_ = 0;
+  std::vector<BinaryRow> H_;
+};
 
 //===----------------------------------------------------------------------===//
 // StabilizerCode
@@ -127,6 +185,21 @@ public:
   ///
   /// @return `StabilizerCode` representing the [[4,2,2]] code.
   static StabilizerCode make422();
+
+  /// @brief Construct a hypergraph product code.
+  ///
+  /// A hypergraph product code is constructed from two classical linear binary
+  /// codes. If the codes have parameters [n1,k1,d1] and [n2,k2,d2], and the
+  /// transpose codes have parameters [nT1,kT1,dT1] and [nT2,kT2,dT2], then the
+  /// hypergraph product code has parameters
+  /// [[n1*n2+nT1*nT2, k1*k2+kT1*kT2, min(d1,d2,dT1,dT2)]]. This makes it
+  /// possible to achieve [[n,O(n),O(√n)]] scaling.
+  ///
+  /// @param code1 The first classical linear binary code.
+  /// @param code2 The second classical linear binary code.
+  /// @return `StabilizerCode` representing the hypergraph product code.
+  static StabilizerCode makeHypergraphProduct(const ClassicalCode &code1,
+                                              const ClassicalCode &code2);
 
   //------------------------------------------------------------------------
   // Accessors
@@ -193,8 +266,12 @@ public:
   const PauliString& getLogicalZ(unsigned logicalIdx = 0) const;
 
   /// @brief Serialise the code to a human-readable description.
+  /// @param includeMatrices Whether to include the parity-check matrices.
   /// @return String showing [[n,k,d]] parameters and parity-check matrices.
-  std::string toString() const;
+  std::string toString(bool includeMatrices = false) const;
+
+  /// @brief Serialize the code's Tanner graph to Graphviz format.
+  std::string toGraphviz() const;
 
 private:
   unsigned n_ = 0, k_ = 0, d_ = 0;

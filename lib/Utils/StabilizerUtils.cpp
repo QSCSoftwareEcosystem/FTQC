@@ -9,6 +9,56 @@
 using namespace mlir::ftqc;
 
 //===----------------------------------------------------------------------===//
+// ClassicalCode methods
+//===----------------------------------------------------------------------===//
+
+ClassicalCode ClassicalCode::fromLinear(unsigned n, unsigned k, unsigned d,
+                                        std::vector<BinaryRow> H) {
+  ClassicalCode code;
+  code.n_ = n; code.k_ = k; code.d_ = d;
+  code.H_ = std::move(H);
+  return code;
+}
+
+ClassicalCode ClassicalCode::makeRepetition(unsigned n) {
+  std::vector<BinaryRow> H(n - 1, BinaryRow(n, 0));
+  for (unsigned i = 0; i < n - 1; ++i) {
+    H[i][i] = 1;
+    H[i][i + 1] = 1;
+  }
+  return ClassicalCode::fromLinear(n, 1, n, H);
+}
+
+unsigned ClassicalCode::getTransposeN() const {
+  return static_cast<unsigned>(H_.size());
+}
+
+unsigned ClassicalCode::getTransposeK() const {
+  unsigned rankH = n_ - k_;
+  return getTransposeN() - rankH;
+}
+
+unsigned ClassicalCode::getTransposeD() const {
+  return d_; // TODO: Return correct value
+}
+
+std::string ClassicalCode::toString(bool includeMatrix) const {
+  std::ostringstream ss;
+  ss << "[" << n_ << "," << k_ << "," << d_ << "] code\n";
+  ss << "  " << H_.size() << " parity checks\n";
+  if (includeMatrix) {
+    ss << "  H =\n";
+    for (auto &row : H_) {
+      ss << "    ";
+      for (uint8_t x : row)
+        ss << "1."[!x];
+      ss << "\n";
+    }
+  }
+  return ss.str();
+}
+
+//===----------------------------------------------------------------------===//
 // StabilizerCode factory methods
 //===----------------------------------------------------------------------===//
 
@@ -101,6 +151,48 @@ StabilizerCode StabilizerCode::makeSurface(unsigned d) {
   return StabilizerCode::fromCSS(n, 1, d, Hx, Hz);
 }
 
+StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
+                                                     const ClassicalCode &code2) {
+  unsigned n1 = code1.getN(), n2 = code2.getN();
+  unsigned k1 = code1.getK(), k2 = code2.getK();
+  unsigned d1 = code1.getD(), d2 = code2.getD();
+  unsigned nT1 = code1.getTransposeN(), nT2 = code2.getTransposeN();
+  unsigned kT1 = code1.getTransposeK(), kT2 = code2.getTransposeK();
+  unsigned dT1 = code1.getTransposeD(), dT2 = code2.getTransposeD();
+  auto H1 = code1.getH(), H2 = code2.getH();
+
+  unsigned n = n1 * n2 + nT1 * nT2;
+  unsigned k = k1 * k2 + kT1 * kT2;
+  unsigned d = std::min({d1, d2, dT1, dT2});
+  std::vector<BinaryRow> Hx(nT1 * n2, BinaryRow(n, 0));
+  std::vector<BinaryRow> Hz(n1 * nT2, BinaryRow(n, 0));
+
+  // Hx = [ H1⊗I_n2 | I_r1⊗H2^T ]
+  for (unsigned i1 = 0; i1 < nT1; ++i1) {
+    for (unsigned j2 = 0; j2 < n2; ++j2) {
+      auto &row = Hx[i1 * n2 + j2];
+      for (unsigned j1 = 0; j1 < n1; ++j1)
+        row[j1 * n2 + j2] = H1[i1][j1];
+      for (unsigned i2 = 0; i2 < nT2; ++i2)
+        row[n1 * n2 + i1 * nT2 + i2] = H2[i2][j2];
+    }
+  }
+
+  // Hz = [ I_n1⊗H2 | H1^T⊗I_r2 ]
+  for (unsigned j1 = 0; j1 < n1; ++j1) {
+    for (unsigned i2 = 0; i2 < nT2; ++i2) {
+      auto &row = Hz[j1 * nT2 + i2];
+      for (unsigned j2 = 0; j2 < n2; ++j2)
+        row[j1 * n2 + j2] = H2[i2][j2];
+      for (unsigned i1 = 0; i1 < nT1; ++i1)
+        row[n1 * n2 + i1 * nT2 + i2] = H1[i1][j1];
+    }
+  }
+
+  // TODO: Set logical operators
+  return StabilizerCode::fromCSS(n, k, d, Hx, Hz);
+}
+
 //===----------------------------------------------------------------------===//
 // Syndrome computation
 //===----------------------------------------------------------------------===//
@@ -176,11 +268,51 @@ PauliString StabilizerCode::decode(llvm::ArrayRef<uint8_t> syndrome) const {
 const PauliString& StabilizerCode::getLogicalX(unsigned) const { return logX_; }
 const PauliString& StabilizerCode::getLogicalZ(unsigned) const { return logZ_; }
 
-std::string StabilizerCode::toString() const {
+std::string StabilizerCode::toString(bool includeMatrices) const {
   std::ostringstream ss;
   ss << "[[" << n_ << "," << k_ << "," << d_ << "]] code\n";
   ss << "  " << Hx_.size() << " X stabilizers, "
      << Hz_.size() << " Z stabilizers\n";
+  if (includeMatrices) {
+    ss << "  Hx =\n";
+    for (auto &row : Hx_) {
+      ss << "    ";
+      for (uint8_t x : row)
+        ss << "X."[!x];
+      ss << "\n";
+    }
+    ss << "  Hz =\n";
+    for (auto &row : Hz_) {
+      ss << "    ";
+      for (uint8_t x : row)
+        ss << "Z."[!x];
+      ss << "\n";
+    }
+  }
+  return ss.str();
+}
+
+std::string StabilizerCode::toGraphviz() const {
+  std::ostringstream ss;
+  ss << "graph {\n"
+     << "  layout=neato;\n";
+  for (size_t i = 0; i < Hx_.size(); ++i) {
+    ss << "  x" << i << " [color=red];\n"
+       << "  x" << i << " -- {";
+    for (unsigned j = 0; j < n_; ++j)
+      if (Hx_[i][j])
+        ss << " d" << j;
+    ss << " };\n";
+  }
+  for (size_t i = 0; i < Hz_.size(); ++i) {
+    ss << "  z" << i << " [color=green];\n"
+       << "  z" << i << " -- {";
+    for (unsigned j = 0; j < n_; ++j)
+      if (Hz_[i][j])
+        ss << " d" << j;
+    ss << " };\n";
+  }
+  ss << "}\n";
   return ss.str();
 }
 
