@@ -16,17 +16,18 @@ include "mlir/IR/EnumAttr.td"
 //===----------------------------------------------------------------------===//
 
 // Error correcting code kind
-def ECC_Steane     : I32EnumAttrCase<"Steane",      0, "steane">;
-def ECC_Surface    : I32EnumAttrCase<"Surface",     1, "surface">;
-def ECC_ColorCode  : I32EnumAttrCase<"ColorCode",   2, "color_code">;
-def ECC_Concat     : I32EnumAttrCase<"Concatenated",3, "concat">;
-def ECC_Repetition : I32EnumAttrCase<"Repetition",  4, "repetition">;
-def ECC_Compass    : I32EnumAttrCase<"Compass",     5, "compass">;
+def ECC_Steane            : I32EnumAttrCase<"Steane",            0, "steane">;
+def ECC_Surface           : I32EnumAttrCase<"Surface",           1, "surface">;
+def ECC_ColorCode         : I32EnumAttrCase<"ColorCode",         2, "color_code">;
+def ECC_Concat            : I32EnumAttrCase<"Concatenated",      3, "concat">;
+def ECC_Repetition        : I32EnumAttrCase<"Repetition",        4, "repetition">;
+def ECC_Compass           : I32EnumAttrCase<"Compass",           5, "compass">;
+def ECC_HypergraphProduct : I32EnumAttrCase<"HypergraphProduct", 6, "hypergraph_product">;
 
 def ECCKindAttr : I32EnumAttr<
     "ECCKind", "Error correcting code kind",
     [ECC_Steane, ECC_Surface, ECC_ColorCode, ECC_Concat,
-     ECC_Repetition, ECC_Compass]> {
+     ECC_Repetition, ECC_Compass, ECC_HypergraphProduct]> {
   let cppNamespace = "::mlir::ftqc";
   let genSpecializedAttr = 0;
 }

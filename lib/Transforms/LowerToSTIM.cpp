@@ -25,6 +25,7 @@
 #include "FTQC/Dialect/FTQCOps.h"
 #include "FTQC/Dialect/FTQCTypes.h"
 #include "FTQC/Transforms/Passes.h"
+#include "FTQC/Utils/StabilizerUtils.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -53,25 +54,26 @@ using namespace mlir::ftqc;
 
 namespace {
 
-// Number of physical qubits per logical qubit (data + X-anc + Z-anc).
-static constexpr int STEANE_DATA  = 7;
-static constexpr int STEANE_XANC  = 3;
-static constexpr int STEANE_ZANC  = 3;
-static constexpr int STEANE_TOTAL = STEANE_DATA + STEANE_XANC + STEANE_ZANC;
+struct CodeParams {
+  /// Number of physical data qubits per logical qubit.
+  int numData;
+  /// Stabilizer support (relative data-qubit offsets, 0-indexed within block).
+  std::vector<std::vector<int>> xStabs, zStabs;
+};
 
-// Offsets within a block for X and Z ancilla.
-static constexpr int XANC_OFF = STEANE_DATA;
-static constexpr int ZANC_OFF = STEANE_DATA + STEANE_XANC;
-
-// Number of syndrome bits per round (one per stabilizer generator per basis).
-static constexpr int SYNDROME_BITS = STEANE_XANC + STEANE_ZANC; // 6
-
-// Steane stabilizer support (relative data-qubit offsets, 0-indexed within block).
-// Same for X and Z (CSS code property).
-static const std::vector<std::vector<int>> STEANE_STABS = {
-  {0, 2, 4, 6},  // Stabilizer 1
-  {1, 2, 5, 6},  // Stabilizer 2
-  {3, 4, 5, 6},  // Stabilizer 3
+static const CodeParams STEANE_PARAMS = {
+  .numData = 7,
+  // Same for X and Z (CSS code property).
+  .xStabs = {
+    {0, 2, 4, 6},  // Stabilizer 1
+    {1, 2, 5, 6},  // Stabilizer 2
+    {3, 4, 5, 6},  // Stabilizer 3
+  },
+  .zStabs = {
+    {0, 2, 4, 6},  // Stabilizer 1
+    {1, 2, 5, 6},  // Stabilizer 2
+    {3, 4, 5, 6},  // Stabilizer 3
+  },
 };
 
 // Qubits on which H is applied during encoding of |0_L>:
@@ -103,6 +105,21 @@ struct QubitBlock {
   int base;     ///< Absolute index of data qubit 0 in this block.
   int obsId;    ///< OBSERVABLE_INCLUDE index for this logical qubit.
   int prevRoundMeasureStart = -1; ///< Measurement index at start of last syndrome round (-1 = none).
+  const CodeParams *code = nullptr;
+
+  // Number of physical qubits per logical qubit (data + X-anc + Z-anc).
+  int numData() const { return code->numData; }
+  int numXAnc() const { return code->xStabs.size(); }
+  int numZAnc() const { return code->zStabs.size(); }
+  // Number of syndrome bits per round (one per stabilizer generator per basis).
+  int numSyndrome() const { return numXAnc() + numZAnc(); }
+
+  /// Absolute index of data qubit i within a block.
+  int dataIndex(int i) const { return base + i; }
+  /// Absolute index of X ancilla i within a block.
+  int xAncIndex(int i) const { return base + numData() + i; }
+  /// Absolute index of Z ancilla i within a block.
+  int zAncIndex(int i) const { return base + numData() + numXAnc() + i; }
 };
 
 class STIMEmitter {
@@ -134,6 +151,9 @@ private:
   int nextObs    = 0; ///< Next OBSERVABLE_INCLUDE index.
   int measureCount = 0; ///< Total measurements emitted so far.
 
+  /// Hypergraph product code parameters, indexed by code distance.
+  DenseMap<int, std::unique_ptr<CodeParams>> hypergraphProductCodes;
+
   //------------------------------------------------------------------------
   // Block management
   //------------------------------------------------------------------------
@@ -144,7 +164,43 @@ private:
     QubitBlock blk;
     blk.base  = nextQubit;
     blk.obsId = nextObs++;
-    nextQubit += STEANE_TOTAL;
+
+    auto code = dyn_cast<LogicalQubitType>(v.getType()).getCode();
+    switch (code.getKind()) {
+    case ECCKind::Steane:
+      blk.code = &STEANE_PARAMS;
+      break;
+
+    case ECCKind::HypergraphProduct:
+      if (!hypergraphProductCodes.contains(code.getDistance())) {
+        auto repCode = ClassicalCode::makeRepetition(code.getDistance());
+        auto hpCode = StabilizerCode::makeHypergraphProduct(repCode, repCode);
+        auto params = std::make_unique<CodeParams>();
+        params->numData = hpCode.getN();
+        params->xStabs.resize(hpCode.getHx().size());
+        for (size_t i = 0; i < params->xStabs.size(); ++i) {
+          for (int j = 0; j < params->numData; ++j) {
+            if (hpCode.getHx()[i][j])
+              params->xStabs[i].push_back(j);
+          }
+        }
+        params->zStabs.resize(hpCode.getHz().size());
+        for (size_t i = 0; i < params->zStabs.size(); ++i) {
+          for (int j = 0; j < params->numData; ++j) {
+            if (hpCode.getHz()[i][j])
+              params->zStabs[i].push_back(j);
+          }
+        }
+        hypergraphProductCodes[code.getDistance()] = std::move(params);
+      }
+      blk.code = hypergraphProductCodes[code.getDistance()].get();
+      break;
+
+    default:
+      break;
+    }
+
+    nextQubit += blk.numData() + blk.numSyndrome();
     blocks.push_back(blk);
     blockOf[v] = idx;
     return idx;
@@ -163,13 +219,6 @@ private:
     assert(it != blockOf.end() && "STIMEmitter: unmapped logical qubit value");
     return blocks[it->second];
   }
-
-  /// Absolute index of data qubit i within a block.
-  int data(QubitBlock &b, int i) { return b.base + i; }
-  /// Absolute index of X ancilla i within a block.
-  int xanc(QubitBlock &b, int i) { return b.base + XANC_OFF + i; }
-  /// Absolute index of Z ancilla i within a block.
-  int zanc(QubitBlock &b, int i) { return b.base + ZANC_OFF + i; }
 
   //------------------------------------------------------------------------
   // Emission helpers
@@ -229,20 +278,20 @@ private:
 
     // RESET all 7 data qubits.
     std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
+    for (int i = 0; i < STEANE_PARAMS.numData; ++i) all7.push_back(b.dataIndex(i));
     emitReset(all7);
 
     // H on the check qubits (first member of each stabilizer support).
     std::vector<int> hQubits;
-    for (int off : ENCODE_H_QUBITS) hQubits.push_back(b.base + off);
+    for (int off : ENCODE_H_QUBITS) hQubits.push_back(b.dataIndex(off));
     emit1Q("H", hQubits);
 
     // CX cascade: for each stabilizer, ctrl = check qubit, tgts = rest of support.
-    for (size_t s = 0; s < STEANE_STABS.size(); ++s) {
-      const auto &support = STEANE_STABS[s];
-      int ctrl = b.base + support[0];
+    for (size_t s = 0; s < STEANE_PARAMS.xStabs.size(); ++s) {
+      const auto &support = STEANE_PARAMS.xStabs[s];
+      int ctrl = b.dataIndex(support[0]);
       for (size_t j = 1; j < support.size(); ++j) {
-        int tgt = b.base + support[j];
+        int tgt = b.dataIndex(support[j]);
         emit2Q("CX", {ctrl, tgt});
       }
     }
@@ -253,7 +302,7 @@ private:
   //------------------------------------------------------------------------
 
   /// Emit one full syndrome extraction round for a block.
-  /// Emits X-syndrome (3 bits) then Z-syndrome (3 bits) → 6 measurements.
+  /// Emits X-syndrome then Z-syndrome.
   /// Emits DETECTOR records comparing to the previous round (or 0 if first).
   void emitSyndromeRound(QubitBlock &b) {
     int roundStart = measureCount; // will be updated after M instructions
@@ -261,54 +310,54 @@ private:
     comment("-- X syndrome --");
     // Prepare X ancilla.
     std::vector<int> xAncs;
-    for (int i = 0; i < STEANE_XANC; ++i) xAncs.push_back(xanc(b, i));
+    for (int i = 0; i < b.numXAnc(); ++i) xAncs.push_back(b.xAncIndex(i));
     emitReset(xAncs);
     emit1Q("H", xAncs);
 
     // CX ancilla → data for each X stabilizer.
-    for (int s = 0; s < STEANE_XANC; ++s) {
-      int ctrl = xanc(b, s);
+    for (int s = 0; s < b.numXAnc(); ++s) {
+      int ctrl = b.xAncIndex(s);
       std::vector<int> pairs;
-      for (int off : STEANE_STABS[s]) {
+      for (int off : b.code->xStabs[s]) {
         pairs.push_back(ctrl);
-        pairs.push_back(data(b, off));
+        pairs.push_back(b.dataIndex(off));
       }
       emit2Q("CX", pairs);
     }
     emit1Q("H", xAncs);
-    emitM(xAncs); // 3 measurements
+    emitM(xAncs);
 
     comment("-- Z syndrome --");
     // Prepare Z ancilla.
     std::vector<int> zAncs;
-    for (int i = 0; i < STEANE_ZANC; ++i) zAncs.push_back(zanc(b, i));
+    for (int i = 0; i < b.numZAnc(); ++i) zAncs.push_back(b.zAncIndex(i));
     emitReset(zAncs);
 
     // CX data → ancilla for each Z stabilizer.
-    for (int s = 0; s < STEANE_ZANC; ++s) {
-      int tgt = zanc(b, s);
+    for (int s = 0; s < b.numZAnc(); ++s) {
+      int tgt = b.zAncIndex(s);
       std::vector<int> pairs;
-      for (int off : STEANE_STABS[s]) {
-        pairs.push_back(data(b, off));
+      for (int off : b.code->zStabs[s]) {
+        pairs.push_back(b.dataIndex(off));
         pairs.push_back(tgt);
       }
       emit2Q("CX", pairs);
     }
-    emitM(zAncs); // 3 measurements
+    emitM(zAncs);
 
-    // Total 6 measurements for this round.
+    // Total b.numSyndrome() measurements for this round.
     // Now emit DETECTOR records.
-    // After the M instructions: measureCount = roundStart + SYNDROME_BITS.
+    // After the M instructions: measureCount = roundStart + b.numSyndrome().
     //
-    // Syndrome bit i (0..5) was measurement (roundStart + i).
-    // Its offset from the current end (measureCount): SYNDROME_BITS - i.
+    // Syndrome bit i was measurement (roundStart + i).
+    // Its offset from the current end (measureCount): b.numSyndrome() - i.
     //
     // If prevRoundMeasureStart >= 0, also compare to the same stabilizer from
     // the previous round.  That bit was measurement (prevRoundMeasureStart + i),
     // so its offset from the current end: measureCount - (prevRoundMeasureStart + i).
 
-    for (int i = 0; i < SYNDROME_BITS; ++i) {
-      int curOff = SYNDROME_BITS - i;  // offset of this round's syndrome bit i
+    for (int i = 0; i < b.numSyndrome(); ++i) {
+      int curOff = b.numSyndrome() - i;  // offset of this round's syndrome bit i
       os << "DETECTOR";
       if (includeComments)
         os << "(" << i << ")"; // optional coordinate for visualisation
@@ -335,54 +384,54 @@ private:
 
   void emitH(QubitBlock &b) {
     comment("logical_h (transversal)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("H", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("H", allData);
   }
 
   void emitX(QubitBlock &b) {
     comment("logical_x (transversal)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("X", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("X", allData);
   }
 
   void emitZ(QubitBlock &b) {
     comment("logical_z (transversal)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("Z", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("Z", allData);
   }
 
   void emitY(QubitBlock &b) {
     comment("logical_y (transversal)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("Y", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("Y", allData);
   }
 
   void emitS(QubitBlock &b) {
     comment("logical_s (transversal)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("S", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("S", allData);
   }
 
   void emitT_approx(QubitBlock &b) {
     // T is non-Clifford; STIM only supports stabilizer circuits.
     // Approximate as S for QEC simulation purposes (tracks Clifford errors correctly).
     comment("logical_t approximated as S (STIM is Clifford-only)");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emit1Q("S", all7);
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emit1Q("S", allData);
   }
 
   void emitCNOT(const QubitBlock &ctrl, const QubitBlock &tgt) {
     comment("logical_cnot (transversal CX)");
     std::vector<int> pairs;
-    for (int i = 0; i < STEANE_DATA; ++i) {
-      pairs.push_back(ctrl.base + i);
-      pairs.push_back(tgt.base + i);
+    for (int i = 0; i < ctrl.numData(); ++i) {
+      pairs.push_back(ctrl.dataIndex(i));
+      pairs.push_back(tgt.dataIndex(i));
     }
     emit2Q("CX", pairs);
   }
@@ -390,24 +439,24 @@ private:
   void emitCZ(const QubitBlock &q0, const QubitBlock &q1) {
     comment("logical_cz (transversal CZ)");
     std::vector<int> pairs;
-    for (int i = 0; i < STEANE_DATA; ++i) {
-      pairs.push_back(q0.base + i);
-      pairs.push_back(q1.base + i);
+    for (int i = 0; i < q0.numData(); ++i) {
+      pairs.push_back(q0.dataIndex(i));
+      pairs.push_back(q1.dataIndex(i));
     }
     emit2Q("CZ", pairs);
   }
 
-  /// Emit logical Z measurement: M all 7 data qubits + OBSERVABLE_INCLUDE.
+  /// Emit logical Z measurement: M all data qubits + OBSERVABLE_INCLUDE.
   void emitMeasure(QubitBlock &b) {
     comment("logical_measure → M all data + OBSERVABLE_INCLUDE");
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_DATA; ++i) all7.push_back(b.base + i);
-    emitM(all7); // 7 measurements
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emitM(allData);
 
-    // Logical Z = XOR of all 7 data qubit Z-measurement results.
+    // Logical Z = XOR of all data qubit Z-measurement results.
     os << "OBSERVABLE_INCLUDE(" << b.obsId << ")";
-    for (int i = 0; i < STEANE_DATA; ++i)
-      os << " rec[-" << (STEANE_DATA - i) << "]";
+    for (int i = 0; i < b.numData(); ++i)
+      os << " rec[-" << (b.numData() - i) << "]";
     os << "\n";
   }
 

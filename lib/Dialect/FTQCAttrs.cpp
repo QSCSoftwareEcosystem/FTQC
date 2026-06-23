@@ -41,6 +41,9 @@ unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
   case ECCKind::Compass:
     base = d * d;   // compass code ~ surface code
     break;
+  case ECCKind::HypergraphProduct:
+    base = d * d + (d - 1) * (d - 1); // for hypergraph product of two d-repetition codes
+    break;
   }
   return base;
 }
@@ -57,6 +60,8 @@ unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d) {
     return 6;   // per level (approximate)
   case ECCKind::Repetition:
     return d - 1;
+  case ECCKind::HypergraphProduct:
+    return d * (d - 1) * 2; // for hypergraph product of two d-repetition codes
   default:
     return d * d;
   }
@@ -76,7 +81,8 @@ double mlir::ftqc::getFTThreshold(ECCKind kind) {
 bool mlir::ftqc::isCSSCode(ECCKind kind) {
   return kind == ECCKind::Steane ||
          kind == ECCKind::Surface ||
-         kind == ECCKind::ColorCode;
+         kind == ECCKind::ColorCode ||
+         kind == ECCKind::HypergraphProduct;
 }
 
 bool mlir::ftqc::hasTransversalT(ECCKind kind) {
