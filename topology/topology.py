@@ -217,6 +217,11 @@ def build_backend(key, token=None):
     from iqm.qiskit_iqm import IQMProvider
     from iqm.iqm_client import IQMClient
 
+    # iqm-client rejects a token passed both as an arg and via $IQM_TOKEN
+    # ("sources must not be mixed"). We always pass it explicitly, so drop the
+    # env copy first to leave a single source.
+    os.environ.pop("IQM_TOKEN", None)
+
     alias = REAL_ALIASES[key]
     print(f"Connecting to {SERVER_URL} (alias '{alias}') ...")
     backend = IQMProvider(SERVER_URL, token=token, quantum_computer=alias).get_backend()
@@ -287,7 +292,9 @@ def main() -> None:
     print(f"\nSaved connectivity -> {json_path}")
 
     if args.plot:
-        save_plot(backend, f"{args.backend}_topology.png")
+        from qiskit.visualization import plot_coupling_map
+        plot_coupling_map(backend.num_qubits, None, backend.coupling_map.get_edges()).savefig(f"{args.backend}_topology.png")
+        #save_plot(backend, f"{args.backend}_topology.png")
 
 
 if __name__ == "__main__":
