@@ -1,0 +1,23 @@
+# real-iqm.source — set up the environment to run real-iqm.py
+#
+#   source real-iqm.source        # build venv (first time) + activate
+#   python real-iqm.py            # run the GHZ circuit on the real IQM server
+#
+# Why a separate venv: real-iqm.py uses qrisp's IQMBackend, which needs
+# iqm-client >= 34.0.3. That pulls in iqm-pulse, which requires Python >= 3.11 —
+# the other venvs here are Python 3.10 and pin iqm-client 28.0.0, so they can't
+# run this. We provision a standalone CPython 3.12 with `uv` (no sudo needed).
+
+VENV=realqpu1.venv
+if [ ! -d "$VENV" ]; then
+python3.12 -m venv $VENV
+python3.12 -m pip install \
+    "qrisp[iqm]" "iqm-client[qiskit,cirq]>=34.0.3" matplotlib
+
+python3.12 -m pip install notebook
+python3.12 -m pip install ipython ipywidgets ipykernel
+ipython kernel install --user --name=$VENV
+fi
+# Activate the venv for the current shell.
+source "$VENV/bin/activate"
+echo "Ready. Run: python3.12 real-iqm.py"
