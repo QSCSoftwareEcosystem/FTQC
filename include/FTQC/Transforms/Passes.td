@@ -456,7 +456,10 @@ def FTQCLowerToIQMJSONPass : Pass<"ftqc-lower-to-iqm-json", "mlir::ModuleOp"> {
     Option<"includeComments", "include-comments", "bool", "true",
            "Emit JSON string fields for FT-only ops (syndrome, correction, frame)">,
     Option<"expandSyndromes", "expand-syndromes", "bool", "true",
-           "Expand syndrome ops into physical ancilla CZ circuits">
+           "Expand syndrome ops into physical ancilla CZ circuits">,
+    Option<"emitRadians", "radians", "bool", "false",
+           "Emit prx args as angle/phase in radians (=value*2pi) instead of "
+           "angle_t/phase_t in turns; required by modern IQM station-control">
   ];
 
   let dependentDialects = [

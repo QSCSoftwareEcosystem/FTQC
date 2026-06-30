@@ -122,6 +122,11 @@ typedef struct FTQCCfg {
     double physical_error_rate;
     /** Target logical error rate                           (default 1e-10) */
     double target_error_rate;
+
+    /** When lower_to_iqm_json: emit prx as angle/phase in radians (value*2pi)
+     *  instead of angle_t/phase_t in turns. Required by modern IQM
+     *  station-control. (Appended at end to keep struct layout stable.) */
+    int lower_to_iqm_json_radians;
 } FTQCCfg;
 
 /**

@@ -3,13 +3,14 @@
 // Translates a post-pipeline FTQC module to an IQM JSON circuit suitable for
 // IQM Resonance hardware or the IQM emulator (device alias with :mock suffix).
 //
-// Gate decompositions to IQM native gates {prx, cz, measure}:
-//   logical_x        → prx(1.0, 0.0)
-//   logical_y        → prx(1.0, 0.25)
-//   logical_h        → prx(0.5, 0.25) ; prx(1.0, 0.0)
-//   logical_z        → Rz(π)   = prx(0.5,0.0) ; prx(1.0,0.25) ; prx(1.5,0.0)
-//   logical_s        → Rz(π/2) = prx(0.5,0.0) ; prx(0.5,0.25) ; prx(1.5,0.0)
-//   logical_t        → Rz(π/4) = prx(0.5,0.0) ; prx(0.25,0.25) ; prx(1.5,0.0)
+// Gate decompositions to IQM native gates {prx, cz, measure}.  prx angles are
+// in *turns* (1 turn = 2π), so a π pulse is angle_t = 0.5 (matching IQM):
+//   logical_x        → prx(0.5, 0.0)
+//   logical_y        → prx(0.5, 0.25)
+//   logical_h        → prx(0.25,0.25) ; prx(0.5,0.0)            (= X·Ry(π/2))
+//   logical_z        → Rz(π)   = prx(0.75,0.0) ; prx(0.5,  0.25) ; prx(0.25,0.0)
+//   logical_s        → Rz(π/2) = prx(0.75,0.0) ; prx(0.25, 0.25) ; prx(0.25,0.0)
+//   logical_t        → Rz(π/4) = prx(0.75,0.0) ; prx(0.125,0.25) ; prx(0.25,0.0)
 //   logical_cnot     → H(target) ; cz[ctrl,tgt] ; H(target)
 //   logical_cz       → cz[QB{a}, QB{b}]
 //   logical_toffoli  → standard 6-CZ Toffoli decomposition (Barenco et al.)
@@ -55,8 +56,10 @@ namespace {
 
 class IQMJSONEmitter {
 public:
-  explicit IQMJSONEmitter(bool includeComments, bool expandSyndromes)
-      : includeComments_(includeComments), expandSyndromes_(expandSyndromes) {}
+  explicit IQMJSONEmitter(bool includeComments, bool expandSyndromes,
+                          bool emitRadians = false)
+      : includeComments_(includeComments), expandSyndromes_(expandSyndromes),
+        emitRadians_(emitRadians) {}
 
   std::string emitModule(ModuleOp mod) {
     bool first = true;
@@ -71,6 +74,7 @@ public:
 private:
   bool includeComments_;
   bool expandSyndromes_;
+  bool emitRadians_ = false;
 
   std::string buf_;
   llvm::raw_string_ostream os_{buf_};
@@ -128,11 +132,33 @@ private:
     instOs_ << "],\"args\":{" << args << "}}";
   }
 
+  // Format a double as a JSON number that always carries a decimal point, so a
+  // whole value (e.g. 0.0) is emitted as "0.0" not "0". The IQM validator types
+  // prx angle/phase strictly as float and rejects an integer literal.
+  static std::string jsonFloat(double v) {
+    char b[64];
+    std::snprintf(b, sizeof(b), "%.9g", v);
+    std::string s(b);
+    if (s.find_first_of(".eEnN") == std::string::npos)  // no '.'/exp/inf/nan
+      s += ".0";
+    return s;
+  }
+
+  // Gate helpers pass angles in turns; emit either turns (angle_t/phase_t) or
+  // radians (angle/phase = turns*2pi) depending on emitRadians_.
   void emitPRX(const std::string &q, double angle_t, double phase_t) {
-    char argbuf[128];
-    std::snprintf(argbuf, sizeof(argbuf),
-                  "\"angle_t\":%.6g,\"phase_t\":%.6g", angle_t, phase_t);
-    emitInst("prx", {q}, argbuf);
+    std::string args;
+    if (emitRadians_) {
+      constexpr double kTurn = 6.283185307179586; // 2*pi
+      args = "\"angle\":" + jsonFloat(angle_t * kTurn) +
+             ",\"phase\":" + jsonFloat(phase_t * kTurn);
+    } else {
+      char b[128];
+      std::snprintf(b, sizeof(b),
+                    "\"angle_t\":%.6g,\"phase_t\":%.6g", angle_t, phase_t);
+      args = b;
+    }
+    emitInst("prx", {q}, args);
   }
 
   void emitCZ(const std::string &a, const std::string &b) {
@@ -154,31 +180,40 @@ private:
   }
 
   //----------------------------------------------------------------------
-  // IQM-native gate helpers (all angles in half-turn units)
+  // IQM-native gate helpers.
+  //
+  // IQM prx(angle_t, phase_t) takes both angles in *turns* (1 turn = 2π):
+  //     prx(a,p) = exp(-i·(2π·a)/2·(cos(2π·p)·X + sin(2π·p)·Y)).
+  // So a π pulse (X) is angle_t = 0.5, and a π/2 pulse is angle_t = 0.25.
+  // (emitPRX writes the values verbatim into "angle_t"/"phase_t".)
   //----------------------------------------------------------------------
 
-  // H = prx(0.5, 0.25) · prx(1.0, 0.0)
+  // X = Rx(π) = prx(0.5, 0.0)
+  void emitX(const std::string &q)   { emitPRX(q, 0.5, 0.0); }
+  // Y = Ry(π) = prx(0.5, 0.25)
+  void emitY(const std::string &q)   { emitPRX(q, 0.5, 0.25); }
+
+  // H = X · Ry(π/2)  — apply Ry(π/2) first, then X.
+  //   Ry(π/2) = prx(0.25, 0.25),  X = prx(0.5, 0.0)
   void emitH(const std::string &q) {
-    emitPRX(q, 0.5, 0.25);
-    emitPRX(q, 1.0, 0.0);
+    emitPRX(q, 0.25, 0.25);
+    emitPRX(q, 0.5,  0.0);
   }
 
-  void emitX(const std::string &q)   { emitPRX(q, 1.0, 0.0); }
-  void emitY(const std::string &q)   { emitPRX(q, 1.0, 0.25); }
-
-  // Rz(θ) = Rx(π/2) · Ry(θ) · Rx(-π/2), using Euler decomposition.
-  // Circuit order: prx(0.5,0.0), prx(θ/π, 0.25), prx(1.5,0.0)
-  void emitZ(const std::string &q) {   // Rz(π)
-    emitPRX(q, 0.5, 0.0); emitPRX(q, 1.0, 0.25); emitPRX(q, 1.5, 0.0);
+  // Rz(θ) = Rx(π/2) · Ry(θ) · Rx(-π/2)  (conjugating Y by Rx(π/2) gives Z).
+  // Circuit order (first applied first): Rx(-π/2), Ry(θ), Rx(π/2), i.e.
+  //   prx(0.75,0.0), prx(θ/2π, 0.25), prx(0.25,0.0).
+  void emitZ(const std::string &q) {   // Rz(π):    Ry(π)    = prx(0.5,  0.25)
+    emitPRX(q, 0.75, 0.0); emitPRX(q, 0.5,   0.25); emitPRX(q, 0.25, 0.0);
   }
-  void emitS(const std::string &q) {   // Rz(π/2)
-    emitPRX(q, 0.5, 0.0); emitPRX(q, 0.5, 0.25); emitPRX(q, 1.5, 0.0);
+  void emitS(const std::string &q) {   // Rz(π/2):  Ry(π/2)  = prx(0.25, 0.25)
+    emitPRX(q, 0.75, 0.0); emitPRX(q, 0.25,  0.25); emitPRX(q, 0.25, 0.0);
   }
-  void emitT(const std::string &q) {   // Rz(π/4)
-    emitPRX(q, 0.5, 0.0); emitPRX(q, 0.25, 0.25); emitPRX(q, 1.5, 0.0);
+  void emitT(const std::string &q) {   // Rz(π/4):  Ry(π/4)  = prx(0.125,0.25)
+    emitPRX(q, 0.75, 0.0); emitPRX(q, 0.125, 0.25); emitPRX(q, 0.25, 0.0);
   }
-  void emitTdg(const std::string &q) { // Rz(-π/4): Ry(-π/4) = prx(0.25, 0.75)
-    emitPRX(q, 0.5, 0.0); emitPRX(q, 0.25, 0.75); emitPRX(q, 1.5, 0.0);
+  void emitTdg(const std::string &q) { // Rz(-π/4): Ry(-π/4) = prx(0.125,0.75)
+    emitPRX(q, 0.75, 0.0); emitPRX(q, 0.125, 0.75); emitPRX(q, 0.25, 0.0);
   }
 
   // CNOT(ctrl, tgt) = H(tgt) · CZ(ctrl,tgt) · H(tgt)
@@ -451,7 +486,7 @@ struct FTQCLowerToIQMJSONPassImpl
   void runOnOperation() override {
     auto mod = getOperation();
 
-    IQMJSONEmitter emitter(includeComments, expandSyndromes);
+    IQMJSONEmitter emitter(includeComments, expandSyndromes, emitRadians);
     std::string json = emitter.emitModule(mod);
 
     if (!outputFile.empty()) {
@@ -476,4 +511,11 @@ struct FTQCLowerToIQMJSONPassImpl
 
 std::unique_ptr<mlir::Pass> mlir::ftqc::createLowerToIQMJSONPass() {
   return std::make_unique<FTQCLowerToIQMJSONPassImpl>();
+}
+
+std::unique_ptr<mlir::Pass>
+mlir::ftqc::createLowerToIQMJSONPass(bool emitRadians) {
+  FTQCLowerToIQMJSONPassOptions opts;
+  opts.emitRadians = emitRadians;
+  return std::make_unique<FTQCLowerToIQMJSONPassImpl>(opts);
 }
