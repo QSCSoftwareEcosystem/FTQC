@@ -57,9 +57,9 @@ namespace {
 class IQMJSONEmitter {
 public:
   explicit IQMJSONEmitter(bool includeComments, bool expandSyndromes,
-                          bool emitRadians = false)
+                          bool emitRadians = false, bool physical = false)
       : includeComments_(includeComments), expandSyndromes_(expandSyndromes),
-        emitRadians_(emitRadians) {}
+        emitRadians_(emitRadians), physical_(physical) {}
 
   std::string emitModule(ModuleOp mod) {
     bool first = true;
@@ -75,6 +75,10 @@ private:
   bool includeComments_;
   bool expandSyndromes_;
   bool emitRadians_ = false;
+  bool physical_ = false;   // expand Steane logical qubits to 7 physical qubits
+
+  // Physical mode: each logical-qubit Value maps to a block of physical QB names.
+  DenseMap<Value, SmallVector<std::string, 8>> blockMap_;
 
   std::string buf_;
   llvm::raw_string_ostream os_{buf_};
@@ -113,6 +117,51 @@ private:
     std::string n = freshQubit();
     qubitMap_[v] = n;
     return n;
+  }
+
+  //----------------------------------------------------------------------
+  // Physical-mode helpers: a logical qubit -> block of physical QB names.
+  //----------------------------------------------------------------------
+
+  // Steane [[7,1,3]] is 7 physical qubits. (Other codes not yet expanded.)
+  static constexpr unsigned kSteaneSize = 7;
+
+  SmallVector<std::string, 8> freshBlock(unsigned n) {
+    SmallVector<std::string, 8> b;
+    for (unsigned i = 0; i < n; ++i)
+      b.push_back(freshQubit());
+    return b;
+  }
+
+  void regBlock(Value v, SmallVector<std::string, 8> b) { blockMap_[v] = std::move(b); }
+
+  void propagateBlock(Value newV, Value oldV) {
+    auto it = blockMap_.find(oldV);
+    if (it != blockMap_.end())
+      blockMap_[newV] = it->second;
+  }
+
+  SmallVector<std::string, 8> qblock(Value v) {
+    auto it = blockMap_.find(v);
+    if (it != blockMap_.end())
+      return it->second;
+    auto b = freshBlock(kSteaneSize);     // fallback: treat as pre-encoded input
+    blockMap_[v] = b;
+    return b;
+  }
+
+  // Steane |0_L> encoder: H on check qubits 0,1,3 then a CNOT cascade.
+  // (Matches the verified encoder in sim_steane_aer.py.)
+  void emitSteaneEncoder(ArrayRef<std::string> q) {
+    emitH(q[0]); emitH(q[1]); emitH(q[3]);
+    emitCNOT(q[0], q[2]); emitCNOT(q[0], q[4]); emitCNOT(q[0], q[6]);
+    emitCNOT(q[1], q[2]); emitCNOT(q[1], q[5]); emitCNOT(q[1], q[6]);
+    emitCNOT(q[3], q[4]); emitCNOT(q[3], q[5]); emitCNOT(q[3], q[6]);
+  }
+
+  // Apply a single-qubit gate transversally across a block.
+  void transversal(ArrayRef<std::string> blk, llvm::function_ref<void(const std::string &)> g) {
+    for (const auto &q : blk) g(q);
   }
 
   //----------------------------------------------------------------------
@@ -251,15 +300,18 @@ private:
     firstInst_ = true;
     qubitMap_.clear();
 
-    // Assign QB{n} names to logical-qubit function arguments.
+    // Assign names to logical-qubit function arguments. In physical mode each
+    // argument is a pre-encoded 7-qubit block; otherwise a single QB.
     for (auto arg : func.getArguments()) {
-      if (isa<LogicalQubitType>(arg.getType()))
-        reg(arg, freshQubit());
+      if (isa<LogicalQubitType>(arg.getType())) {
+        if (physical_) regBlock(arg, freshBlock(kSteaneSize));
+        else           reg(arg, freshQubit());
+      }
     }
 
     if (!func.empty()) {
       for (auto &op : func.getBody().front())
-        emitOp(&op);
+        physical_ ? emitOpPhysical(&op) : emitOp(&op);
     }
 
     os_ << "{\n"
@@ -469,6 +521,73 @@ private:
         emitComment("unsupported:" + u->getName().getStringRef().str());
       });
   }
+
+  //----------------------------------------------------------------------
+  // Physical (ECC-expanded) emission — Steane [[7,1,3]] blocks.
+  //
+  // Each logical qubit becomes 7 physical qubits. init_zero emits the |0_L>
+  // encoder; single-qubit Cliffords (H/X/Y/Z) are transversal; CNOT is the 7
+  // pairwise CNOTs; measurement reads all 7 physical qubits (the logical bit is
+  // recovered downstream as the parity of the 7 outcomes). EC/syndrome ops carry
+  // no FT correction here, so they are no-ops (the encoder gives a valid |0_L>).
+  //----------------------------------------------------------------------
+  void emitOpPhysical(Operation *op) {
+    llvm::TypeSwitch<Operation *>(op)
+      .Case<InitZeroOp>([&](InitZeroOp o) {
+        auto blk = freshBlock(kSteaneSize);
+        regBlock(o.getResult(), blk);
+        emitSteaneEncoder(blk);
+      })
+      .Case<InitPlusOp>([&](InitPlusOp o) {
+        auto blk = freshBlock(kSteaneSize);
+        regBlock(o.getResult(), blk);
+        emitSteaneEncoder(blk);                       // |0_L>
+        transversal(blk, [&](const std::string &q){ emitH(q); });  // -> |+_L>
+      })
+      .Case<LogicalHOp>([&](LogicalHOp o) {
+        auto blk = qblock(o.getQubit()); propagateBlock(o.getResult(), o.getQubit());
+        transversal(blk, [&](const std::string &q){ emitH(q); });
+      })
+      .Case<LogicalXOp>([&](LogicalXOp o) {
+        auto blk = qblock(o.getQubit()); propagateBlock(o.getResult(), o.getQubit());
+        transversal(blk, [&](const std::string &q){ emitX(q); });
+      })
+      .Case<LogicalYOp>([&](LogicalYOp o) {
+        auto blk = qblock(o.getQubit()); propagateBlock(o.getResult(), o.getQubit());
+        transversal(blk, [&](const std::string &q){ emitY(q); });
+      })
+      .Case<LogicalZOp>([&](LogicalZOp o) {
+        auto blk = qblock(o.getQubit()); propagateBlock(o.getResult(), o.getQubit());
+        transversal(blk, [&](const std::string &q){ emitZ(q); });
+      })
+      .Case<LogicalCNOTOp>([&](LogicalCNOTOp o) {
+        auto c = qblock(o.getControl());
+        auto t = qblock(o.getTarget());
+        propagateBlock(o.getControlOut(), o.getControl());
+        propagateBlock(o.getTargetOut(), o.getTarget());
+        for (unsigned i = 0; i < kSteaneSize && i < c.size() && i < t.size(); ++i)
+          emitCNOT(c[i], t[i]);                       // transversal CNOT
+      })
+      .Case<LogicalMeasureOp>([&](LogicalMeasureOp o) {
+        auto blk = qblock(o.getLogicalQubit());
+        int li = measureIdx_++;
+        for (unsigned i = 0; i < blk.size(); ++i)
+          emitMeasure(blk[i], "mL" + std::to_string(li) + "_" + std::to_string(i));
+      })
+      // EC / syndrome / frame / annotation: no FT correction in this lowering.
+      .Case<ECRoundOp>([&](ECRoundOp o)      { propagateBlock(o.getCorrectedQubit(), o.getLogicalQubit()); emitComment("ec_round"); })
+      .Case<CorrectOp>([&](CorrectOp o)      { propagateBlock(o.getCorrectedQubit(), o.getLogicalQubit()); emitComment("correct"); })
+      .Case<SteaneZSyndromeOp>([&](SteaneZSyndromeOp o) { propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit()); emitComment("steane_z_syndrome"); })
+      .Case<SteaneXSyndromeOp>([&](SteaneXSyndromeOp o) { propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit()); emitComment("steane_x_syndrome"); })
+      .Case<DeallocOp>([&](DeallocOp) {})
+      .Case<ResourceAnnotationOp>([&](ResourceAnnotationOp) {})
+      .Case<EncodeOp>([&](EncodeOp) { emitComment("encode"); })
+      .Case<DecodeOp>([&](DecodeOp) { emitComment("decode"); })
+      .Case<func::ReturnOp>([&](func::ReturnOp) {})
+      .Default([&](Operation *u) {
+        emitComment("physical-unsupported:" + u->getName().getStringRef().str());
+      });
+  }
 };
 
 } // namespace
@@ -486,7 +605,7 @@ struct FTQCLowerToIQMJSONPassImpl
   void runOnOperation() override {
     auto mod = getOperation();
 
-    IQMJSONEmitter emitter(includeComments, expandSyndromes, emitRadians);
+    IQMJSONEmitter emitter(includeComments, expandSyndromes, emitRadians, physical);
     std::string json = emitter.emitModule(mod);
 
     if (!outputFile.empty()) {
@@ -517,5 +636,13 @@ std::unique_ptr<mlir::Pass>
 mlir::ftqc::createLowerToIQMJSONPass(bool emitRadians) {
   FTQCLowerToIQMJSONPassOptions opts;
   opts.emitRadians = emitRadians;
+  return std::make_unique<FTQCLowerToIQMJSONPassImpl>(opts);
+}
+
+std::unique_ptr<mlir::Pass>
+mlir::ftqc::createLowerToIQMJSONPass(bool emitRadians, bool physical) {
+  FTQCLowerToIQMJSONPassOptions opts;
+  opts.emitRadians = emitRadians;
+  opts.physical = physical;
   return std::make_unique<FTQCLowerToIQMJSONPassImpl>(opts);
 }

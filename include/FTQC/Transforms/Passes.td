@@ -459,7 +459,10 @@ def FTQCLowerToIQMJSONPass : Pass<"ftqc-lower-to-iqm-json", "mlir::ModuleOp"> {
            "Expand syndrome ops into physical ancilla CZ circuits">,
     Option<"emitRadians", "radians", "bool", "false",
            "Emit prx args as angle/phase in radians (=value*2pi) instead of "
-           "angle_t/phase_t in turns; required by modern IQM station-control">
+           "angle_t/phase_t in turns; required by modern IQM station-control">,
+    Option<"physical", "physical", "bool", "false",
+           "Expand each Steane logical qubit into a 7-physical-qubit block: "
+           "emit the |0_L> encoder, transversal gates, and 7 physical measures">
   ];
 
   let dependentDialects = [

@@ -127,6 +127,9 @@ typedef struct FTQCCfg {
      *  instead of angle_t/phase_t in turns. Required by modern IQM
      *  station-control. (Appended at end to keep struct layout stable.) */
     int lower_to_iqm_json_radians;
+    /** When lower_to_iqm_json: expand each Steane logical qubit into a
+     *  7-physical-qubit block (|0_L> encoder + transversal gates + 7 measures). */
+    int lower_to_iqm_json_physical;
 } FTQCCfg;
 
 /**

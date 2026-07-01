@@ -234,6 +234,9 @@ std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass();
 /// Variant selecting prx angle units: emitRadians=true emits angle/phase in
 /// radians (value*2pi); false (default) emits angle_t/phase_t in turns.
 std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass(bool emitRadians);
+/// Variant also selecting physical expansion: physical=true expands each Steane
+/// logical qubit into a 7-physical-qubit block (encoder + transversal gates).
+std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass(bool emitRadians, bool physical);
 
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"

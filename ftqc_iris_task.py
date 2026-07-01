@@ -37,6 +37,34 @@ IQM submission reads auth from the environment (RESONANCE_API_KEY / IQM_TOKEN,
 IQM_BASE_URL); these are mirrored to the IRIS_-prefixed names the iris_iqm device
 actually reads. If IRIS can't locate libiqm-qdmi-device.so, point it via
 --iqm-lib or IRIS_LIB_IQM.
+
+It's used only for the physical path, and it does two things: route the circuit onto the device's connectivity, then submit it. There are
+  three reasons it exists — and why it has to be a separate process:
+
+  1. The physical circuit can't run as-is — it needs routing.
+  A 7-qubit Steane block's encoder is 9 CNOTs with a fixed adjacency, and I verified that graph is not a subgraph of the 20-qubit device
+  topology. The raw path (FTQC JSON → iris_iqm → QDMI → server) does no routing — I tested that the server rejects a CZ between non-adjacent
+  qubits ("not allowed as locus for 'cz'"). So the circuit must be transpiled to physical qubits + SWAPs first. qiskit-iqm's transpile_to_IQM
+  does exactly that. (Device-valid circuits like the 2-qubit bell don't need it and still go straight through iris_iqm.)
+
+  2. qiskit-iqm can't live in the IRIS process.
+  Importing qiskit-iqm into the process that drives the iris_iqm device breaks the QDMI library's symbol resolution
+  (IQM_QDMI_device_session_alloc not found), and the iris_iqm device was unreliable for the larger 7-qubit job anyway. Isolating qiskit-iqm in a
+  child process avoids that interference entirely, and I fall back to qiskit-iqm's own (proven) submission for the routed circuit.
+
+  3. Python version split.
+  iqm-client/qiskit-iqm ≥34 (needed to talk to this server) require Python ≥3.11, but the interpreter that drives IRIS here is 3.10. So the
+  routing/transpilation has to run under a 3.12 interpreter regardless — a subprocess is the natural boundary. It defaults to IQM/realqpu.venv
+  and is overridable via FTQC_ROUTER_PYTHON.
+
+  So the flow is:
+  - Tasks 1–3 (QASM → logical → physical MLIR → IQM JSON) run in-process via IRIS.
+  - Physical circuits: the subprocess (3.12, qiskit-iqm) routes to device connectivity + submits + returns counts.
+  - Already-device-valid circuits: submitted directly through the iris_iqm device, no subprocess.
+
+  If IQM ever adds server-side routing, or the whole thing runs under Python ≥3.11 with a fixed iris_iqm for large jobs, the subprocess could be
+  dropped and everything would go through iris_iqm.
+
 """
 
 import sys, os, argparse, ctypes, json, re
@@ -119,6 +147,8 @@ class FTQCCfg(Structure):
         # Appended (must match the tail of the C FTQCCfg): emit prx as
         # angle/phase in radians instead of angle_t/phase_t in turns.
         ("lower_to_iqm_json_radians", c_int),
+        # Expand each Steane logical qubit into a 7-physical-qubit block.
+        ("lower_to_iqm_json_physical", c_int),
     ]
 
 # Map pipeline name → which flag to set in FTQCCfg
@@ -138,6 +168,35 @@ def make_cfg(ecc_kind: str, ecc_dist: int, func_name: str,
     flag = _PIPELINE_FLAGS.get(pipeline)
     if flag:
         setattr(cfg, flag, 1)
+    return cfg
+
+# ftqc-opt pass flag (CLI --ftqc-<pass>) → FTQCCfg field. Lets the user compose
+# a custom Task-2 pipeline instead of a fixed --pipeline, mirroring ftqc-opt.
+FTQC_PASS_FLAGS = {
+    "ftqc-steane-encode":     "steane_encode",
+    "ftqc-surface-encode":    "surface_encode",
+    "ftqc-color-encode":      "color_encode",
+    "ftqc-insert-syndrome":   "insert_syndrome",
+    "ftqc-insert-correction": "insert_correction",
+    "ftqc-pauli-frame-opt":   "pauli_frame_opt",
+    "ftqc-transversal-gates": "transversal_gates",
+    "ftqc-lower-to-quantum":  "lower_to_quantum",
+    "ftqc-lower-to-stim":     "lower_to_stim",
+    "ftqc-lower-to-qir":      "lower_to_qir",
+    "ftqc-lower-to-qasm3":    "lower_to_qasm3",
+    "ftqc-resource-estimate": "resource_estimate",
+    "ftqc-magic-distill":     "magic_distill",
+}
+
+def make_cfg_from_flags(ecc_kind: str, ecc_dist: int, func_name: str,
+                        fields: list) -> FTQCCfg:
+    """Build a FTQCCfg with the given per-pass flag fields set (no pre-pipeline)."""
+    cfg = FTQCCfg()
+    cfg.ecc_kind  = ecc_kind.encode()
+    cfg.ecc_dist  = ecc_dist
+    cfg.func_name = func_name.encode()
+    for f in fields:
+        setattr(cfg, f, 1)
     return cfg
 
 def cfg_as_np(cfg: FTQCCfg) -> np.ndarray:
@@ -282,6 +341,99 @@ def strip_comments(circuit: dict) -> dict:
     return circuit
 
 
+# Routing must happen in a SEPARATE process: importing qiskit-iqm into the IRIS
+# process breaks the QDMI device's symbol resolution (the iris_iqm session fails
+# to allocate). This script (run by a Python with qiskit-iqm, >=3.11) reads
+# {circuit,url,token,alias} on stdin and prints the device-routed IQM circuit.
+_ROUTER_SCRIPT = r"""
+import sys, json
+d = json.load(sys.stdin)
+from qiskit import QuantumCircuit
+from iqm.qiskit_iqm import IQMProvider, transpile_to_IQM
+c = d["circuit"]
+be = IQMProvider(d["url"], token=d["token"], quantum_computer=d["alias"]).get_backend()
+qubits = sorted({q for i in c["instructions"] for q in i["locus"]}, key=lambda s: int(s[2:]))
+idx = {q: i for i, q in enumerate(qubits)}
+nmeas = sum(1 for i in c["instructions"] if i["name"] == "measure")
+qc = QuantumCircuit(len(qubits), nmeas); cb = 0
+for ins in c["instructions"]:
+    a = ins.get("args", {}); loc = [idx[q] for q in ins["locus"]]
+    if ins["name"] == "prx": qc.r(a["angle"], a["phase"], loc[0])
+    elif ins["name"] == "cz": qc.cz(loc[0], loc[1])
+    elif ins["name"] == "measure": qc.measure(loc[0], cb); cb += 1
+ser = be.serialize_circuit(transpile_to_IQM(qc, be))
+print(json.dumps({"name": c.get("name", "circuit"),
+                  "instructions": [{"name": op.name, "locus": list(op.locus),
+                                    "args": dict(op.args)} for op in ser.instructions]}))
+"""
+
+# Route AND submit in one subprocess via qiskit-iqm (be.run). Used for physical
+# circuits, which need routing that the raw iris_iqm/QDMI path can't do. Reads
+# {circuit,url,token,alias,shots} on stdin, prints {"counts": {bitstring: n}}.
+_ROUTE_SUBMIT_SCRIPT = r"""
+import sys, json
+d = json.load(sys.stdin)
+from qiskit import QuantumCircuit
+from iqm.qiskit_iqm import IQMProvider, transpile_to_IQM
+c = d["circuit"]
+be = IQMProvider(d["url"], token=d["token"], quantum_computer=d["alias"]).get_backend()
+qubits = sorted({q for i in c["instructions"] for q in i["locus"]}, key=lambda s: int(s[2:]))
+idx = {q: i for i, q in enumerate(qubits)}
+nmeas = sum(1 for i in c["instructions"] if i["name"] == "measure")
+qc = QuantumCircuit(len(qubits), nmeas); cb = 0
+for ins in c["instructions"]:
+    a = ins.get("args", {}); loc = [idx[q] for q in ins["locus"]]
+    if ins["name"] == "prx": qc.r(a["angle"], a["phase"], loc[0])
+    elif ins["name"] == "cz": qc.cz(loc[0], loc[1])
+    elif ins["name"] == "measure": qc.measure(loc[0], cb); cb += 1
+counts = be.run(transpile_to_IQM(qc, be), shots=d["shots"]).result().get_counts()
+print(json.dumps({"counts": {k.replace(" ", ""): int(v) for k, v in counts.items()}}))
+"""
+
+def _router_python() -> str:
+    """Python interpreter that has qiskit-iqm for the routing subprocess."""
+    cand = os.environ.get("FTQC_ROUTER_PYTHON") or str(
+        _HERE.parent / "IQM" / "realqpu.venv" / "bin" / "python")
+    return cand
+
+def _router_env() -> dict:
+    """Env for the routing subprocess. The token is passed explicitly in the
+    payload, so drop IQM_TOKEN/RESONANCE_API_KEY from the env — iqm-client
+    refuses a token given both as an argument and via the environment."""
+    return {k: v for k, v in os.environ.items()
+            if k not in ("IQM_TOKEN", "RESONANCE_API_KEY")}
+
+def route_and_submit_iqm(circuit: dict, server_url: str, token: str,
+                         qc_alias: str, shots: int) -> dict:
+    """Route + run a circuit on the real device via qiskit-iqm (subprocess).
+    Returns a counts dict {bitstring: n}. Used for physical circuits."""
+    import subprocess
+    payload = json.dumps({"circuit": circuit, "url": server_url, "token": token,
+                          "alias": qc_alias, "shots": shots})
+    py = _router_python()
+    r = subprocess.run([py, "-c", _ROUTE_SUBMIT_SCRIPT], input=payload,
+                       capture_output=True, text=True, env=_router_env())
+    if r.returncode != 0:
+        raise RuntimeError(f"route+submit subprocess ({py}) failed:\n{r.stderr[-1500:]}")
+    return json.loads(r.stdout.strip().splitlines()[-1])["counts"]
+
+def route_for_device(circuit: dict, server_url: str, token: str,
+                     qc_alias: str) -> dict:
+    """Map a logical-adjacency IQM circuit (radians) onto the device coupling
+    graph via qiskit-iqm (in a subprocess). The raw QDMI path can't route, and a
+    7-qubit Steane block's CZ pattern is not a device subgraph, so routing is
+    required before submitting a physical circuit."""
+    import subprocess
+    payload = json.dumps({"circuit": circuit, "url": server_url,
+                          "token": token, "alias": qc_alias})
+    py = _router_python()
+    r = subprocess.run([py, "-c", _ROUTER_SCRIPT], input=payload,
+                       capture_output=True, text=True, env=_router_env())
+    if r.returncode != 0:
+        raise RuntimeError(f"routing subprocess ({py}) failed:\n{r.stderr[-1500:]}")
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
 def submit_iqm_json(circuit_json: str, qc_alias: str, shots: int,
                     heralding: str) -> list[tuple[int, int]]:
     """Run one IRIS task on the iris_iqm (iris_qpu) device. Returns [(key,count)]."""
@@ -310,7 +462,9 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         pipeline: str, out_file: Path,
         submit_iqm: bool = False, qc_alias: str = "default",
         shots: int = 1024, heralding: str = "none",
-        keep_turns: bool = False) -> None:
+        keep_turns: bool = False, pass_fields: list = None,
+        physical: bool = False, route: bool = None,
+        server_url: str = None, token: str = None) -> None:
 
     qasm_bytes = qasm_file.read_bytes()
 
@@ -325,7 +479,11 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
     # cfg_import: no pipeline (QASM → logical MLIR only, no passes)
     # cfg_opt:    full pipeline for logical → physical conversion
     cfg_import = make_cfg(ecc_kind, ecc_dist, func_name, pipeline="")
-    cfg_opt    = make_cfg(ecc_kind, ecc_dist, func_name, pipeline=pipeline)
+    # Task 2: an explicit --ftqc-* pass list (if given) overrides --pipeline.
+    if pass_fields:
+        cfg_opt = make_cfg_from_flags(ecc_kind, ecc_dist, func_name, pass_fields)
+    else:
+        cfg_opt = make_cfg(ecc_kind, ecc_dist, func_name, pipeline=pipeline)
 
     # Convert to numpy bytes so iris.dmem() uses the correct host pointer.
     # FTQCCfg has no pointer fields — all fields are inline values/arrays —
@@ -371,10 +529,12 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         # Task 3: physical MLIR → IQM JSON (lower_to_iqm_json only, no pipeline).
         # The pass emits prx in radians (angle/phase) by default — what modern
         # IQM station-control requires; --keep-turns asks for angle_t/phase_t.
+        # physical=true expands each Steane logical qubit to a 7-qubit block.
         cfg_json = FTQCCfg()
         cfg_json.func_name = func_name.encode()
         cfg_json.lower_to_iqm_json = 1
         cfg_json.lower_to_iqm_json_radians = 0 if keep_turns else 1
+        cfg_json.lower_to_iqm_json_physical = 1 if physical else 0
         json_mlir_np      = np.zeros(_MAX_OUT, dtype=np.uint8)
         json_mlir_size_np = np.zeros(2, dtype=np.uint64)
         k_json = make_mlir_kernel_iris(cfg_as_np(cfg_json))
@@ -388,31 +548,57 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         jn = int(json_mlir_size_np[0])
         circuit = json.loads(extract_iqm_json(json_mlir_np[:jn].tobytes().decode()))
         strip_comments(circuit)
-        circuit_json = json.dumps(circuit, indent=2)
-
-        iqm_json_file = out_file.with_suffix(".iqm.json")
-        iqm_json_file.write_text(circuit_json)
-        ninst = len(circuit.get("instructions", []))
+        nq = len({q for i in circuit["instructions"] for q in i["locus"]})
         units = "turns" if keep_turns else "radians"
-        print(f"\nIQM JSON: {iqm_json_file}  ({ninst} instructions, prx in {units})")
+        iqm_json_file = out_file.with_suffix(".iqm.json")
+        iqm_json_file.write_text(json.dumps(circuit, indent=2))
+        print(f"\nIQM JSON: {iqm_json_file}  "
+              f"({len(circuit['instructions'])} instructions, {nq} qubits, "
+              f"prx in {units}{', physical Steane' if physical else ''})")
 
-        # Task 4: submit the JSON to the iris_iqm (iris_qpu) device.
-        print(f"\nSubmitting to iris_iqm  (alias='{qc_alias}', shots={shots}, "
-              f"heralding='{heralding}') ...")
-        records = submit_iqm_json(circuit_json, qc_alias, shots, heralding)
+        # A physical circuit uses logical adjacency, so it must be routed onto
+        # the device coupling graph (the raw iris_iqm/QDMI path can't route).
+        # Default: route when physical.
+        if route is None:
+            route = physical
 
-        iris.finalize()
+        if route:
+            # Route + submit via qiskit-iqm in a subprocess (needs Python>=3.11).
+            # IRIS is finalized first: the lowering tasks are done, and we submit
+            # through qiskit-iqm rather than the iris_iqm device.
+            iris.finalize()
+            if keep_turns:
+                raise RuntimeError("routing needs radians; drop --keep-turns")
+            print(f"\nRouting + submitting on device via qiskit-iqm "
+                  f"(alias='{qc_alias}', shots={shots}) ...")
+            counts = route_and_submit_iqm(circuit, server_url, token, qc_alias, shots)
+            records = [(int(b, 2), n) for b, n in counts.items()]
+            width = max((len(b) for b in counts), default=1)
+        else:
+            # Task 4: submit the device-valid JSON to the iris_iqm device.
+            circuit_json = json.dumps(circuit)
+            print(f"\nSubmitting to iris_iqm  (alias='{qc_alias}', shots={shots}, "
+                  f"heralding='{heralding}') ...")
+            records = submit_iqm_json(circuit_json, qc_alias, shots, heralding)
+            iris.finalize()
+            width = sum(1 for i in circuit["instructions"] if i.get("name") == "measure")
 
         if not records:
             print("  (no measurement records returned — check the device log above)")
-        else:
-            # Pad each outcome to the number of measured qubits for readability.
-            width = sum(1 for i in circuit["instructions"] if i.get("name") == "measure")
-            total = sum(c for _, c in records) or 1
-            print(f"\nIQM results ({total} shots, {len(records)} outcomes):")
-            for key, count in sorted(records, key=lambda kc: -kc[1]):
-                bits = format(key, "0{}b".format(max(width, 1)))
-                print(f"  |{bits}>  {count:>6}  ({100.0 * count / total:5.1f}%)")
+            return
+        total = sum(c for _, c in records) or 1
+        print(f"\nIQM results ({total} shots, {len(records)} outcomes):")
+        for key, count in sorted(records, key=lambda kc: -kc[1])[:12]:
+            bits = format(key, "0{}b".format(max(width, 1)))
+            print(f"  |{bits}>  {count:>6}  ({100.0 * count / total:5.1f}%)")
+        if physical:
+            # Steane logical bit = parity of the (7) physical-qubit outcomes.
+            par = {0: 0, 1: 0}
+            for key, count in records:
+                par[bin(key).count("1") & 1] += count
+            print("\nDecoded Steane logical bit (parity of physical outcomes):")
+            for b in (0, 1):
+                print(f"  logical |{b}>  {par[b]:>6}  ({100.0 * par[b] / total:5.1f}%)")
         return
 
     iris.finalize()
@@ -447,7 +633,23 @@ def main():
     ap.add_argument("--keep-turns", action="store_true",
                     help="submit prx angles in turns as emitted (default: convert "
                          "to radians, which modern station-control requires)")
+    ap.add_argument("--physical", action="store_true",
+                    help="expand each Steane logical qubit into a 7-physical-qubit "
+                         "block (|0_L> encoder + transversal gates + 7 measures)")
+    ap.add_argument("--route", dest="route", action="store_true", default=None,
+                    help="route the circuit onto the device coupling map via "
+                         "qiskit-iqm before submit (default: on when --physical)")
+    ap.add_argument("--no-route", dest="route", action="store_false",
+                    help="submit without routing (raw circuit must be device-valid)")
+    # ftqc-opt pass flags: compose a custom Task-2 pipeline (overrides --pipeline).
+    g = ap.add_argument_group("ftqc-opt passes (compose Task 2; override --pipeline)")
+    for flag in FTQC_PASS_FLAGS:
+        g.add_argument(f"--{flag}", action="store_true")
     args = ap.parse_args()
+
+    # Collect any --ftqc-* pass flags the user set → FTQCCfg field names.
+    pass_fields = [field for flag, field in FTQC_PASS_FLAGS.items()
+                   if getattr(args, flag.replace("-", "_"))]
 
     qasm_file = Path(args.qasm_file)
     if not qasm_file.exists():
@@ -465,19 +667,24 @@ def main():
             print("Warning: no RESONANCE_API_KEY / IQM_TOKEN set — the iris_iqm "
                   "device will fail to authenticate.", file=sys.stderr)
 
+    task2_desc = " ".join("--" + f for f in FTQC_PASS_FLAGS
+                          if getattr(args, f.replace("-", "_"))) or args.pipeline
     print(f"Input:    {qasm_file}")
     print(f"ECC:      {args.ecc_kind}  d={args.ecc_dist}")
-    print(f"Pipeline: {args.pipeline}")
+    print(f"Task 2:   {task2_desc}")
     print(f"Output:   {out_file}")
     if args.submit_iqm:
         print(f"Submit:   iris_iqm  alias={args.qc_alias}  shots={args.shots}  "
-              f"lib={os.environ.get('IRIS_LIB_IQM', '(IRIS default)')}")
+              f"physical={args.physical}  lib={os.environ.get('IRIS_LIB_IQM', '(IRIS default)')}")
     print()
 
     run(qasm_file, args.ecc_kind, args.ecc_dist, args.func_name,
         args.pipeline, out_file,
         submit_iqm=args.submit_iqm, qc_alias=args.qc_alias, shots=args.shots,
-        heralding=args.heralding, keep_turns=args.keep_turns)
+        heralding=args.heralding, keep_turns=args.keep_turns,
+        pass_fields=pass_fields, physical=args.physical, route=args.route,
+        server_url=os.environ.get("IQM_BASE_URL"),
+        token=os.environ.get("RESONANCE_API_KEY") or os.environ.get("IQM_TOKEN"))
 
 if __name__ == "__main__":
     main()
