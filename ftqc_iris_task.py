@@ -332,6 +332,27 @@ def extract_iqm_json(mlir_text: str) -> str:
     return _mlir_unescape(m.group(1))
 
 
+# Steane [[7,1,3]] Z-stabilizer supports (0-indexed), matching the emitter's
+# encoder. The 3 checks form a Hamming syndrome that locates a single X (bit-flip)
+# error — the correction relevant to a Z-basis logical readout.
+STEANE_STAB = [[1, 2, 3, 4], [0, 2, 3, 5], [0, 1, 3, 6]]
+_STEANE_DECODE = {sum((e in STEANE_STAB[k]) << k for k in range(3)): e
+                  for e in range(7)}   # syndrome (1..7) -> qubit to flip
+
+def steane_correct(databits: list) -> tuple:
+    """(raw_logical, corrected_logical) from 7 physical Z-basis outcomes.
+    Correction = classical Pauli-frame update from the data-computed syndrome
+    (IQM has no real-time feed-forward, so it is applied in post-processing)."""
+    raw = sum(databits) & 1
+    syn = 0
+    for k in range(3):
+        syn |= (sum(databits[j] for j in STEANE_STAB[k]) & 1) << k
+    corr = databits[:]
+    if syn:
+        corr[_STEANE_DECODE[syn]] ^= 1
+    return raw, sum(corr) & 1
+
+
 def strip_comments(circuit: dict) -> dict:
     """Drop `_comment` pseudo-instructions (emitted with include-comments=true);
     the device rejects unknown instruction names. prx angle units are handled by
@@ -380,14 +401,18 @@ be = IQMProvider(d["url"], token=d["token"], quantum_computer=d["alias"]).get_ba
 qubits = sorted({q for i in c["instructions"] for q in i["locus"]}, key=lambda s: int(s[2:]))
 idx = {q: i for i, q in enumerate(qubits)}
 nmeas = sum(1 for i in c["instructions"] if i["name"] == "measure")
-qc = QuantumCircuit(len(qubits), nmeas); cb = 0
+qc = QuantumCircuit(len(qubits), nmeas); cb = 0; key_to_cb = {}
 for ins in c["instructions"]:
     a = ins.get("args", {}); loc = [idx[q] for q in ins["locus"]]
     if ins["name"] == "prx": qc.r(a["angle"], a["phase"], loc[0])
     elif ins["name"] == "cz": qc.cz(loc[0], loc[1])
-    elif ins["name"] == "measure": qc.measure(loc[0], cb); cb += 1
+    elif ins["name"] == "measure":
+        key_to_cb[a.get("key", "c%d" % cb)] = cb; qc.measure(loc[0], cb); cb += 1
 counts = be.run(transpile_to_IQM(qc, be), shots=d["shots"]).result().get_counts()
-print(json.dumps({"counts": {k.replace(" ", ""): int(v) for k, v in counts.items()}}))
+# clbits survive transpilation (only qubits are remapped), so key_to_cb still
+# identifies which bit of each outcome is which measurement.
+print(json.dumps({"counts": {k.replace(" ", ""): int(v) for k, v in counts.items()},
+                  "key_to_cb": key_to_cb}))
 """
 
 def _router_python() -> str:
@@ -415,7 +440,8 @@ def route_and_submit_iqm(circuit: dict, server_url: str, token: str,
                        capture_output=True, text=True, env=_router_env())
     if r.returncode != 0:
         raise RuntimeError(f"route+submit subprocess ({py}) failed:\n{r.stderr[-1500:]}")
-    return json.loads(r.stdout.strip().splitlines()[-1])["counts"]
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    return out["counts"], out["key_to_cb"]
 
 def route_for_device(circuit: dict, server_url: str, token: str,
                      qc_alias: str) -> dict:
@@ -562,6 +588,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         if route is None:
             route = physical
 
+        key_to_cb = None
         if route:
             # Route + submit via qiskit-iqm in a subprocess (needs Python>=3.11).
             # IRIS is finalized first: the lowering tasks are done, and we submit
@@ -571,7 +598,8 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
                 raise RuntimeError("routing needs radians; drop --keep-turns")
             print(f"\nRouting + submitting on device via qiskit-iqm "
                   f"(alias='{qc_alias}', shots={shots}) ...")
-            counts = route_and_submit_iqm(circuit, server_url, token, qc_alias, shots)
+            counts, key_to_cb = route_and_submit_iqm(circuit, server_url, token,
+                                                     qc_alias, shots)
             records = [(int(b, 2), n) for b, n in counts.items()]
             width = max((len(b) for b in counts), default=1)
         else:
@@ -582,6 +610,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
             records = submit_iqm_json(circuit_json, qc_alias, shots, heralding)
             iris.finalize()
             width = sum(1 for i in circuit["instructions"] if i.get("name") == "measure")
+            counts = {format(k, "0{}b".format(max(width, 1))): n for k, n in records}
 
         if not records:
             print("  (no measurement records returned — check the device log above)")
@@ -591,14 +620,24 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         for key, count in sorted(records, key=lambda kc: -kc[1])[:12]:
             bits = format(key, "0{}b".format(max(width, 1)))
             print(f"  |{bits}>  {count:>6}  ({100.0 * count / total:5.1f}%)")
-        if physical:
-            # Steane logical bit = parity of the (7) physical-qubit outcomes.
-            par = {0: 0, 1: 0}
-            for key, count in records:
-                par[bin(key).count("1") & 1] += count
-            print("\nDecoded Steane logical bit (parity of physical outcomes):")
-            for b in (0, 1):
-                print(f"  logical |{b}>  {par[b]:>6}  ({100.0 * par[b] / total:5.1f}%)")
+
+        if physical and key_to_cb:
+            # Steane logical readout: locate the 7 data measurements (keys "mL*"),
+            # then report the logical bit RAW (parity) vs CORRECTED (syndrome-decoded
+            # Pauli-frame update). qiskit counts are little-endian over clbits.
+            data_keys = sorted((k for k in key_to_cb if k.startswith("mL")),
+                               key=lambda k: int(k.split("_")[-1]))
+            if len(data_keys) == 7:
+                raw = {0: 0, 1: 0}
+                cor = {0: 0, 1: 0}
+                for bits, n in counts.items():
+                    b = bits[::-1]                       # b[cb] = clbit cb
+                    data = [int(b[key_to_cb[k]]) for k in data_keys]
+                    r, c = steane_correct(data)
+                    raw[r] += n; cor[c] += n
+                print("\nSteane logical bit  (raw = parity, corrected = syndrome-decoded):")
+                for lbl, d in (("raw      ", raw), ("corrected", cor)):
+                    print(f"  {lbl}  |0>={100.0*d[0]/total:5.1f}%  |1>={100.0*d[1]/total:5.1f}%")
         return
 
     iris.finalize()

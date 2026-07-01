@@ -164,6 +164,29 @@ private:
     for (const auto &q : blk) g(q);
   }
 
+  // Steane [[7,1,3]] stabilizer generators (0-indexed supports), for the encoder
+  // above. CSS: the X- and Z-type generators share the same support. The three
+  // Z-generators' columns give a Hamming syndrome that locates a single X error.
+  static constexpr int kStab[3][4] = {{1, 2, 3, 4}, {0, 2, 3, 5}, {0, 1, 3, 6}};
+
+  // One round of syndrome extraction: measure the 3 Z- and 3 X-stabilizers, each
+  // into a fresh ancilla. Z-parity: CNOT(data->anc); X-parity: H(anc), CNOT(anc->data),
+  // H(anc). Keys sZ<k>/sX<k> so post-processing can read the syndrome bits.
+  void emitSteaneSyndrome(ArrayRef<std::string> blk) {
+    for (int k = 0; k < 3; ++k) {                 // Z-stabilizers (detect X errors)
+      std::string anc = freshQubit();
+      for (int j = 0; j < 4; ++j) emitCNOT(blk[kStab[k][j]], anc);
+      emitMeasure(anc, "sZ" + std::to_string(k) + "_" + std::to_string(measureIdx_++));
+    }
+    for (int k = 0; k < 3; ++k) {                 // X-stabilizers (detect Z errors)
+      std::string anc = freshQubit();
+      emitH(anc);
+      for (int j = 0; j < 4; ++j) emitCNOT(anc, blk[kStab[k][j]]);
+      emitH(anc);
+      emitMeasure(anc, "sX" + std::to_string(k) + "_" + std::to_string(measureIdx_++));
+    }
+  }
+
   //----------------------------------------------------------------------
   // JSON instruction emitters
   //----------------------------------------------------------------------
@@ -574,11 +597,40 @@ private:
         for (unsigned i = 0; i < blk.size(); ++i)
           emitMeasure(blk[i], "mL" + std::to_string(li) + "_" + std::to_string(i));
       })
-      // EC / syndrome / frame / annotation: no FT correction in this lowering.
-      .Case<ECRoundOp>([&](ECRoundOp o)      { propagateBlock(o.getCorrectedQubit(), o.getLogicalQubit()); emitComment("ec_round"); })
+      // Error-correction round: extract the 6 stabilizer syndromes into ancillas
+      // (when expand-syndromes). Correction has no real-time feed-forward on IQM
+      // hardware, so it is applied classically in post-processing (Pauli frame).
+      .Case<ECRoundOp>([&](ECRoundOp o) {
+        auto blk = qblock(o.getLogicalQubit());
+        propagateBlock(o.getCorrectedQubit(), o.getLogicalQubit());
+        if (expandSyndromes_) emitSteaneSyndrome(blk);
+        else                  emitComment("ec_round");
+      })
       .Case<CorrectOp>([&](CorrectOp o)      { propagateBlock(o.getCorrectedQubit(), o.getLogicalQubit()); emitComment("correct"); })
-      .Case<SteaneZSyndromeOp>([&](SteaneZSyndromeOp o) { propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit()); emitComment("steane_z_syndrome"); })
-      .Case<SteaneXSyndromeOp>([&](SteaneXSyndromeOp o) { propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit()); emitComment("steane_x_syndrome"); })
+      .Case<SteaneZSyndromeOp>([&](SteaneZSyndromeOp o) {
+        auto blk = qblock(o.getLogicalQubit());
+        propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit());
+        if (expandSyndromes_)
+          for (int k = 0; k < 3; ++k) {
+            std::string anc = freshQubit();
+            for (int j = 0; j < 4; ++j) emitCNOT(blk[kStab[k][j]], anc);
+            emitMeasure(anc, "sZ" + std::to_string(k) + "_" + std::to_string(measureIdx_++));
+          }
+        else emitComment("steane_z_syndrome");
+      })
+      .Case<SteaneXSyndromeOp>([&](SteaneXSyndromeOp o) {
+        auto blk = qblock(o.getLogicalQubit());
+        propagateBlock(o.getOutLogicalQubit(), o.getLogicalQubit());
+        if (expandSyndromes_)
+          for (int k = 0; k < 3; ++k) {
+            std::string anc = freshQubit();
+            emitH(anc);
+            for (int j = 0; j < 4; ++j) emitCNOT(anc, blk[kStab[k][j]]);
+            emitH(anc);
+            emitMeasure(anc, "sX" + std::to_string(k) + "_" + std::to_string(measureIdx_++));
+          }
+        else emitComment("steane_x_syndrome");
+      })
       .Case<DeallocOp>([&](DeallocOp) {})
       .Case<ResourceAnnotationOp>([&](ResourceAnnotationOp) {})
       .Case<EncodeOp>([&](EncodeOp) { emitComment("encode"); })
