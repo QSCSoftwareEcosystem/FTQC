@@ -1071,9 +1071,9 @@ python3 -m pip install "iqm-client[qiskit,cirq]" "qrisp[iqm]"
 
 ## How to run demo?
 ```
-python3 -m venv realqpu
+python3.12 -m venv realqpu
 source realqpu/bin/activate
-python3 -m pip install "iqm-client[qiskit,cirq]" "qrisp[iqm]"
+python3.12 -m pip install "qrisp[iqm]" "iqm-client[qiskit,cirq]>=34.0.3" matplotlib
 IQM_TOKEN=<token> bash demo.sh
 ```
 
