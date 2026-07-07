@@ -11,6 +11,7 @@
 VENV=realqpu1.venv
 if [ ! -d "$VENV" ]; then
 python3.12 -m venv $VENV
+source $VENV/bin/activate
 python3.12 -m pip install \
     "qrisp[iqm]" "iqm-client[qiskit,cirq]>=34.0.3" matplotlib
 
