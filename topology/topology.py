@@ -22,6 +22,7 @@ The token is never hard-coded: supply it via --token or one of those env vars.
 The fake backends need no server, URL, or token.
 """
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -86,6 +87,8 @@ class FakeCal:
         self._ep = ep
         self._prx_err = ep.single_qubit_gate_depolarizing_error_parameters.get("prx", {})
         self._cz = ep.two_qubit_gate_depolarizing_error_parameters.get("cz", {})
+        # Fakes have no calibration timestamp (static mock data).
+        self.timestamp = None
         # No chip-level metadata for fakes: None => "treat every qubit as available".
         self.available_qubits = None
         self.all_qubits = None
@@ -172,6 +175,8 @@ class RealCal:
     def __init__(self, client):
         qms = client.get_quality_metric_set()
         self.name = f"{qms.dut_label} @ {qms.created_timestamp:%Y-%m-%d %H:%M UTC}"
+        # Machine-parseable ISO-8601 timestamp of the calibration (for time series).
+        self.timestamp = qms.created_timestamp.isoformat()
         self._t1, self._t2r, self._t2e = {}, {}, {}
         self._prx_fid, self._cz_fid = {}, {}
         self._clif_cz_fid, self._clif_1q_fid = {}, {}
@@ -362,6 +367,7 @@ def connectivity(backend, cal, name=None) -> dict:
     topo = {
         "backend": name or backend.name,
         "calibration": cal.name,
+        "calibration_timestamp": getattr(cal, "timestamp", None),
         "num_qubits": backend.num_qubits,
         "qubits": list(backend.architecture.qubits),
         "available_qubits": available_qubits,
@@ -484,12 +490,19 @@ def main() -> None:
     p.add_argument("--plot", action="store_true", help="save a PNG of the qubit graph")
     p.add_argument("--json", nargs="?", const="", default=None,
                    help="write connectivity JSON (optional PATH; default <backend>_topology.json)")
+    p.add_argument("--snapshot-dir", default=None,
+                   help="also write a timestamped snapshot 'topology-<UTC>.json' into "
+                        "this directory (consumed by the Django dashboard)")
     p.add_argument("--token", default=ENV_TOKEN,
                    help="API token for real backends (default: $IQM_TOKEN / $RESONANCE_API_KEY)")
     args = p.parse_args()
 
     backend, cal = build_backend(args.backend, token=args.token)
     topo = connectivity(backend, cal, name=args.backend)
+    # Wall-clock capture time — each run is a distinct point on the dashboard's
+    # time axis, even when the underlying calibration set has not changed.
+    now = dt.datetime.now(dt.timezone.utc)
+    topo["generated_at"] = now.isoformat()
     print_topology(topo)
 
     # Always emit a JSON file; honour an explicit path if given.
@@ -497,6 +510,15 @@ def main() -> None:
     with open(json_path, "w") as f:
         json.dump(topo, f, indent=2)
     print(f"\nSaved connectivity -> {json_path}")
+
+    # Timestamped snapshot for the time-variant dashboard (topology-*.json).
+    if args.snapshot_dir is not None:
+        os.makedirs(args.snapshot_dir, exist_ok=True)
+        stamp = now.strftime("%Y%m%dT%H%M%S_%f")
+        snap_path = os.path.join(args.snapshot_dir, f"topology-{stamp}.json")
+        with open(snap_path, "w") as f:
+            json.dump(topo, f, indent=2)
+        print(f"Saved snapshot   -> {snap_path}")
 
     if args.plot:
         from qiskit.visualization import plot_coupling_map
