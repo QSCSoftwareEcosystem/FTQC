@@ -115,6 +115,7 @@ public:
   unsigned getTransposeD() const; ///< Code distance of the transpose code.
 
   llvm::ArrayRef<BinaryRow> getH() const { return H_; } ///< Parity-check matrix.
+  std::vector<BinaryRow> getTransposeH() const; ///< Transposed parity-check matrix.
 
   /// @brief Serialise the code to a human-readable description.
   /// @param includeMatrix Whether to include the parity-check matrix.
@@ -279,7 +280,7 @@ private:
   mutable std::vector<PauliString> syndromeLUT_; ///< Lazily built LUT.
   mutable bool lutBuilt_ = false;
 
-  PauliString logX_, logZ_; ///< Representative logical operators.
+  std::vector<PauliString> logX_, logZ_; ///< Representative logical operators.
 
   void buildLUT() const; ///< Build the syndrome lookup table.
 };

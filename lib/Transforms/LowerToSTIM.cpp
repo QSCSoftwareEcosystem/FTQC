@@ -55,6 +55,7 @@ using namespace mlir::ftqc;
 namespace {
 
 struct CodeParams {
+  ECCKind kind;
   /// Number of physical data qubits per logical qubit.
   int numData;
   /// Stabilizer support (relative data-qubit offsets, 0-indexed within block).
@@ -62,6 +63,7 @@ struct CodeParams {
 };
 
 static const CodeParams STEANE_PARAMS = {
+  .kind = ECCKind::Steane,
   .numData = 7,
   // Same for X and Z (CSS code property).
   .xStabs = {
@@ -151,8 +153,8 @@ private:
   int nextObs    = 0; ///< Next OBSERVABLE_INCLUDE index.
   int measureCount = 0; ///< Total measurements emitted so far.
 
-  /// Hypergraph product code parameters, indexed by code distance.
-  DenseMap<int, std::unique_ptr<CodeParams>> hypergraphProductCodes;
+  /// Cached code parameters, indexed by code kind and distance.
+  DenseMap<std::pair<ECCKind, int>, std::unique_ptr<CodeParams>> codeParams;
 
   //------------------------------------------------------------------------
   // Block management
@@ -171,29 +173,37 @@ private:
       blk.code = &STEANE_PARAMS;
       break;
 
+    // TODO: Logical gates are not yet emitted correctly for these code families.
+    case ECCKind::Surface:
     case ECCKind::HypergraphProduct:
-      if (!hypergraphProductCodes.contains(code.getDistance())) {
-        auto repCode = ClassicalCode::makeRepetition(code.getDistance());
-        auto hpCode = StabilizerCode::makeHypergraphProduct(repCode, repCode);
+      if (!codeParams.contains({code.getKind(), code.getDistance()})) {
+        StabilizerCode stabCode;
+        if (code.getKind() == ECCKind::Surface) {
+          stabCode = StabilizerCode::makeSurface(code.getDistance());
+        } else {
+          auto repCode = ClassicalCode::makeRepetition(code.getDistance());
+          stabCode = StabilizerCode::makeHypergraphProduct(repCode, repCode);
+        }
         auto params = std::make_unique<CodeParams>();
-        params->numData = hpCode.getN();
-        params->xStabs.resize(hpCode.getHx().size());
+        params->kind = code.getKind();
+        params->numData = stabCode.getN();
+        params->xStabs.resize(stabCode.getHx().size());
         for (size_t i = 0; i < params->xStabs.size(); ++i) {
           for (int j = 0; j < params->numData; ++j) {
-            if (hpCode.getHx()[i][j])
+            if (stabCode.getHx()[i][j])
               params->xStabs[i].push_back(j);
           }
         }
-        params->zStabs.resize(hpCode.getHz().size());
+        params->zStabs.resize(stabCode.getHz().size());
         for (size_t i = 0; i < params->zStabs.size(); ++i) {
           for (int j = 0; j < params->numData; ++j) {
-            if (hpCode.getHz()[i][j])
+            if (stabCode.getHz()[i][j])
               params->zStabs[i].push_back(j);
           }
         }
-        hypergraphProductCodes[code.getDistance()] = std::move(params);
+        codeParams[{code.getKind(), code.getDistance()}] = std::move(params);
       }
-      blk.code = hypergraphProductCodes[code.getDistance()].get();
+      blk.code = codeParams[{code.getKind(), code.getDistance()}].get();
       break;
 
     default:
@@ -276,24 +286,30 @@ private:
   void emitEncoding(QubitBlock &b) {
     comment("--- Encoding |0_L> ---");
 
-    // RESET all 7 data qubits.
-    std::vector<int> all7;
-    for (int i = 0; i < STEANE_PARAMS.numData; ++i) all7.push_back(b.dataIndex(i));
-    emitReset(all7);
+    // RESET all data qubits.
+    std::vector<int> allData;
+    for (int i = 0; i < b.numData(); ++i) allData.push_back(b.dataIndex(i));
+    emitReset(allData);
 
-    // H on the check qubits (first member of each stabilizer support).
-    std::vector<int> hQubits;
-    for (int off : ENCODE_H_QUBITS) hQubits.push_back(b.dataIndex(off));
-    emit1Q("H", hQubits);
+    if (b.code->kind == ECCKind::Steane) {
+      // H on the check qubits (first member of each stabilizer support).
+      std::vector<int> hQubits;
+      for (int off : ENCODE_H_QUBITS) hQubits.push_back(b.dataIndex(off));
+      emit1Q("H", hQubits);
 
-    // CX cascade: for each stabilizer, ctrl = check qubit, tgts = rest of support.
-    for (size_t s = 0; s < STEANE_PARAMS.xStabs.size(); ++s) {
-      const auto &support = STEANE_PARAMS.xStabs[s];
-      int ctrl = b.dataIndex(support[0]);
-      for (size_t j = 1; j < support.size(); ++j) {
-        int tgt = b.dataIndex(support[j]);
-        emit2Q("CX", {ctrl, tgt});
+      // CX cascade: for each stabilizer, ctrl = check qubit, tgts = rest of support.
+      for (size_t s = 0; s < STEANE_PARAMS.xStabs.size(); ++s) {
+        const auto &support = STEANE_PARAMS.xStabs[s];
+        int ctrl = b.dataIndex(support[0]);
+        for (size_t j = 1; j < support.size(); ++j) {
+          int tgt = b.dataIndex(support[j]);
+          emit2Q("CX", {ctrl, tgt});
+        }
       }
+
+    } else {
+      // TODO: Use a fault-tolerant encoding scheme.
+      emitSyndromeRound(b);
     }
   }
 

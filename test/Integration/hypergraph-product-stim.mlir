@@ -1,4 +1,4 @@
-// RUN: ftqc-opt %s --ftqc-lower-to-stim=physical-error-rate=0 2>&1 | FileCheck %s
+// RUN: ftqc-opt %s --ftqc-lower-to-stim='syndrome-rounds=0 physical-error-rate=0' 2>&1 | FileCheck %s
 
 // X syndrome
 // CHECK: R 13 14 15 16 17 18
@@ -35,7 +35,9 @@
 // CHECK: DETECTOR(10) rec[-2]
 // CHECK: DETECTOR(11) rec[-1]
 
-func.func @hypergraph_product_syndrome(%lq: !ftqc.logical_qubit<#ftqc.ecc<hypergraph_product, 3>>) -> (!ftqc.logical_qubit<#ftqc.ecc<hypergraph_product, 3>>, !ftqc.syndrome<12>) {
-  %lq1, %syn = ftqc.extract_syndrome %lq : <<hypergraph_product, 3>> -> (<<hypergraph_product, 3>>, <12>)
-  func.return %lq1, %syn : !ftqc.logical_qubit<#ftqc.ecc<hypergraph_product, 3>>, !ftqc.syndrome<12>
+func.func @hypergraph_product_memory() -> i1 {
+  %lq0 = ftqc.init_zero : <<hypergraph_product, 3>>
+  %lq1, %syn = ftqc.extract_syndrome %lq0 : <<hypergraph_product, 3>> -> (<<hypergraph_product, 3>>, <12>)
+  %b0 = ftqc.logical_measure %lq1 : (<<hypergraph_product, 3>>) -> i1
+  func.return %b0 : i1
 }

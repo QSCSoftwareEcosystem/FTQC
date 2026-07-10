@@ -42,6 +42,14 @@ unsigned ClassicalCode::getTransposeD() const {
   return d_; // TODO: Return correct value
 }
 
+std::vector<BinaryRow> ClassicalCode::getTransposeH() const {
+  std::vector<BinaryRow> transposeH(n_, BinaryRow(H_.size(), 0));
+  for (unsigned i = 0; i < n_; ++i)
+    for (unsigned j = 0; j < H_.size(); ++j)
+      transposeH[i][j] = H_[j][i];
+  return transposeH;
+}
+
 std::string ClassicalCode::toString(bool includeMatrix) const {
   std::ostringstream ss;
   ss << "[" << n_ << "," << k_ << "," << d_ << "] code\n";
@@ -56,6 +64,42 @@ std::string ClassicalCode::toString(bool includeMatrix) const {
     }
   }
   return ss.str();
+}
+
+namespace {
+  struct Basis {
+    std::vector<BinaryRow> vectors;
+    llvm::SmallVector<bool> included;
+  };
+
+  // This implements strong lower triangular Gaussian reduction, as described in
+  // Algorithm 1 of https://doi.org/10.22331/q-2023-10-24-1153, to find a basis
+  // for the kernel of the given matrix.
+  Basis kernelBasis(unsigned n, std::vector<BinaryRow> matrix) {
+    Basis basis;
+    basis.vectors.resize(n, BinaryRow(n, 0));
+    for (unsigned i = 0; i < n; ++i)
+      basis.vectors[i][i] = 1;
+    basis.included.resize(n, true);
+
+    for (unsigned j = 0; j < n; ++j) {
+      for (unsigned i = 0; i < matrix.size(); ++i) {
+        if (matrix[i][j]) {
+          basis.included[j] = false;
+          for (unsigned l = j + 1; l < n; ++l) {
+            if (matrix[i][l]) {
+              for (unsigned m = 0; m < matrix.size(); ++m) {
+                matrix[m][l] ^= matrix[m][j];
+                basis.vectors[l][m] ^= basis.vectors[j][m];
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+    return basis;
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -85,11 +129,11 @@ StabilizerCode StabilizerCode::makeSteane() {
   auto code = StabilizerCode::fromCSS(7, 1, 3, H, H);
 
   // Logical X: X0X1X2 (minimum weight representative, weight 3)
-  code.logX_ = {Pauli::X, Pauli::X, Pauli::X,
-                Pauli::I, Pauli::I, Pauli::I, Pauli::I};
+  code.logX_.push_back(
+      {Pauli::X, Pauli::X, Pauli::X, Pauli::I, Pauli::I, Pauli::I, Pauli::I});
   // Logical Z: Z0Z1Z2 (same support)
-  code.logZ_ = {Pauli::Z, Pauli::Z, Pauli::Z,
-                Pauli::I, Pauli::I, Pauli::I, Pauli::I};
+  code.logZ_.push_back(
+      {Pauli::Z, Pauli::Z, Pauli::Z, Pauli::I, Pauli::I, Pauli::I, Pauli::I});
   return code;
 }
 
@@ -124,31 +168,37 @@ StabilizerCode StabilizerCode::makeSurface(unsigned d) {
 
   // Fill in plaquette structure for d×d grid.
   // X plaquettes: bulk (d-1)×(d-1)/2 + boundary.
-  // This is a simplified placeholder.
+  int d_ = d;
   unsigned plaq = 0;
-  for (unsigned r = 0; r < d - 1 && plaq < halfStabs; ++r) {
-    for (unsigned c = r % 2; c < d - 1 && plaq < halfStabs; c += 2, ++plaq) {
+  for (int r = 0; r < d_ - 1; ++r) {
+    for (int c = -(r % 2); c < d_; c += 2, ++plaq) {
       // Plaquette at (r,c): involves qubits (r,c), (r,c+1), (r+1,c), (r+1,c+1)
-      unsigned q0 = r * d + c,       q1 = r * d + c + 1;
-      unsigned q2 = (r+1)*d + c,     q3 = (r+1)*d + c + 1;
-      if (q0 < n) Hx[plaq][q0] = 1;
-      if (q1 < n) Hx[plaq][q1] = 1;
-      if (q2 < n) Hx[plaq][q2] = 1;
-      if (q3 < n) Hx[plaq][q3] = 1;
+      if (r >= 0 && c >= 0)         Hx[plaq][r * d_ + c] = 1;
+      if (r >= 0 && c + 1 < d_)     Hx[plaq][r * d_ + c + 1] = 1;
+      if (r + 1 < d_ && c >= 0)     Hx[plaq][(r + 1) * d_ + c] = 1;
+      if (r + 1 < d_ && c + 1 < d_) Hx[plaq][(r + 1) * d_ + c + 1] = 1;
     }
   }
   plaq = 0;
-  for (unsigned r = 0; r < d - 1 && plaq < halfStabs; ++r) {
-    for (unsigned c = (r+1)%2; c < d - 1 && plaq < halfStabs; c += 2, ++plaq) {
-      unsigned q0 = r*d+c, q1 = r*d+c+1, q2 = (r+1)*d+c, q3 = (r+1)*d+c+1;
-      if (q0<n) Hz[plaq][q0]=1;
-      if (q1<n) Hz[plaq][q1]=1;
-      if (q2<n) Hz[plaq][q2]=1;
-      if (q3<n) Hz[plaq][q3]=1;
+  for (int r = -1; r < d_; ++r) {
+    for (int c = (r + 1) % 2; c < d_ - 1; c += 2, ++plaq) {
+      if (r >= 0 && c >= 0)         Hz[plaq][r * d_ + c] = 1;
+      if (r >= 0 && c + 1 < d_)     Hz[plaq][r * d_ + c + 1] = 1;
+      if (r + 1 < d_ && c >= 0)     Hz[plaq][(r + 1) * d_ + c] = 1;
+      if (r + 1 < d_ && c + 1 < d_) Hz[plaq][(r + 1) * d_ + c + 1] = 1;
     }
   }
 
-  return StabilizerCode::fromCSS(n, 1, d, Hx, Hz);
+  auto code = StabilizerCode::fromCSS(n, 1, d, Hx, Hz);
+
+  code.logX_.emplace_back(n, Pauli::I);
+  code.logZ_.emplace_back(n, Pauli::I);
+  for (unsigned i = 0; i < d; ++i) {
+    code.logX_.back()[i] = Pauli::X;
+    code.logZ_.back()[i * d] = Pauli::Z;
+  }
+
+  return code;
 }
 
 StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
@@ -167,30 +217,67 @@ StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
   std::vector<BinaryRow> Hx(nT1 * n2, BinaryRow(n, 0));
   std::vector<BinaryRow> Hz(n1 * nT2, BinaryRow(n, 0));
 
-  // Hx = [ H1⊗I_n2 | I_r1⊗H2^T ]
-  for (unsigned i1 = 0; i1 < nT1; ++i1) {
-    for (unsigned j2 = 0; j2 < n2; ++j2) {
-      auto &row = Hx[i1 * n2 + j2];
-      for (unsigned j1 = 0; j1 < n1; ++j1)
-        row[j1 * n2 + j2] = H1[i1][j1];
-      for (unsigned i2 = 0; i2 < nT2; ++i2)
-        row[n1 * n2 + i1 * nT2 + i2] = H2[i2][j2];
+  // Hx = [ H1 ⊗ I_n2 | I_nT1 ⊗ H2^T ]
+  for (unsigned c1 = 0; c1 < nT1; ++c1) {
+    for (unsigned v2 = 0; v2 < n2; ++v2) {
+      auto &row = Hx[c1 * n2 + v2];
+      for (unsigned v1 = 0; v1 < n1; ++v1)
+        row[v1 * n2 + v2] = H1[c1][v1];
+      for (unsigned c2 = 0; c2 < nT2; ++c2)
+        row[n1 * n2 + c1 * nT2 + c2] = H2[c2][v2];
     }
   }
 
-  // Hz = [ I_n1⊗H2 | H1^T⊗I_r2 ]
-  for (unsigned j1 = 0; j1 < n1; ++j1) {
-    for (unsigned i2 = 0; i2 < nT2; ++i2) {
-      auto &row = Hz[j1 * nT2 + i2];
-      for (unsigned j2 = 0; j2 < n2; ++j2)
-        row[j1 * n2 + j2] = H2[i2][j2];
-      for (unsigned i1 = 0; i1 < nT1; ++i1)
-        row[n1 * n2 + i1 * nT2 + i2] = H1[i1][j1];
+  // Hz = [ I_n1 ⊗ H2 | H1^T ⊗ I_nT2 ]
+  for (unsigned v1 = 0; v1 < n1; ++v1) {
+    for (unsigned c2 = 0; c2 < nT2; ++c2) {
+      auto &row = Hz[v1 * nT2 + c2];
+      for (unsigned v2 = 0; v2 < n2; ++v2)
+        row[v1 * n2 + v2] = H2[c2][v2];
+      for (unsigned c1 = 0; c1 < nT1; ++c1)
+        row[n1 * n2 + c1 * nT2 + c2] = H1[c1][v1];
     }
   }
 
-  // TODO: Set logical operators
-  return StabilizerCode::fromCSS(n, k, d, Hx, Hz);
+  auto code = StabilizerCode::fromCSS(n, k, d, Hx, Hz);
+
+  auto kernel1 = kernelBasis(n1, H1);
+  auto kernel2 = kernelBasis(n2, H2);
+  auto kernelT1 = kernelBasis(nT1, code1.getTransposeH());
+  auto kernelT2 = kernelBasis(nT2, code2.getTransposeH());
+
+  // Based on Lemma 1 of https://doi.org/10.22331/q-2023-10-24-1153.
+  for (unsigned v1 = 0; v1 < n1; ++v1) {
+    for (unsigned v2 = 0; v2 < n2; ++v2) {
+      if (kernel1.included[v1] && kernel2.included[v2]) {
+        code.logX_.emplace_back(n, Pauli::I);
+        code.logZ_.emplace_back(n, Pauli::I);
+        for (unsigned i2 = 0; i2 < n2; ++i2)
+          if (kernel2.vectors[v2][i2])
+            code.logX_.back()[v1 * n2 + i2] = Pauli::X;
+        for (unsigned i1 = 0; i1 < n1; ++i1)
+          if (kernel1.vectors[v1][i1])
+            code.logZ_.back()[i1 * n2 + v2] = Pauli::Z;
+      }
+    }
+  }
+
+  for (unsigned c1 = 0; c1 < nT1; ++c1) {
+    for (unsigned c2 = 0; c2 < nT2; ++c2) {
+      if (kernelT1.included[c1] && kernelT2.included[c2]) {
+        code.logX_.emplace_back(n, Pauli::I);
+        code.logZ_.emplace_back(n, Pauli::I);
+        for (unsigned i1 = 0; i1 < nT1; ++i1)
+          if (kernelT1.vectors[c1][i1])
+            code.logX_.back()[n1 * n2 + i1 * nT2 + c2] = Pauli::X;
+        for (unsigned i2 = 0; i2 < nT2; ++i2)
+          if (kernelT2.vectors[c2][i2])
+            code.logZ_.back()[n1 * n2 + c1 * nT2 + i2] = Pauli::Z;
+      }
+    }
+  }
+
+  return code;
 }
 
 //===----------------------------------------------------------------------===//
@@ -265,8 +352,13 @@ PauliString StabilizerCode::decode(llvm::ArrayRef<uint8_t> syndrome) const {
   return PauliString(n_, Pauli::I);  // no correction
 }
 
-const PauliString& StabilizerCode::getLogicalX(unsigned) const { return logX_; }
-const PauliString& StabilizerCode::getLogicalZ(unsigned) const { return logZ_; }
+const PauliString& StabilizerCode::getLogicalX(unsigned logicalIdx) const {
+  return logX_[logicalIdx];
+}
+
+const PauliString& StabilizerCode::getLogicalZ(unsigned logicalIdx) const {
+  return logZ_[logicalIdx];
+}
 
 std::string StabilizerCode::toString(bool includeMatrices) const {
   std::ostringstream ss;
