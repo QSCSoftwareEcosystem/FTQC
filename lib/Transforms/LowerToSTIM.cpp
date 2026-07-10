@@ -153,8 +153,7 @@ private:
   int nextObs    = 0; ///< Next OBSERVABLE_INCLUDE index.
   int measureCount = 0; ///< Total measurements emitted so far.
 
-  /// Cached code parameters, indexed by code kind and distance.
-  DenseMap<std::pair<ECCKind, int>, std::unique_ptr<CodeParams>> codeParams;
+  DenseMap<ECCAttr, std::unique_ptr<CodeParams>> codeParams;
 
   //------------------------------------------------------------------------
   // Block management
@@ -176,14 +175,8 @@ private:
     // TODO: Logical gates are not yet emitted correctly for these code families.
     case ECCKind::Surface:
     case ECCKind::HypergraphProduct:
-      if (!codeParams.contains({code.getKind(), code.getDistance()})) {
-        StabilizerCode stabCode;
-        if (code.getKind() == ECCKind::Surface) {
-          stabCode = StabilizerCode::makeSurface(code.getDistance());
-        } else {
-          auto repCode = ClassicalCode::makeRepetition(code.getDistance());
-          stabCode = StabilizerCode::makeHypergraphProduct(repCode, repCode);
-        }
+      if (!codeParams.contains(code)) {
+        StabilizerCode stabCode = code.makeStabilizerCode();
         auto params = std::make_unique<CodeParams>();
         params->kind = code.getKind();
         params->numData = stabCode.getN();
@@ -201,9 +194,9 @@ private:
               params->zStabs[i].push_back(j);
           }
         }
-        codeParams[{code.getKind(), code.getDistance()}] = std::move(params);
+        codeParams[code] = std::move(params);
       }
-      blk.code = codeParams[{code.getKind(), code.getDistance()}].get();
+      blk.code = codeParams[code].get();
       break;
 
     default:

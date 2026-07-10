@@ -25,7 +25,7 @@ using namespace mlir::ftqc;
 //===----------------------------------------------------------------------===//
 
 static ECCAttr makeColorAttr(MLIRContext *ctx, unsigned d) {
-  return ECCAttr::get(ctx, ECCKind::ColorCode, d, 1);
+  return ECCAttr::get(ctx, ECCKind::ColorCode, d, 1, {}, {});
 }
 
 static LogicalQubitType makeColorQubitType(MLIRContext *ctx, unsigned d) {

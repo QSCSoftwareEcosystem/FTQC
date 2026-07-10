@@ -33,6 +33,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
+#include "FTQC/Utils/StabilizerUtils.h"
+
 // Pull in the enum declarations first.
 #include "FTQC/Dialect/FTQCEnums.h.inc"
 
@@ -59,10 +61,14 @@ namespace mlir::ftqc {
 ///
 /// @param kind     ECC family (steane, surface, …).
 /// @param distance Code distance d (must be odd for CSS codes).
-/// @param levels   Concatenation depth (default 1).
+/// @param levels   Concatenation depth.
+/// @param code1    First classical code, used to construct some code families.
+/// @param code2    Second classical code, used to construct some code families.
 /// @return Number of physical data qubits per logical qubit.
 unsigned getPhysicalQubitsForCode(ECCKind kind, unsigned distance,
-                                  unsigned levels = 1);
+                                  unsigned levels,
+                                  ClassicalCodeAttr code1,
+                                  ClassicalCodeAttr code2);
 
 /// @brief Ancilla qubit count per syndrome-extraction round.
 ///
@@ -71,8 +77,12 @@ unsigned getPhysicalQubitsForCode(ECCKind kind, unsigned distance,
 ///
 /// @param kind     ECC family.
 /// @param distance Code distance d.
+/// @param code1    First classical code, used to construct some code families.
+/// @param code2    Second classical code, used to construct some code families.
 /// @return Number of ancilla qubits per round.
-unsigned getAncillaQubitsForCode(ECCKind kind, unsigned distance);
+unsigned getAncillaQubitsForCode(ECCKind kind, unsigned distance,
+                                 ClassicalCodeAttr code1,
+                                 ClassicalCodeAttr code2);
 
 /// @brief Approximate fault-tolerance threshold for a code kind.
 ///

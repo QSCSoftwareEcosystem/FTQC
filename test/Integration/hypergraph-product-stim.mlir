@@ -35,9 +35,12 @@
 // CHECK: DETECTOR(10) rec[-2]
 // CHECK: DETECTOR(11) rec[-1]
 
+#repetition3 = #ftqc.classical_code<3, 1, 3, [1,1,0, 0,1,1]>
+#surface3 = #ftqc.ecc<hypergraph_product, 3, 1, #repetition3, #repetition3>
+
 func.func @hypergraph_product_memory() -> i1 {
-  %lq0 = ftqc.init_zero : <<hypergraph_product, 3>>
-  %lq1, %syn = ftqc.extract_syndrome %lq0 : <<hypergraph_product, 3>> -> (<<hypergraph_product, 3>>, <12>)
-  %b0 = ftqc.logical_measure %lq1 : (<<hypergraph_product, 3>>) -> i1
+  %lq0 = ftqc.init_zero : <#surface3>
+  %lq1, %syn = ftqc.extract_syndrome %lq0 : <#surface3> -> (<#surface3>, <12>)
+  %b0 = ftqc.logical_measure %lq1 : (<#surface3>) -> i1
   func.return %b0 : i1
 }

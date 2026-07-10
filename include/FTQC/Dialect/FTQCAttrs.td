@@ -97,10 +97,12 @@ def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
   let parameters = (ins
     "ECCKind"   : $kind,
     "uint32_t"  : $distance,
-    DefaultValuedParameter<"uint32_t", "1"> : $levels
+    DefaultValuedParameter<"uint32_t", "1"> : $levels,
+    OptionalParameter<"ClassicalCodeAttr"> : $code1,
+    OptionalParameter<"ClassicalCodeAttr"> : $code2
   );
 
-  let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? `>`";
+  let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? (`,` $code1^)? (`,` $code2^)? `>`";
 
   let extraClassDeclaration = [{
     /// Number of physical qubits per logical qubit.
@@ -113,6 +115,24 @@ def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
     bool supportsTransversalT() const;
     /// Fault-tolerance threshold (approximate, code-dependent).
     double getFTThreshold() const;
+    StabilizerCode makeStabilizerCode() const;
+  }];
+}
+
+//----------------------------------------------------------------------
+// ClassicalCode — a classical linear binary code
+//----------------------------------------------------------------------
+def FTQC_ClassicalCode : FTQC_Attr<"ClassicalCode", "classical_code"> {
+  let summary = "An [n,k,d] classical linear binary code";
+  let parameters = (ins
+    "uint32_t" : $n,
+    "uint32_t" : $k,
+    "uint32_t" : $d,
+    "DenseI8ArrayAttr" : $H
+  );
+  let assemblyFormat = "`<` $n `,` $k `,` $d `,` $H `>`";
+  let extraClassDeclaration = [{
+    ClassicalCode makeClassicalCode() const;
   }];
 }
 

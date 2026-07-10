@@ -16,7 +16,9 @@ using namespace mlir::ftqc;
 //===----------------------------------------------------------------------===//
 
 unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
-                                               unsigned levels) {
+                                              unsigned levels,
+                                              ClassicalCodeAttr code1,
+                                              ClassicalCodeAttr code2) {
   unsigned base = 0;
   switch (kind) {
   case ECCKind::Steane:
@@ -42,13 +44,16 @@ unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
     base = d * d;   // compass code ~ surface code
     break;
   case ECCKind::HypergraphProduct:
-    base = d * d + (d - 1) * (d - 1); // for hypergraph product of two d-repetition codes
+    base = code1.getN() * code2.getN()
+      + (code1.getH().size()/code1.getN()) * (code2.getH().size()/code2.getN());
     break;
   }
   return base;
 }
 
-unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d) {
+unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d,
+                                             ClassicalCodeAttr code1,
+                                             ClassicalCodeAttr code2) {
   switch (kind) {
   case ECCKind::Steane:
     return 6;   // 3 X + 3 Z stabilizers → 6 ancilla per round
@@ -61,7 +66,8 @@ unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d) {
   case ECCKind::Repetition:
     return d - 1;
   case ECCKind::HypergraphProduct:
-    return d * (d - 1) * 2; // for hypergraph product of two d-repetition codes
+    return (code1.getH().size() / code1.getN()) * code2.getN()
+           + code1.getN() * (code2.getH().size() / code2.getN());
   default:
     return d * d;
   }
@@ -97,11 +103,13 @@ bool mlir::ftqc::hasTransversalT(ECCKind kind) {
 //===----------------------------------------------------------------------===//
 
 unsigned ECCAttr::getPhysicalQubits() const {
-  return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels());
+  return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels(),
+                                  getCode1(), getCode2());
 }
 
 unsigned ECCAttr::getAncillaQubits() const {
-  return getAncillaQubitsForCode(getKind(), getDistance());
+  return getAncillaQubitsForCode(getKind(), getDistance(),
+                                 getCode1(), getCode2());
 }
 
 bool ECCAttr::isCSS() const {
@@ -114,6 +122,34 @@ bool ECCAttr::supportsTransversalT() const {
 
 double ECCAttr::getFTThreshold() const {
   return mlir::ftqc::getFTThreshold(getKind());
+}
+
+StabilizerCode ECCAttr::makeStabilizerCode() const {
+  switch (getKind()) {
+  case ECCKind::Steane:
+    return StabilizerCode::makeSteane();
+  case ECCKind::Surface:
+    return StabilizerCode::makeSurface(getDistance());
+  case ECCKind::HypergraphProduct:
+    return StabilizerCode::makeHypergraphProduct(
+        getCode1().makeClassicalCode(), getCode2().makeClassicalCode());
+  default:
+    return StabilizerCode(); // TODO: Handle remaining cases.
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ClassicalCodeAttr extra methods
+//===----------------------------------------------------------------------===//
+
+ClassicalCode ClassicalCodeAttr::makeClassicalCode() const {
+  unsigned n = getN();
+  auto flatH = getH();
+  std::vector<BinaryRow> H(flatH.size() / n, BinaryRow(n));
+  for (unsigned i = 0; i < H.size(); ++i)
+    for (unsigned j = 0; j < n; ++j)
+      H[i][j] = flatH[i * n + j];
+  return ClassicalCode::fromLinear(n, getK(), getD(), H);
 }
 
 //===----------------------------------------------------------------------===//
