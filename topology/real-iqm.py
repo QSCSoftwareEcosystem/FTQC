@@ -7,12 +7,21 @@
 #!pip install iqm-client>=34.0.3
 
 
+import os
+
 from qrisp.interface import IQMBackend
+
+# Auth comes from the environment; never hard-code tokens.
+#   export IQM_TOKEN=<your-token>   (or RESONANCE_API_KEY)
+api_token = os.environ.get("IQM_TOKEN") or os.environ.get("RESONANCE_API_KEY")
+if not api_token:
+    raise SystemExit("IQM_TOKEN (or RESONANCE_API_KEY) is not set in the environment")
+server_url = os.environ.get("IQM_BASE_URL", "https://qccsw.ccs.ornl.gov/")
 
 # Set use_timeslot=True if you have booked a timeslot
 quantum_computer = IQMBackend(
-    api_token = "93lj8ALd8qYuWRxKKh8vvn2FSt7UMSm0eSmFEXkwj4QBnw800zt3UJQq+rzNZELY",
-    server_url = "https://qccsw.ccs.ornl.gov/")
+    api_token = api_token,
+    server_url = server_url)
     #use_timeslot=False)
 
 from qrisp import *
