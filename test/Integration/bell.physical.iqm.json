@@ -1,0 +1,91 @@
+{
+  "name": "circuit",
+  "instructions": [
+    {
+      "name": "prx",
+      "locus": [
+        "QB1"
+      ],
+      "args": {
+        "angle": 1.57079633,
+        "phase": 1.57079633
+      }
+    },
+    {
+      "name": "prx",
+      "locus": [
+        "QB1"
+      ],
+      "args": {
+        "angle": 3.14159265,
+        "phase": 0.0
+      }
+    },
+    {
+      "name": "prx",
+      "locus": [
+        "QB2"
+      ],
+      "args": {
+        "angle": 1.57079633,
+        "phase": 1.57079633
+      }
+    },
+    {
+      "name": "prx",
+      "locus": [
+        "QB2"
+      ],
+      "args": {
+        "angle": 3.14159265,
+        "phase": 0.0
+      }
+    },
+    {
+      "name": "cz",
+      "locus": [
+        "QB1",
+        "QB2"
+      ],
+      "args": {}
+    },
+    {
+      "name": "prx",
+      "locus": [
+        "QB2"
+      ],
+      "args": {
+        "angle": 1.57079633,
+        "phase": 1.57079633
+      }
+    },
+    {
+      "name": "prx",
+      "locus": [
+        "QB2"
+      ],
+      "args": {
+        "angle": 3.14159265,
+        "phase": 0.0
+      }
+    },
+    {
+      "name": "measure",
+      "locus": [
+        "QB1"
+      ],
+      "args": {
+        "key": "mQB1_0"
+      }
+    },
+    {
+      "name": "measure",
+      "locus": [
+        "QB2"
+      ],
+      "args": {
+        "key": "mQB2_1"
+      }
+    }
+  ]
+}

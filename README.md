@@ -1067,3 +1067,13 @@ pen.venv/bin/python sim_pennylane_qec.py \
 ftqc-opt --ftqc-steane-pipeline --ftqc-lower-to-qir \
     test/Integration/bell-state-ft.mlir
 ```
+python3 -m pip install "iqm-client[qiskit,cirq]" "qrisp[iqm]"
+
+## How to run demo?
+```
+python3.12 -m venv realqpu
+source realqpu/bin/activate
+python3.12 -m pip install "qrisp[iqm]" "iqm-client[qiskit,cirq]>=34.0.3" matplotlib
+IQM_TOKEN=<token> bash demo.sh
+```
+
