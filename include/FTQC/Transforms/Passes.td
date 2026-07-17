@@ -532,6 +532,90 @@ def FTQCLowerToLightStimJSONPass : Pass<"ftqc-lower-to-lightstim-json", "mlir::M
   ];
 }
 
+  def FTQCCanonicalizeToLightStimAtomicPass : Pass<"ftqc-canonicalize-to-lightstim-atomic", "mlir::ModuleOp"> {
+    let summary = "Canonicalize FTQC IR to a LightStim-style atomic timeline (Section 4.2 model)";
+    let description = [{
+      Walks FTQC IR and emits a versioned atomic timeline JSON following the
+      five-operation composition model from LightStim Section 4.2:
+        1) initialize, 2) syndrome_extraction, 3) activate/deactivate_coupler,
+        4) unitary_block, 5) data_readout.
+
+      This pass is intentionally compiler-side canonicalization only: it does
+      not include simulation configuration (noise/decoder/max_shots).
+
+      The emitted JSON can be written to `output-file` and/or attached to the
+      module as `ftqc.lightstim_atomic_ir`.
+    }];
+
+    let options = [
+      Option<"outputFile", "output-file", "std::string", "\"\"",
+        "Write atomic timeline JSON to this path (empty = stderr)">,
+      Option<"lightstimCode", "lightstim-code", "std::string", "\"unrotated_surface_code\"",
+        "LightStim code name to emit for surface logical qubits">,
+      Option<"patchSpacing", "patch-spacing", "int", "10",
+        "Coordinate spacing between patches when no layout metadata exists">,
+      Option<"defaultSERounds", "default-se-rounds", "unsigned", "1",
+        "Default syndrome-extraction rounds when FTQC op has no explicit rounds">,
+      Option<"surgeryRounds", "surgery-rounds", "unsigned", "5",
+        "Syndrome extraction rounds to insert for each lattice-surgery coupler window">,
+      Option<"attachModuleAttr", "attach-module-attr", "bool", "true",
+        "Attach atomic timeline JSON as the ftqc.lightstim_atomic_ir module attribute">
+    ];
+
+    let dependentDialects = [
+      "mlir::ftqc::FTQCDialect",
+      "mlir::func::FuncDialect"
+    ];
+  }
+
+  def FTQCLowerToLightStimAtomicJSONPass : Pass<"ftqc-lower-to-lightstim-atomic-json", "mlir::ModuleOp"> {
+    let summary = "Lower FTQC IR to LightStim atomic descriptor JSON (v2 timeline + simulation config)";
+    let description = [{
+      Emits a full LightStim-facing descriptor JSON in which the protocol body
+      is represented as an atomic timeline (initialize/se/coupler/unitary/readout)
+      and the runtime section includes noise/decoder/simulation knobs.
+
+      This pass is intended as phase-3 lowering after canonical atomic modeling.
+      It can be used directly while development converges.
+    }];
+
+    let options = [
+      Option<"outputFile", "output-file", "std::string", "\"\"",
+        "Write descriptor JSON to this path (empty = stderr)">,
+      Option<"lightstimCode", "lightstim-code", "std::string", "\"unrotated_surface_code\"",
+        "LightStim code name to emit for surface logical qubits">,
+      Option<"patchSpacing", "patch-spacing", "int", "10",
+        "Coordinate spacing between patches when no layout metadata exists">,
+      Option<"defaultSERounds", "default-se-rounds", "unsigned", "1",
+        "Default syndrome-extraction rounds when FTQC op has no explicit rounds">,
+      Option<"surgeryRounds", "surgery-rounds", "unsigned", "5",
+        "Syndrome extraction rounds to insert for each lattice-surgery coupler window">,
+      Option<"physErrorRate", "physical-error-rate", "double", "1e-3",
+        "Circuit-level physical error rate assigned to all noise channels">,
+      Option<"decoderName", "decoder", "std::string", "\"pymatching\"",
+        "Decoder name for the LightStim simulation pipeline">,
+      Option<"decoderBackend", "decoder-backend", "std::string", "\"cpu\"",
+        "Decoder backend for the LightStim simulation pipeline">,
+      Option<"maxErrors", "max-errors", "unsigned", "100",
+        "Simulation max_errors stopping target">,
+      Option<"maxShots", "max-shots", "unsigned", "5000000",
+        "Simulation max_shots hard cap">,
+      Option<"batchSize", "batch-size", "unsigned", "10000",
+        "Simulation batch size">,
+      Option<"numWorkers", "num-workers", "unsigned", "4",
+        "Simulation worker count">,
+      Option<"noiselessCheckShots", "noiseless-check-shots", "unsigned", "100",
+        "Noiseless descriptor sanity-check shots">,
+      Option<"attachModuleAttr", "attach-module-attr", "bool", "false",
+        "Attach descriptor JSON as the ftqc.lightstim_atomic_json module attribute">
+    ];
+
+    let dependentDialects = [
+      "mlir::ftqc::FTQCDialect",
+      "mlir::func::FuncDialect"
+    ];
+  }
+
 //===----------------------------------------------------------------------===//
 // STIM Physical Circuit Translation Pass
 //===----------------------------------------------------------------------===//

@@ -23,6 +23,8 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createLowerToQASM3Pass(); });
   ::mlir::registerPass([] { return createLowerToIQMJSONPass(); });
   ::mlir::registerPass([] { return createLowerToLightStimJSONPass(); });
+  ::mlir::registerPass([] { return createCanonicalizeToLightStimAtomicPass(); });
+  ::mlir::registerPass([] { return createLowerToLightStimAtomicJSONPass(); });
   ::mlir::registerPass([] { return createLowerToSTIMPass(); });
   ::mlir::registerPass([] { return createLowerToQIRPass(); });
   ::mlir::registerPass([] { return createLowerToQIRnsPass(); });

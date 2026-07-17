@@ -244,6 +244,18 @@ std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass(bool emitRadians, bool phys
 /// currently covering surface-code patches and `ftqc.lattice_surgery`.
 std::unique_ptr<mlir::Pass> createLowerToLightStimJSONPass();
 
+/// @brief Create the LightStim atomic canonicalization pass.
+///
+/// Emits a versioned atomic timeline JSON (Section 4.2 composition model)
+/// and optionally attaches it as `ftqc.lightstim_atomic_ir`.
+std::unique_ptr<mlir::Pass> createCanonicalizeToLightStimAtomicPass();
+
+/// @brief Create the LightStim atomic descriptor lowering pass.
+///
+/// Emits a full descriptor JSON with atomic timeline + noise/decoder/simulation
+/// configuration and optionally attaches it as `ftqc.lightstim_atomic_json`.
+std::unique_ptr<mlir::Pass> createLowerToLightStimAtomicJSONPass();
+
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
 
