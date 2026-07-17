@@ -481,12 +481,15 @@ def FTQCLowerToLightStimJSONPass : Pass<"ftqc-lower-to-lightstim-json", "mlir::M
     Walks FTQC IR and emits a small JSON descriptor consumable by a
     LightStim descriptor runner such as `run_lightstim_descriptor.py`.
 
-    The initial version supports surface-code logical qubits and
-    `ftqc.lattice_surgery` operations.  Logical qubit SSA values are assigned
-    stable `patch_N` ids; ids propagate through logical gates and lattice
-    surgery result values.  `ftqc.init_zero` maps to `initial_basis="Z"`,
-    `ftqc.init_plus` maps to `initial_basis="X"`, and `ftqc.logical_measure`
-    maps to `measurement_basis="Z"`.
+    The initial version supports surface-code logical qubits with
+    `ftqc.lattice_surgery` operations and hypergraph-product logical qubits
+    with single-patch memory experiments.  Logical qubit SSA values are
+    assigned stable `patch_N` ids; ids propagate through logical gates,
+    lattice surgery result values, and syndrome extraction result values.
+    `ftqc.init_zero` maps to `initial_basis="Z"`, `ftqc.init_plus` maps to
+    `initial_basis="X"`, `ftqc.extract_syndrome` maps to a
+    `syndrome_extraction` operation, and `ftqc.logical_measure` maps to
+    `measurement_basis="Z"` unless a measurement basis attribute is present.
 
     Layout metadata is intentionally simple for now: patch 0 is placed at
     `[0, 0]`, and the second patch in a surgery pair is placed at

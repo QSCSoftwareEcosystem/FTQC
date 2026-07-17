@@ -39,6 +39,8 @@ struct PatchInfo {
   int offsetY = 0;
   std::string initialBasis = "Z";
   std::string measurementBasis = "Z";
+  ClassicalCodeAttr code1;
+  ClassicalCodeAttr code2;
 };
 
 struct SurgeryInfo {
@@ -46,6 +48,11 @@ struct SurgeryInfo {
   std::string patch0;
   std::string patch1;
   unsigned rounds = 5;
+};
+
+struct SyndromeExtractionInfo {
+  std::string patch;
+  unsigned rounds = 1;
 };
 
 static std::string jsonEscape(StringRef text) {
@@ -128,11 +135,13 @@ private:
   DenseMap<Value, unsigned> patchOfValue_;
   std::vector<PatchInfo> patches_;
   std::vector<SurgeryInfo> surgeries_;
+  std::vector<SyndromeExtractionInfo> syndromeExtractions_;
 
   FailureOr<std::string> emitFunc(func::FuncOp func) {
     patchOfValue_.clear();
     patches_.clear();
     surgeries_.clear();
+    syndromeExtractions_.clear();
 
     if (!func.empty()) {
       for (auto &op : func.getBody().front()) {
@@ -160,19 +169,32 @@ private:
     auto type = logicalType(value);
     if (!type)
       return emitError(value.getLoc(), "expected logical qubit value"), failure();
-    if (type.getCode().getKind() != ECCKind::Surface)
-      return emitError(value.getLoc(), "LightStim export currently supports only surface-code logical qubits"),
-             failure();
+    auto ecc = type.getCode();
 
     unsigned index = patches_.size();
     PatchInfo patch;
     patch.id = "patch_" + std::to_string(index);
-    patch.code = lightstimCode_;
-    patch.distance = type.getDistance();
+    patch.distance = ecc.getDistance();
     patch.offsetX = index == 0 ? 0 : static_cast<int>(index) * patchSpacing_;
     patch.offsetY = 0;
     patch.initialBasis = initialBasis.str();
     patch.measurementBasis = "Z";
+
+    switch (ecc.getKind()) {
+    case ECCKind::Surface:
+      patch.code = lightstimCode_;
+      break;
+    case ECCKind::HypergraphProduct:
+      patch.code = "hypergraph_product";
+      patch.code1 = ecc.getCode1();
+      patch.code2 = ecc.getCode2();
+      break;
+    default:
+      return emitError(value.getLoc(),
+                       "LightStim export currently supports surface and hypergraph-product logical qubits"),
+             failure();
+    }
+
     patches_.push_back(patch);
     patchOfValue_[value] = index;
     return index;
@@ -258,8 +280,18 @@ private:
           patchOfValue_[o.getResult1()] = *p1;
           return success();
         })
+        .Case<ExtractSyndromeOp>([&](ExtractSyndromeOp o) {
+          auto patchIndex = ensurePatch(o.getLogicalQubit());
+          if (failed(patchIndex))
+            return failure();
+
+          syndromeExtractions_.push_back(SyndromeExtractionInfo{
+              patches_[*patchIndex].id, o.getRounds().value_or(1)});
+          patchOfValue_[o.getOutLogicalQubit()] = *patchIndex;
+          return success();
+        })
         .Case<LogicalMeasureOp>([&](LogicalMeasureOp o) {
-          setMeasurement(o.getLogicalQubit(), "Z");
+          setMeasurement(o.getLogicalQubit(), o.getBasis() == 1 ? "X" : "Z");
           return success();
         })
         .Case<DeallocOp>([&](DeallocOp) { return success(); })
@@ -273,13 +305,39 @@ private:
         });
   }
 
+  void writeClassicalCodeJSON(llvm::raw_ostream &os,
+                              ClassicalCodeAttr code) {
+    auto flatH = code.getH();
+    unsigned n = code.getN();
+    unsigned rows = n == 0 ? 0 : static_cast<unsigned>(flatH.size()) / n;
+
+    os << "[";
+    for (unsigned row = 0; row < rows; ++row) {
+      if (row)
+        os << ", ";
+      os << "[";
+      bool first = true;
+      for (unsigned col = 0; col < n; ++col) {
+        if (!first)
+          os << ", ";
+        os << static_cast<int>(flatH[row * n + col]);
+        first = false;
+      }
+      os << "]";
+    }
+    os << "]";
+  }
+
   void writeJSON(llvm::raw_ostream &os, StringRef funcName) {
+    StringRef experimentType =
+        surgeries_.empty() ? "memory" : "two_patch_lattice_surgery";
+
     os << "{\n";
     os << "  \"format\": \"ftqc-lightstim-experiment\",\n";
     os << "  \"version\": 1,\n";
     os << "  \"experiment\": {\n";
     os << "    \"name\": \"" << jsonEscape(sanitizeName(funcName)) << "\",\n";
-    os << "    \"type\": \"two_patch_lattice_surgery\"\n";
+    os << "    \"type\": \"" << experimentType << "\"\n";
     os << "  },\n";
 
     os << "  \"patches\": [\n";
@@ -291,22 +349,52 @@ private:
       os << "      \"distance\": " << p.distance << ",\n";
       os << "      \"offset\": [" << p.offsetX << ", " << p.offsetY << "],\n";
       os << "      \"initial_basis\": \"" << p.initialBasis << "\",\n";
-      os << "      \"measurement_basis\": \"" << p.measurementBasis << "\"\n";
+      os << "      \"measurement_basis\": \"" << p.measurementBasis << "\"";
+      if (p.code == "hypergraph_product") {
+        os << ",\n";
+        os << "      \"classical_codes\": {\n";
+        os << "        \"code1\": ";
+        writeClassicalCodeJSON(os, p.code1);
+        os << ",\n";
+        os << "        \"code2\": ";
+        writeClassicalCodeJSON(os, p.code2);
+        os << "\n";
+        os << "      }\n";
+      } else {
+        os << "\n";
+      }
       os << "    }" << (i + 1 == patches_.size() ? "\n" : ",\n");
     }
     os << "  ],\n";
 
     os << "  \"operations\": [\n";
+    bool firstOp = true;
     for (size_t i = 0; i < surgeries_.size(); ++i) {
       const SurgeryInfo &s = surgeries_[i];
+      if (!firstOp)
+        os << ",\n";
       os << "    {\n";
       os << "      \"type\": \"lattice_surgery\",\n";
       os << "      \"interaction\": \"" << s.interaction << "\",\n";
       os << "      \"patches\": [\"" << s.patch0 << "\", \"" << s.patch1 << "\"],\n";
       os << "      \"rounds\": " << s.rounds << ",\n";
       os << "      \"rotate_first_patch\": false\n";
-      os << "    }" << (i + 1 == surgeries_.size() ? "\n" : ",\n");
+      os << "    }";
+      firstOp = false;
     }
+    for (size_t i = 0; i < syndromeExtractions_.size(); ++i) {
+      const SyndromeExtractionInfo &s = syndromeExtractions_[i];
+      if (!firstOp)
+        os << ",\n";
+      os << "    {\n";
+      os << "      \"type\": \"syndrome_extraction\",\n";
+      os << "      \"patch\": \"" << s.patch << "\",\n";
+      os << "      \"rounds\": " << s.rounds << "\n";
+      os << "    }";
+      firstOp = false;
+    }
+    if (!firstOp)
+      os << "\n";
     os << "  ],\n";
 
     os << "  \"noise\": {\n";

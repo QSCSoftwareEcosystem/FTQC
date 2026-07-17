@@ -17,7 +17,9 @@ if str(LIGHTSTIM_REPO) not in sys.path:
     sys.path.insert(0, str(LIGHTSTIM_REPO))
 
 from lightstim.noise.config import NoiseConfig
+from lightstim.protocols.memory import MemoryExperiment
 from lightstim.protocols.two_patch_ls import TwoPatchLSExperiment
+from lightstim.qec_code.HGP import HGPCode, HGPCodeExtractionBlock
 from lightstim.simulation.decoder_backend import DecoderConfig, SimulationPipeline
 
 
@@ -55,34 +57,18 @@ def validate_descriptor(descriptor: dict[str, Any]) -> None:
 
     experiment = descriptor["experiment"]
     require_keys(experiment, ["name", "type"], "experiment")
-    if experiment["type"] != "two_patch_lattice_surgery":
-        raise DescriptorError("only experiment.type='two_patch_lattice_surgery' is currently supported")
+    if experiment["type"] not in ("two_patch_lattice_surgery", "memory"):
+        raise DescriptorError(
+            "experiment.type must be 'two_patch_lattice_surgery' or 'memory'"
+        )
 
     patches = descriptor["patches"]
-    if len(patches) != 2:
-        raise DescriptorError("two_patch_lattice_surgery requires exactly two patches")
-    for index, patch in enumerate(patches):
-        require_keys(patch, ["id", "code", "distance", "offset", "initial_basis", "measurement_basis"], f"patches[{index}]")
-        if patch["code"] != "unrotated_surface_code":
-            raise DescriptorError("only code='unrotated_surface_code' is currently supported")
-        if patch["initial_basis"] not in ("X", "Z"):
-            raise DescriptorError(f"patches[{index}].initial_basis must be X or Z")
-        if patch["measurement_basis"] not in ("X", "Z"):
-            raise DescriptorError(f"patches[{index}].measurement_basis must be X or Z")
-        if len(patch["offset"]) != 2:
-            raise DescriptorError(f"patches[{index}].offset must contain two numbers")
-
     operations = descriptor["operations"]
-    if len(operations) != 1:
-        raise DescriptorError("this adapter currently supports exactly one operation")
-    operation = operations[0]
-    require_keys(operation, ["type", "interaction", "patches", "rounds"], "operations[0]")
-    if operation["type"] != "lattice_surgery":
-        raise DescriptorError("only operation type='lattice_surgery' is currently supported")
-    if operation["interaction"] not in ("ZZ", "XX"):
-        raise DescriptorError("operation.interaction must be ZZ or XX")
-    if operation["patches"] != [patches[0]["id"], patches[1]["id"]]:
-        raise DescriptorError("operation.patches must reference the two patches in descriptor order")
+
+    if experiment["type"] == "two_patch_lattice_surgery":
+        validate_lattice_surgery(patches, operations)
+    else:
+        validate_memory(patches, operations)
 
     noise = descriptor["noise"]
     require_keys(noise, ["model", "rates"], "noise")
@@ -92,7 +78,80 @@ def validate_descriptor(descriptor: dict[str, Any]) -> None:
     decoder = descriptor["decoder"]
     require_keys(decoder, ["name"], "decoder")
     if decoder["name"] != "pymatching":
-        raise DescriptorError("only decoder.name='pymatching' is currently supported for this surface-code adapter")
+        raise DescriptorError("only decoder.name='pymatching' is currently supported")
+
+
+def validate_patch_common(patch: dict[str, Any], index: int) -> None:
+    require_keys(patch, ["id", "code", "distance", "offset", "initial_basis", "measurement_basis"], f"patches[{index}]")
+    if patch["initial_basis"] not in ("X", "Z"):
+        raise DescriptorError(f"patches[{index}].initial_basis must be X or Z")
+    if patch["measurement_basis"] not in ("X", "Z"):
+        raise DescriptorError(f"patches[{index}].measurement_basis must be X or Z")
+    if len(patch["offset"]) != 2:
+        raise DescriptorError(f"patches[{index}].offset must contain two numbers")
+
+
+def validate_lattice_surgery(
+    patches: list[dict[str, Any]],
+    operations: list[dict[str, Any]],
+) -> None:
+    if len(patches) != 2:
+        raise DescriptorError("two_patch_lattice_surgery requires exactly two patches")
+    for index, patch in enumerate(patches):
+        validate_patch_common(patch, index)
+        if patch["code"] != "unrotated_surface_code":
+            raise DescriptorError("only code='unrotated_surface_code' is currently supported for lattice surgery")
+
+    if len(operations) != 1:
+        raise DescriptorError("two_patch_lattice_surgery currently supports exactly one operation")
+    operation = operations[0]
+    require_keys(operation, ["type", "interaction", "patches", "rounds"], "operations[0]")
+    if operation["type"] != "lattice_surgery":
+        raise DescriptorError("operation.type must be 'lattice_surgery'")
+    if operation["interaction"] not in ("ZZ", "XX"):
+        raise DescriptorError("operation.interaction must be ZZ or XX")
+    if operation["patches"] != [patches[0]["id"], patches[1]["id"]]:
+        raise DescriptorError("operation.patches must reference the two patches in descriptor order")
+
+
+def validate_memory(
+    patches: list[dict[str, Any]],
+    operations: list[dict[str, Any]],
+) -> None:
+    if len(patches) != 1:
+        raise DescriptorError("memory requires exactly one patch")
+
+    patch = patches[0]
+    validate_patch_common(patch, 0)
+    if patch["initial_basis"] != patch["measurement_basis"]:
+        raise DescriptorError("patches[0].initial_basis must equal patches[0].measurement_basis for memory experiments")
+    if patch["code"] != "hypergraph_product":
+        raise DescriptorError("only code='hypergraph_product' is currently supported for memory experiments")
+    require_keys(patch, ["classical_codes"], "patches[0]")
+    classical_codes = patch["classical_codes"]
+    require_keys(classical_codes, ["code1", "code2"], "patches[0].classical_codes")
+    validate_classical_code(classical_codes["code1"], "patches[0].classical_codes.code1")
+    validate_classical_code(classical_codes["code2"], "patches[0].classical_codes.code2")
+
+    for index, operation in enumerate(operations):
+        require_keys(operation, ["type", "patch", "rounds"], f"operations[{index}]")
+        if operation["type"] != "syndrome_extraction":
+            raise DescriptorError(f"operations[{index}].type must be 'syndrome_extraction'")
+        if operation["patch"] != patch["id"]:
+            raise DescriptorError(f"operations[{index}].patch must reference {patch['id']!r}")
+        if int(operation["rounds"]) <= 0:
+            raise DescriptorError(f"operations[{index}].rounds must be positive")
+
+
+def validate_classical_code(code: Any, where: str) -> None:
+    if not isinstance(code, list):
+        raise DescriptorError(f"{where} must be a list of rows")
+    for row_index, row in enumerate(code):
+        if not isinstance(row, list):
+            raise DescriptorError(f"{where}[{row_index}] must be a list")
+        for bit in row:
+            if bit not in (0, 1):
+                raise DescriptorError(f"{where}[{row_index}] contains out-of-range bit {bit}")
 
 
 def noise_config(descriptor: dict[str, Any] | None) -> NoiseConfig | None:
@@ -109,6 +168,15 @@ def noise_config(descriptor: dict[str, Any] | None) -> NoiseConfig | None:
 
 
 def build_circuit(descriptor: dict[str, Any], noisy: bool = True):
+    experiment_type = descriptor["experiment"]["type"]
+    if experiment_type == "two_patch_lattice_surgery":
+        return build_lattice_surgery_circuit(descriptor, noisy=noisy)
+    if experiment_type == "memory":
+        return build_memory_circuit(descriptor, noisy=noisy)
+    raise DescriptorError(f"unsupported experiment type: {experiment_type!r}")
+
+
+def build_lattice_surgery_circuit(descriptor: dict[str, Any], noisy: bool = True):
     patches = descriptor["patches"]
     operation = descriptor["operations"][0]
     patch0, patch1 = patches
@@ -134,6 +202,25 @@ def build_circuit(descriptor: dict[str, Any], noisy: bool = True):
 
     with contextlib.redirect_stdout(io.StringIO()):
         return experiment.build()
+
+
+def build_memory_circuit(descriptor: dict[str, Any], noisy: bool = True):
+    patch_desc = descriptor["patches"][0]
+    patch = HGPCode(
+        patch_desc["classical_codes"]["code1"],
+        patch_desc["classical_codes"]["code2"],
+        d=patch_desc["distance"]
+    )
+    experiment = MemoryExperiment(
+        qec_patch=patch,
+        patch_name=patch_desc["id"],
+        extraction_block_class=HGPCodeExtractionBlock,
+        rounds=sum(int(op["rounds"]) for op in descriptor["operations"]),
+        basis=patch_desc["initial_basis"],
+        noise_params=noise_config(descriptor) if noisy else None,
+        noise_model=descriptor["noise"]["model"],
+    )
+    return experiment.build()
 
 
 def check_noiseless_circuit(descriptor: dict[str, Any]) -> None:
@@ -195,18 +282,28 @@ def main() -> None:
 
     experiment = descriptor["experiment"]
     patches = descriptor["patches"]
-    operation = descriptor["operations"][0]
     rates = descriptor["noise"]["rates"]
 
     print(f"experiment: {experiment['name']}")
-    print(f"operation: {operation['interaction']} lattice surgery, rounds={operation['rounds']}")
-    print(
-        "patches: "
-        f"{patches[0]['id']} d={patches[0]['distance']} offset={patches[0]['offset']} "
-        f"init={patches[0]['initial_basis']} meas={patches[0]['measurement_basis']}; "
-        f"{patches[1]['id']} d={patches[1]['distance']} offset={patches[1]['offset']} "
-        f"init={patches[1]['initial_basis']} meas={patches[1]['measurement_basis']}"
-    )
+    if experiment["type"] == "two_patch_lattice_surgery":
+        operation = descriptor["operations"][0]
+        print(f"operation: {operation['interaction']} lattice surgery, rounds={operation['rounds']}")
+        print(
+            "patches: "
+            f"{patches[0]['id']} d={patches[0]['distance']} offset={patches[0]['offset']} "
+            f"init={patches[0]['initial_basis']} meas={patches[0]['measurement_basis']}; "
+            f"{patches[1]['id']} d={patches[1]['distance']} offset={patches[1]['offset']} "
+            f"init={patches[1]['initial_basis']} meas={patches[1]['measurement_basis']}"
+        )
+    else:
+        rounds = sum(int(op["rounds"]) for op in descriptor["operations"])
+        patch = patches[0]
+        print(f"operation: memory experiment, syndrome_rounds={rounds}")
+        print(
+            "patches: "
+            f"{patch['id']} code={patch['code']} d={patch['distance']} offset={patch['offset']} "
+            f"init={patch['initial_basis']} meas={patch['measurement_basis']}"
+        )
     print(f"circuit: qubits={circuit.num_qubits} detectors={circuit.num_detectors} observables={circuit.num_observables}")
     print(f"noise: {descriptor['noise']['model']} {rates}")
     print(f"decoder: {descriptor['decoder']['name']}")
