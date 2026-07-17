@@ -1,4 +1,10 @@
-// RUN: ftqc-opt %s --ftqc-lower-to-lightstim-json="physical-error-rate=0.001 surgery-rounds=5 patch-spacing=10 max-errors=100 max-shots=5000000" 2>&1 | FileCheck %s
+// RUN: ftqc-opt %s --ftqc-lower-to-lightstim-json 2>&1 | FileCheck %s
+//
+// Usage with defaults:
+//   ftqc-opt input.mlir --ftqc-lower-to-lightstim-json
+//
+// Usage with explicit experiment/simulation options:
+//   ftqc-opt input.mlir --ftqc-lower-to-lightstim-json="physical-error-rate=0.001 surgery-rounds=5 patch-spacing=10 max-errors=100 max-shots=5000000"
 
 // CHECK: "format": "ftqc-lightstim-experiment"
 // CHECK: "type": "two_patch_lattice_surgery"
