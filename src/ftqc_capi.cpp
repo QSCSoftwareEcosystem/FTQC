@@ -158,7 +158,9 @@ static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
     if (cfg->lower_to_qasm3)
         pm.addPass(mlir::ftqc::createLowerToQASM3Pass());
     if (cfg->lower_to_iqm_json)
-        pm.addPass(mlir::ftqc::createLowerToIQMJSONPass());
+        pm.addPass(mlir::ftqc::createLowerToIQMJSONPass(
+            cfg->lower_to_iqm_json_radians != 0,
+            cfg->lower_to_iqm_json_physical != 0));
     if (cfg->lower_to_lattice_surgery)
         pm.addPass(mlir::ftqc::createLowerToLatticeSurgeryPass());
     if (cfg->lower_to_iqs)

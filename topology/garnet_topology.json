@@ -1,5 +1,5 @@
 {
-  "backend": "IQMFakeGarnetBackend",
+  "backend": "garnet",
   "calibration": "Garnet",
   "num_qubits": 20,
   "qubits": [
@@ -25,9 +25,9 @@
     "QB20"
   ],
   "native_gates": [
+    "id",
     "delay",
     "measure",
-    "id",
     "r",
     "cz"
   ],
