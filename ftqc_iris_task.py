@@ -266,8 +266,8 @@ def setup_iqm_env(iqm_lib: str | None = None) -> str | None:
     lib = iqm_lib or os.environ.get("IRIS_LIB_IQM") or os.environ.get("LIB_IQM")
     if not lib:
         for c in [
-            _HERE.parent / "IQM" / "QDMI-on-IQM" / "install" / "lib" / "libiqm-qdmi-device.so",
-            _HERE.parent / "QDMI-on-IQM" / "install" / "lib" / "libiqm-qdmi-device.so",
+            _HERE.parent / os.path.join("IQM", "QDMI-on-IQM", "install", "lib", getlibwithext("libiqm-qdmi-device")),
+            _HERE.parent / os.path.join("QDMI-on-IQM", "install", "lib", getlibwithext("libiqm-qdmi-device")),
         ]:
             if c.exists():
                 lib = str(c)
@@ -665,7 +665,7 @@ def main():
     ap.add_argument("--shots", type=int, default=1024)
     ap.add_argument("--heralding", default="none", choices=["none", "zeros", "null"])
     ap.add_argument("--iqm-lib", default=None,
-                    help="path to libiqm-qdmi-device.so; sets IRIS_LIB_IQM if IRIS "
+                    help=f"path to {getlibwithext('libiqm-qdmi-device')}; sets IRIS_LIB_IQM if IRIS "
                          "can't find it on its own")
     ap.add_argument("--base-url", default=None,
                     help="IQM server URL (sets IQM_BASE_URL for the iris_iqm device)")
