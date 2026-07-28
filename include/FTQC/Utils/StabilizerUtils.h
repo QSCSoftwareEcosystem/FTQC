@@ -69,16 +69,20 @@ using BinaryRow = llvm::SmallVector<uint8_t, 64>;
 /// @brief Syndrome bit vector (output of a round of stabiliser measurements).
 using Syndrome = llvm::SmallVector<uint8_t, 8>;
 
+/// @brief Basis vector for a vector space.
+struct BasisVector {
+  /// @brief The basis vector.
+  BinaryRow vector;
+  /// @brief Index i such that vector[i] == 1, and vector[j] == 0 for all j > i.
+  unsigned pivotIndex;
+};
+
 //===----------------------------------------------------------------------===//
 // ClassicalCode
 //===----------------------------------------------------------------------===//
 
 /// @brief Represents an [n,k,d] classical linear binary code via its
 /// parity-check matrix.
-///
-/// For every [n,k,d] linear code with an r×n parity-check matrix H, we can
-/// define an [r,r-rank(H),dT] transpose code using the transposed parity-check
-/// matrix H^T.
 class ClassicalCode {
 public:
   ClassicalCode() = default;
@@ -86,13 +90,9 @@ public:
   /// @brief Construct a linear code from an explicit parity-check matrix.
   ///
   /// @param n Total number of physical bits.
-  /// @param k Number of encoded logical bits.
-  /// @param d Code distance.
   /// @param H Parity-check matrix, each row of length n.
   /// @return Fully constructed `ClassicalCode`.
-  static ClassicalCode fromLinear(
-      unsigned n, unsigned k, unsigned d,
-      std::vector<BinaryRow> H);
+  static ClassicalCode fromLinear(unsigned n, std::vector<BinaryRow> H);
 
   /// @brief Construct the [d,1,d] repetition code.
   ///
@@ -102,20 +102,27 @@ public:
   /// @return `ClassicalCode` representing the [d,1,d] repetition code.
   static ClassicalCode makeRepetition(unsigned n);
 
+  /// @brief Construct a code using the transposed parity-check matrix.
+  ///
+  /// If this is an [n,k,d] code with an r×n parity-check matrix H, then the
+  /// transpose code is an [r,r-rank(H),dT] code with parity-check matrix H^T.
+  ///
+  /// @return `ClassicalCode` representing the transpose code.
+  ClassicalCode transposeCode() const;
+
   //------------------------------------------------------------------------
   // Accessors
   //------------------------------------------------------------------------
 
   unsigned getN() const { return n_; } ///< Total physical bit count.
-  unsigned getK() const { return k_; } ///< Logical bit count.
+  unsigned getK() const { return basis_.size(); } ///< Logical bit count.
   unsigned getD() const { return d_; } ///< Code distance.
 
-  unsigned getTransposeN() const; ///< Physical bit count of the transpose code.
-  unsigned getTransposeK() const; ///< Logical bit count of the transpose code.
-  unsigned getTransposeD() const; ///< Code distance of the transpose code.
-
   llvm::ArrayRef<BinaryRow> getH() const { return H_; } ///< Parity-check matrix.
-  std::vector<BinaryRow> getTransposeH() const; ///< Transposed parity-check matrix.
+
+  /// @brief Get a basis for the codespace, i.e. for the kernel of H.
+  /// @return Array of basis vectors, each with a unique pivot index.
+  llvm::ArrayRef<BasisVector> getBasis() const { return basis_; }
 
   /// @brief Serialise the code to a human-readable description.
   /// @param includeMatrix Whether to include the parity-check matrix.
@@ -123,8 +130,12 @@ public:
   std::string toString(bool includeMatrix = false) const;
 
 private:
-  unsigned n_ = 0, k_ = 0, d_ = 0;
+  unsigned n_ = 0, d_ = 0;
   std::vector<BinaryRow> H_;
+  std::vector<BasisVector> basis_;
+
+  void computeBasis();
+  void computeDistance();
 };
 
 //===----------------------------------------------------------------------===//

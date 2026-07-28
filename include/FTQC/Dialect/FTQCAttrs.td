@@ -126,11 +126,9 @@ def FTQC_ClassicalCode : FTQC_Attr<"ClassicalCode", "classical_code"> {
   let summary = "An [n,k,d] classical linear binary code";
   let parameters = (ins
     "uint32_t" : $n,
-    "uint32_t" : $k,
-    "uint32_t" : $d,
     "DenseI8ArrayAttr" : $H
   );
-  let assemblyFormat = "`<` $n `,` $k `,` $d `,` $H `>`";
+  let assemblyFormat = "`<` $n `,` $H `>`";
   let extraClassDeclaration = [{
     ClassicalCode makeClassicalCode() const;
   }];

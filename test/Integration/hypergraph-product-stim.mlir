@@ -35,7 +35,7 @@
 // CHECK: DETECTOR(10) rec[-2]
 // CHECK: DETECTOR(11) rec[-1]
 
-#repetition3 = #ftqc.classical_code<3, 1, 3, [1,1,0, 0,1,1]>
+#repetition3 = #ftqc.classical_code<3, [1,1,0, 0,1,1]>
 #surface3 = #ftqc.ecc<hypergraph_product, 3, 1, #repetition3, #repetition3>
 
 func.func @hypergraph_product_memory() -> i1 {

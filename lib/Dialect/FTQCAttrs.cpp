@@ -149,7 +149,7 @@ ClassicalCode ClassicalCodeAttr::makeClassicalCode() const {
   for (unsigned i = 0; i < H.size(); ++i)
     for (unsigned j = 0; j < n; ++j)
       H[i][j] = flatH[i * n + j];
-  return ClassicalCode::fromLinear(n, getK(), getD(), H);
+  return ClassicalCode::fromLinear(n, H);
 }
 
 //===----------------------------------------------------------------------===//

@@ -1,8 +1,10 @@
 //===- StabilizerUtils.cpp - Stabilizer formalism implementation ----------===//
 #include "FTQC/Utils/StabilizerUtils.h"
+#include "llvm/ADT/bit.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
+#include <limits>
 #include <numeric>
 #include <sstream>
 
@@ -12,11 +14,12 @@ using namespace mlir::ftqc;
 // ClassicalCode methods
 //===----------------------------------------------------------------------===//
 
-ClassicalCode ClassicalCode::fromLinear(unsigned n, unsigned k, unsigned d,
-                                        std::vector<BinaryRow> H) {
+ClassicalCode ClassicalCode::fromLinear(unsigned n, std::vector<BinaryRow> H) {
   ClassicalCode code;
-  code.n_ = n; code.k_ = k; code.d_ = d;
+  code.n_ = n;
   code.H_ = std::move(H);
+  code.computeBasis();
+  code.computeDistance();
   return code;
 }
 
@@ -26,33 +29,21 @@ ClassicalCode ClassicalCode::makeRepetition(unsigned n) {
     H[i][i] = 1;
     H[i][i + 1] = 1;
   }
-  return ClassicalCode::fromLinear(n, 1, n, H);
+  return ClassicalCode::fromLinear(n, H);
 }
 
-unsigned ClassicalCode::getTransposeN() const {
-  return static_cast<unsigned>(H_.size());
-}
-
-unsigned ClassicalCode::getTransposeK() const {
-  unsigned rankH = n_ - k_;
-  return getTransposeN() - rankH;
-}
-
-unsigned ClassicalCode::getTransposeD() const {
-  return d_; // TODO: Return correct value
-}
-
-std::vector<BinaryRow> ClassicalCode::getTransposeH() const {
-  std::vector<BinaryRow> transposeH(n_, BinaryRow(H_.size(), 0));
+ClassicalCode ClassicalCode::transposeCode() const {
+  unsigned transposeN = H_.size();
+  std::vector<BinaryRow> transposeH(n_, BinaryRow(transposeN, 0));
   for (unsigned i = 0; i < n_; ++i)
-    for (unsigned j = 0; j < H_.size(); ++j)
+    for (unsigned j = 0; j < transposeN; ++j)
       transposeH[i][j] = H_[j][i];
-  return transposeH;
+  return ClassicalCode::fromLinear(transposeN, transposeH);
 }
 
 std::string ClassicalCode::toString(bool includeMatrix) const {
   std::ostringstream ss;
-  ss << "[" << n_ << "," << k_ << "," << d_ << "] code\n";
+  ss << "[" << n_ << "," << getK() << "," << d_ << "] code\n";
   ss << "  " << H_.size() << " parity checks\n";
   if (includeMatrix) {
     ss << "  H =\n";
@@ -66,39 +57,55 @@ std::string ClassicalCode::toString(bool includeMatrix) const {
   return ss.str();
 }
 
-namespace {
-  struct Basis {
-    std::vector<BinaryRow> vectors;
-    llvm::SmallVector<bool> included;
-  };
+// This implements strong lower triangular Gaussian reduction, as described in
+// Algorithm 1 of https://doi.org/10.22331/q-2023-10-24-1153, to find a basis
+// for the kernel of the given matrix.
+void ClassicalCode::computeBasis() {
+  auto H = H_; // We need a copy of the matrix to mutate.
+  basis_.resize(n_);
+  for (unsigned i = 0; i < n_; ++i) {
+    basis_[i].vector.resize(n_, 0);
+    basis_[i].vector[i] = 1;
+    basis_[i].pivotIndex = i;
+  }
+  std::vector<bool> excluded(n_, false);
 
-  // This implements strong lower triangular Gaussian reduction, as described in
-  // Algorithm 1 of https://doi.org/10.22331/q-2023-10-24-1153, to find a basis
-  // for the kernel of the given matrix.
-  Basis kernelBasis(unsigned n, std::vector<BinaryRow> matrix) {
-    Basis basis;
-    basis.vectors.resize(n, BinaryRow(n, 0));
-    for (unsigned i = 0; i < n; ++i)
-      basis.vectors[i][i] = 1;
-    basis.included.resize(n, true);
-
-    for (unsigned j = 0; j < n; ++j) {
-      for (unsigned i = 0; i < matrix.size(); ++i) {
-        if (matrix[i][j]) {
-          basis.included[j] = false;
-          for (unsigned l = j + 1; l < n; ++l) {
-            if (matrix[i][l]) {
-              for (unsigned m = 0; m < matrix.size(); ++m) {
-                matrix[m][l] ^= matrix[m][j];
-                basis.vectors[l][m] ^= basis.vectors[j][m];
-              }
-            }
+  for (unsigned j = 0; j < n_; ++j) {
+    for (unsigned i = 0; i < H.size(); ++i) {
+      if (H[i][j]) {
+        excluded[j] = true;
+        for (unsigned l = j + 1; l < n_; ++l) {
+          if (H[i][l]) {
+            for (unsigned m = 0; m < H.size(); ++m)
+              H[m][l] ^= H[m][j];
+            for (unsigned m = 0; m < n_; ++m)
+              basis_[l].vector[m] ^= basis_[j].vector[m];
           }
-          break;
         }
+        break;
       }
     }
-    return basis;
+  }
+
+  basis_.erase(std::remove_if(basis_.begin(), basis_.end(), [&](auto &b) {
+    return excluded[b.pivotIndex];
+  }), basis_.end());
+}
+
+// Find the minumum Hamming weight of all nonzero codewords, which is the
+// distance. We iterate over codewords in Gray code order, so that we only have
+// to add one basis vector per iteration. This takes O(n 2^k) time.
+void ClassicalCode::computeDistance() {
+  BinaryRow codeword(n_, 0);
+  d_ = std::numeric_limits<unsigned>::max();
+  for (unsigned i = 1; i < (1u << getK()); ++i) {
+    auto &basisVector = basis_[llvm::countr_zero(i)].vector;
+    unsigned weight = 0;
+    for (unsigned j = 0; j < n_; ++j) {
+      codeword[j] ^= basisVector[j];
+      weight += codeword[j];
+    }
+    d_ = std::min(d_, weight);
   }
 }
 
@@ -203,12 +210,14 @@ StabilizerCode StabilizerCode::makeSurface(unsigned d) {
 
 StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
                                                      const ClassicalCode &code2) {
+  ClassicalCode codeT1 = code1.transposeCode(), codeT2 = code2.transposeCode();
+
   unsigned n1 = code1.getN(), n2 = code2.getN();
   unsigned k1 = code1.getK(), k2 = code2.getK();
   unsigned d1 = code1.getD(), d2 = code2.getD();
-  unsigned nT1 = code1.getTransposeN(), nT2 = code2.getTransposeN();
-  unsigned kT1 = code1.getTransposeK(), kT2 = code2.getTransposeK();
-  unsigned dT1 = code1.getTransposeD(), dT2 = code2.getTransposeD();
+  unsigned nT1 = codeT1.getN(), nT2 = codeT2.getN();
+  unsigned kT1 = codeT1.getK(), kT2 = codeT2.getK();
+  unsigned dT1 = codeT1.getD(), dT2 = codeT2.getD();
   auto H1 = code1.getH(), H2 = code2.getH();
 
   unsigned n = n1 * n2 + nT1 * nT2;
@@ -241,39 +250,35 @@ StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
 
   auto code = StabilizerCode::fromCSS(n, k, d, Hx, Hz);
 
-  auto kernel1 = kernelBasis(n1, H1);
-  auto kernel2 = kernelBasis(n2, H2);
-  auto kernelT1 = kernelBasis(nT1, code1.getTransposeH());
-  auto kernelT2 = kernelBasis(nT2, code2.getTransposeH());
+  auto basis1 = code1.getBasis();
+  auto basis2 = code2.getBasis();
+  auto basisT1 = codeT1.getBasis();
+  auto basisT2 = codeT2.getBasis();
 
   // Based on Lemma 1 of https://doi.org/10.22331/q-2023-10-24-1153.
-  for (unsigned v1 = 0; v1 < n1; ++v1) {
-    for (unsigned v2 = 0; v2 < n2; ++v2) {
-      if (kernel1.included[v1] && kernel2.included[v2]) {
-        code.logX_.emplace_back(n, Pauli::I);
-        code.logZ_.emplace_back(n, Pauli::I);
-        for (unsigned i2 = 0; i2 < n2; ++i2)
-          if (kernel2.vectors[v2][i2])
-            code.logX_.back()[v1 * n2 + i2] = Pauli::X;
-        for (unsigned i1 = 0; i1 < n1; ++i1)
-          if (kernel1.vectors[v1][i1])
-            code.logZ_.back()[i1 * n2 + v2] = Pauli::Z;
-      }
+  for (auto &b1 : basis1) {
+    for (auto &b2 : basis2) {
+      code.logX_.emplace_back(n, Pauli::I);
+      for (unsigned v2 = 0; v2 < n2; ++v2)
+        if (b2.vector[v2])
+          code.logX_.back()[b1.pivotIndex * n2 + v2] = Pauli::X;
+      code.logZ_.emplace_back(n, Pauli::I);
+      for (unsigned v1 = 0; v1 < n1; ++v1)
+        if (b1.vector[v1])
+          code.logZ_.back()[v1 * n2 + b2.pivotIndex] = Pauli::Z;
     }
   }
 
-  for (unsigned c1 = 0; c1 < nT1; ++c1) {
-    for (unsigned c2 = 0; c2 < nT2; ++c2) {
-      if (kernelT1.included[c1] && kernelT2.included[c2]) {
-        code.logX_.emplace_back(n, Pauli::I);
-        code.logZ_.emplace_back(n, Pauli::I);
-        for (unsigned i1 = 0; i1 < nT1; ++i1)
-          if (kernelT1.vectors[c1][i1])
-            code.logX_.back()[n1 * n2 + i1 * nT2 + c2] = Pauli::X;
-        for (unsigned i2 = 0; i2 < nT2; ++i2)
-          if (kernelT2.vectors[c2][i2])
-            code.logZ_.back()[n1 * n2 + c1 * nT2 + i2] = Pauli::Z;
-      }
+  for (auto &bT1 : basisT1) {
+    for (auto &bT2 : basisT2) {
+      code.logX_.emplace_back(n, Pauli::I);
+      for (unsigned c1 = 0; c1 < nT1; ++c1)
+        if (bT1.vector[c1])
+          code.logX_.back()[n1 * n2 + c1 * nT2 + bT2.pivotIndex] = Pauli::X;
+      code.logZ_.emplace_back(n, Pauli::I);
+      for (unsigned c2 = 0; c2 < nT2; ++c2)
+        if (bT2.vector[c2])
+          code.logZ_.back()[n1 * n2 + bT1.pivotIndex * nT2 + c2] = Pauli::Z;
     }
   }
 
