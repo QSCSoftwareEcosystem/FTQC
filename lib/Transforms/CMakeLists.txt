@@ -14,6 +14,9 @@ add_mlir_library(FTQCTransforms
   LowerToQIR.cpp
   LowerToQIRns.cpp
   LowerToIntelQSCpp.cpp
+  ExpandPhysical.cpp
+  QPhysToQASM3.cpp
+  QPhysToIQMJSON.cpp
   Passes.cpp
 
   DEPENDS

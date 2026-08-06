@@ -678,4 +678,67 @@ def FTQC_ResourceAnnotationOp : FTQC_Op<"resource_annotation",
   let assemblyFormat = "attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// QPHYS physical layer — ftqc.qphys.*
+//
+// Produced by `--ftqc-expand-physical`, which unfolds each logical qubit into
+// its physical block (data + syndrome ancillas).  These ops carry the concrete
+// data/ancilla qubits as SSA values so a single physical IR can feed every
+// back-end lowering.  Value-semantics, mirroring the logical gate ops above.
+//===----------------------------------------------------------------------===//
+
+def FTQC_QPhysAllocOp : FTQC_Op<"qphys.alloc"> {
+  let summary = "Allocate a physical qubit in |0> with a hardware id and role";
+  let description = [{
+    Introduces one physical qubit.  `id` is the hardware qubit index; `role`
+    labels it for readability ("data", "x_anc", "z_anc").  This is the op that
+    makes data and ancilla qubits explicit in the IR.
+
+    Example: `%q = ftqc.qphys.alloc {id = 7 : i64, role = "x_anc"} : !ftqc.qphys_qubit`
+  }];
+  let arguments = (ins I64Attr:$id, OptionalAttr<StrAttr>:$role);
+  let results   = (outs FTQC_QPhysQubitType:$qubit);
+  let assemblyFormat = "attr-dict `:` type($qubit)";
+}
+
+class FTQC_QPhys1Q<string mnem>
+    : FTQC_Op<mnem, [SameOperandsAndResultType]> {
+  let arguments = (ins FTQC_QPhysQubitType:$in);
+  let results   = (outs FTQC_QPhysQubitType:$out);
+  let assemblyFormat = "$in attr-dict `:` type($in)";
+}
+
+def FTQC_QPhysResetOp : FTQC_QPhys1Q<"qphys.reset"> {
+  let summary = "Reset a physical qubit to |0>"; }
+def FTQC_QPhysHOp : FTQC_QPhys1Q<"qphys.h"> {
+  let summary = "Physical Hadamard gate"; }
+def FTQC_QPhysXOp : FTQC_QPhys1Q<"qphys.x"> {
+  let summary = "Physical Pauli-X gate"; }
+def FTQC_QPhysZOp : FTQC_QPhys1Q<"qphys.z"> {
+  let summary = "Physical Pauli-Z gate"; }
+def FTQC_QPhysSOp : FTQC_QPhys1Q<"qphys.s"> {
+  let summary = "Physical S (phase) gate"; }
+def FTQC_QPhysTOp : FTQC_QPhys1Q<"qphys.t"> {
+  let summary = "Physical T gate"; }
+
+class FTQC_QPhys2Q<string mnem> : FTQC_Op<mnem> {
+  let arguments = (ins FTQC_QPhysQubitType:$q0, FTQC_QPhysQubitType:$q1);
+  let results   = (outs FTQC_QPhysQubitType:$o0, FTQC_QPhysQubitType:$o1);
+  let assemblyFormat = "$q0 `,` $q1 attr-dict `:` type($q0)";
+}
+
+def FTQC_QPhysCXOp : FTQC_QPhys2Q<"qphys.cx"> {
+  let summary = "Physical CNOT gate (q0 = control, q1 = target)"; }
+def FTQC_QPhysCZOp : FTQC_QPhys2Q<"qphys.cz"> {
+  let summary = "Physical CZ gate"; }
+def FTQC_QPhysSwapOp : FTQC_QPhys2Q<"qphys.swap"> {
+  let summary = "Physical SWAP gate (for routing passes)"; }
+
+def FTQC_QPhysMeasureOp : FTQC_Op<"qphys.measure"> {
+  let summary = "Measure a physical qubit in the Z basis";
+  let arguments = (ins FTQC_QPhysQubitType:$in, OptionalAttr<StrAttr>:$key);
+  let results   = (outs I1:$bit);
+  let assemblyFormat = "$in attr-dict `:` type($in) `->` type($bit)";
+}
+
 #endif // FTQC_OPS_TD

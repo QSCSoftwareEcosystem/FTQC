@@ -591,4 +591,43 @@ def FTQCLowerToLatticeSurgeryPass : Pass<"ftqc-lower-to-lattice-surgery", "mlir:
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// Physical expansion (qphys layer)
+//===----------------------------------------------------------------------===//
+
+def FTQCExpandPhysicalPass : Pass<"ftqc-expand-physical", "mlir::func::FuncOp"> {
+  let summary = "Unfold logical qubits into physical qphys data + ancilla qubits";
+  let description = [{
+    Lowers the logical `ftqc` IR to the physical `ftqc.qphys.*` layer: each
+    `!ftqc.logical_qubit` becomes a block of `!ftqc.qphys_qubit` values
+    (Steane [[7,1,3]]: 7 data + 3 X-ancilla + 3 Z-ancilla), and logical gates /
+    syndrome ops become physical gate + measure circuits.  This materializes the
+    data and ancilla qubits as explicit, labeled SSA values so routing/SWAP and
+    the back-end lowerings can operate on one physical IR.
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect", "mlir::arith::ArithDialect"];
+}
+
+def FTQCQPhysToQASM3Pass : Pass<"ftqc-qphys-to-qasm3", "mlir::ModuleOp"> {
+  let summary = "Lower the physical qphys IR to OpenQASM 3.0";
+  let description = [{
+    Translates an `ftqc.qphys.*` physical circuit (produced by
+    `--ftqc-expand-physical`) to OpenQASM 3.0, demonstrating that back ends can
+    consume the shared physical IR rather than re-deriving the physical layout.
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+}
+
+def FTQCQPhysToIQMJSONPass : Pass<"ftqc-qphys-to-iqm-json", "mlir::ModuleOp"> {
+  let summary = "Lower the physical qphys IR to IQM JSON";
+  let description = [{
+    Retargets the IQM JSON back end onto the shared `ftqc.qphys.*` physical IR
+    (produced by `--ftqc-expand-physical`): each qphys qubit maps to hardware
+    locus "QB<id+1>" and physical gates are decomposed into IQM native gates
+    {prx, cz, measure}.  The physical (data + ancilla) layout comes from the IR,
+    not from layout logic duplicated inside the emitter.
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+}
+
 #endif // FTQC_PASSES_TD

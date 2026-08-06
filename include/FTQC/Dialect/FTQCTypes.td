@@ -158,4 +158,23 @@ def FTQC_PauliFrameType : FTQC_Type<"PauliFrame", "pauli_frame"> {
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// QPhysQubitType — !ftqc.qphys_qubit   (physical / hardware qubit)
+//===----------------------------------------------------------------------===//
+
+def FTQC_QPhysQubitType : FTQC_Type<"QPhysQubit", "qphys_qubit"> {
+  let summary = "A single physical (hardware) qubit in the qphys layer";
+  let description = [{
+    The `qphys` layer sits *below* the logical `ftqc` types: after the
+    `--ftqc-expand-physical` pass, each `!ftqc.logical_qubit` is unfolded into
+    a block of `!ftqc.qphys_qubit` values (7 data + ancillas for Steane
+    [[7,1,3]]).  Physical gates (`ftqc.qphys.*`) act on these values with
+    ordinary quantum value-semantics, so back ends can lower a *single*
+    physical IR instead of re-deriving the physical layout in every emitter.
+
+    A `qphys_qubit` is produced by `ftqc.qphys.alloc` (which stamps a hardware
+    `id` and a `role`) and threaded through physical gates until measured.
+  }];
+}
+
 #endif // FTQC_TYPES_TD
