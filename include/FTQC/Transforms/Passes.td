@@ -630,4 +630,20 @@ def FTQCQPhysToIQMJSONPass : Pass<"ftqc-qphys-to-iqm-json", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::ftqc::FTQCDialect"];
 }
 
+
+def FTQCQPhysInitLayoutPass : Pass<"ftqc-qphys-init-layout", "mlir::ModuleOp"> {
+  let summary = "Map each physical qphys qubit to a hardware qubit index on the backend";
+  let description = [{
+    Maps each `ftqc.qphys_qubit` qubit in the physical circuit (produced by
+    `--ftqc-expand-physical`) to a hardware qubit index on the backend by
+    updating the `id` attribute of its `ftqc.qphys.alloc` operation according
+    to the qubit-id mapping in an initial-layout JSON file.
+  }];
+  let options = [
+    Option<"inputFile", "input-file", "std::string", "\"\"",
+           "Initial-layout JSON file containing logical-to-hardware qubit mappings">
+  ];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+}
+
 #endif // FTQC_PASSES_TD

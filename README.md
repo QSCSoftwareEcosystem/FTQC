@@ -744,6 +744,32 @@ ftqc-opt bell.qasm \
 
 ---
 
+## Physical Initial Layout — `--ftqc-qphys-init-layout`
+
+Maps the logical `id` on every `ftqc.qphys.alloc` produced by
+`--ftqc-expand-physical` to a backend hardware-qubit index. The mapping is
+read from the JSON file supplied through the `input-file` pass option:
+
+```bash
+ftqc-opt physical.mlir \
+    --ftqc-qphys-init-layout="input-file=initial-layout.json"
+```
+
+```json
+{
+  "logical_to_hardware_mapping": {
+    "0": 5,
+    "1": 2,
+    "2": 7
+  }
+}
+```
+
+Invoking the pass without `input-file` is a silent no-op. A missing input file,
+invalid mapping file, or missing logical-qubit ID causes the pass to fail.
+
+---
+
 ## Analysis Passes
 
 ### Fault Path Analysis (`--ftqc-fault-path`)
