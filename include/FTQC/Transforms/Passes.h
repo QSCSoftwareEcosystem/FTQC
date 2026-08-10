@@ -289,6 +289,39 @@ std::unique_ptr<mlir::Pass> createThresholdAnalysisPass(double physicalError,
                                                          double targetError);
 
 //===----------------------------------------------------------------------===//
+// Physical expansion (qphys layer)
+//===----------------------------------------------------------------------===//
+
+/// @brief Create the physical-expansion pass (`--ftqc-expand-physical`).
+///
+/// Unfolds each `!ftqc.logical_qubit` into its physical block of
+/// `!ftqc.qphys_qubit` values and rewrites logical gates / syndrome ops into
+/// `ftqc.qphys.*` physical gates.  Data and ancilla qubits become explicit,
+/// labeled SSA values.  Currently expands the Steane [[7,1,3]] Clifford +
+/// syndrome + measurement subset; unhandled logical ops (T / magic-state /
+/// distillation / surface / color) cause a pass error rather than broken IR.
+std::unique_ptr<mlir::Pass> createExpandPhysicalPass();
+
+/// @brief Create the qphys → OpenQASM 3.0 lowering (`--ftqc-qphys-to-qasm3`).
+///
+/// Demonstrates lowering a *physical* IR (post `--ftqc-expand-physical`) to a
+/// back end: walks `ftqc.qphys.*` ops and emits physical-qubit QASM, proving
+/// that emitters can consume one shared physical IR instead of re-deriving the
+/// physical layout per back end.
+std::unique_ptr<mlir::Pass> createQPhysToQASM3Pass();
+
+/// @brief Create the qphys → IQM JSON lowering (`--ftqc-qphys-to-iqm-json`).
+///
+/// Retargets the IQM back end onto the shared physical IR: each qphys qubit
+/// maps to hardware locus "QB<id+1>" and physical gates are decomposed into
+/// IQM native gates {prx, cz, measure}.  Replaces the need for the logical
+/// LowerToIQMJSON emitter to re-derive the physical (data+ancilla) layout.
+std::unique_ptr<mlir::Pass> createQPhysToIQMJSONPass();
+
+/** Create the physical-qubit initial-layout pass. With no input file, it is a no-op. */
+std::unique_ptr<mlir::Pass> createQPhysInitLayoutPass();
+
+//===----------------------------------------------------------------------===//
 // Pre-built pipelines
 //===----------------------------------------------------------------------===//
 
