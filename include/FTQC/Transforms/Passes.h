@@ -292,7 +292,7 @@ std::unique_ptr<mlir::Pass> createThresholdAnalysisPass(double physicalError,
 // Physical expansion (qphys layer)
 //===----------------------------------------------------------------------===//
 
-/// @brief Create the physical-expansion pass (`--ftqc-expand-physical`).
+/// @brief Create the Steane physical-expansion pass (`--ftqc-expand-physical`).
 ///
 /// Unfolds each `!ftqc.logical_qubit` into its physical block of
 /// `!ftqc.qphys_qubit` values and rewrites logical gates / syndrome ops into
@@ -301,6 +301,18 @@ std::unique_ptr<mlir::Pass> createThresholdAnalysisPass(double physicalError,
 /// syndrome + measurement subset; unhandled logical ops (T / magic-state /
 /// distillation / surface / color) cause a pass error rather than broken IR.
 std::unique_ptr<mlir::Pass> createExpandPhysicalPass();
+
+/// @brief Create the generic physical-expansion pass
+/// (`--ftqc-expand-physical-generic`).
+///
+/// Unfolds each `!ftqc.logical_qubit` into its physical block of
+/// `!ftqc.qphys_qubit` values and rewrites logical gates / syndrome ops into
+/// `ftqc.qphys.*` physical gates.  Data and ancilla qubits become explicit,
+/// labeled SSA values.  Currently expands the Steane, surface, and hypergraph
+/// product codes, and supports syndome extraction, logical Pauli gates, qubit
+/// initialization and measurement.  Unhandled logical ops cause a pass error
+/// rather than broken IR.
+std::unique_ptr<mlir::Pass> createExpandPhysicalGenericPass();
 
 /// @brief Create the qphys → OpenQASM 3.0 lowering (`--ftqc-qphys-to-qasm3`).
 ///

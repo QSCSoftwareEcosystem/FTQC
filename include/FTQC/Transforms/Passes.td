@@ -596,7 +596,7 @@ def FTQCLowerToLatticeSurgeryPass : Pass<"ftqc-lower-to-lattice-surgery", "mlir:
 //===----------------------------------------------------------------------===//
 
 def FTQCExpandPhysicalPass : Pass<"ftqc-expand-physical", "mlir::func::FuncOp"> {
-  let summary = "Unfold logical qubits into physical qphys data + ancilla qubits";
+  let summary = "Unfold Steane logical qubits into physical qphys data + ancilla qubits";
   let description = [{
     Lowers the logical `ftqc` IR to the physical `ftqc.qphys.*` layer: each
     `!ftqc.logical_qubit` becomes a block of `!ftqc.qphys_qubit` values
@@ -606,6 +606,21 @@ def FTQCExpandPhysicalPass : Pass<"ftqc-expand-physical", "mlir::func::FuncOp"> 
     the back-end lowerings can operate on one physical IR.
   }];
   let dependentDialects = ["mlir::ftqc::FTQCDialect", "mlir::arith::ArithDialect"];
+}
+
+def FTQCExpandPhysicalGenericPass : Pass<"ftqc-expand-physical-generic", "mlir::ModuleOp"> {
+  let summary = "Unfold generic logical qubits into physical qphys data + ancilla qubits";
+  let description = [{
+    Lowers the logical `ftqc` IR to the physical `ftqc.qphys.*` layer: each
+    `!ftqc.logical_qubit` becomes a block of `!ftqc.qphys_qubit` values, and
+    logical gates / syndrome ops become physical gate + measure circuits.
+    Currently syndrome extraction, logical Pauli gates, qubit initialization and
+    measurement are supported, using Steane, surface, or hypergraph product
+    codes.  This materializes the data and ancilla qubits as explicit, labeled
+    SSA values so routing/SWAP and the back-end lowerings can operate on one
+    physical IR.
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
 }
 
 def FTQCQPhysToQASM3Pass : Pass<"ftqc-qphys-to-qasm3", "mlir::ModuleOp"> {

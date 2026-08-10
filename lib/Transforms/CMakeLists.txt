@@ -15,6 +15,7 @@ add_mlir_library(FTQCTransforms
   LowerToQIRns.cpp
   LowerToIntelQSCpp.cpp
   ExpandPhysical.cpp
+  ExpandPhysicalGeneric.cpp
   QPhysToQASM3.cpp
   QPhysToIQMJSON.cpp
   QPhysInitLayout.cpp
