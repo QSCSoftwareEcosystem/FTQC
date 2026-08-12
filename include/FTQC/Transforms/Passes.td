@@ -620,7 +620,7 @@ def FTQCExpandPhysicalGenericPass : Pass<"ftqc-expand-physical-generic", "mlir::
     SSA values so routing/SWAP and the back-end lowerings can operate on one
     physical IR.
   }];
-  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect", "mlir::arith::ArithDialect"];
 }
 
 def FTQCQPhysToQASM3Pass : Pass<"ftqc-qphys-to-qasm3", "mlir::ModuleOp"> {

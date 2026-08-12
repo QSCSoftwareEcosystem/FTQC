@@ -19,6 +19,9 @@
 #include "FTQC/Transforms/Passes.h"
 #include "FTQC/Utils/StabilizerUtils.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -246,12 +249,35 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
   LogicalResult
   matchAndRewrite(LogicalMeasureOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Value> results;
-    for (auto qubit : adaptor.getLogicalQubit()) {
-      results.push_back(QPhysMeasureOp::create(rewriter, op.getLoc(), qubit,
-                                               rewriter.getStringAttr("m")));
+    auto code = op.getLogicalQubit().getType().getCode().makeStabilizerCode();
+    auto &paulis = op.getBasis() == 1 ? code.getLogicalX() : code.getLogicalZ();
+    Location loc = op.getLoc();
+    ValueRange qubits = adaptor.getLogicalQubit();
+    Value acc;
+    for (size_t i = 0; i < qubits.size(); ++i) {
+      Value qubit = qubits[i];
+      switch (paulis[i]) {
+      case Pauli::I:
+        break;
+      case Pauli::Y:
+        qubit = QPhysSOp::create(rewriter, loc, qubit);
+        qubit = QPhysSOp::create(rewriter, loc, qubit);
+        qubit = QPhysSOp::create(rewriter, loc, qubit);
+        [[fallthrough]];
+      case Pauli::X:
+        qubit = QPhysHOp::create(rewriter, loc, qubit);
+        [[fallthrough]];
+      case Pauli::Z:
+        Value bit = QPhysMeasureOp::create(rewriter, loc, qubit,
+                                           rewriter.getStringAttr("m"));
+        acc = acc ? arith::XOrIOp::create(rewriter, loc, acc, bit) : bit;
+        // In principle we should undo the basis change for X and Y measurements
+        // here, but that can be omitted since LogicalMeasureOp releases the
+        // logical qubit.
+        break;
+      }
     }
-    rewriter.replaceOpWithMultiple(op, {std::move(results)});
+    rewriter.replaceOp(op, acc);
     return success();
   }
 };
@@ -269,15 +295,8 @@ struct FTQCExpandPhysicalGenericPassImpl
     auto mod = getOperation();
     auto *ctx = &getContext();
 
-    ConversionTarget target(*ctx);
-    target.addDynamicallyLegalDialect<FTQCDialect>([](Operation *op) {
-      return op->getName().getStringRef().starts_with("ftqc.qphys.");
-    });
-    target.markUnknownOpDynamicallyLegal([](Operation *op) {
-      return true;
-    });
-
     TypeConverter typeConverter;
+    typeConverter.addConversion([](Type type) { return type; });
     typeConverter.addConversion(
         [ctx](LogicalQubitType lqt, SmallVectorImpl<Type> &types) {
           types.resize(lqt.getPhysicalQubits(), QPhysQubitType::get(ctx));
@@ -289,6 +308,17 @@ struct FTQCExpandPhysicalGenericPassImpl
           return success();
         });
 
+    ConversionTarget target(*ctx);
+    target.addDynamicallyLegalDialect<FTQCDialect>([](Operation *op) {
+      return op->getName().getStringRef().starts_with("ftqc.qphys.");
+    });
+    target.addLegalOp<arith::XOrIOp>();
+    target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+      return typeConverter.isSignatureLegal(op.getFunctionType());
+    });
+    target.addDynamicallyLegalOp<func::CallOp, func::ReturnOp>(
+        [&](Operation *op) { return typeConverter.isLegal(op); });
+
     RewritePatternSet patterns(ctx);
     uint64_t nextId = 0;
     patterns.add<InitZeroPattern>(typeConverter, ctx, nextId);
@@ -299,9 +329,15 @@ struct FTQCExpandPhysicalGenericPassImpl
     patterns.add<LogicalZPattern>(typeConverter, ctx);
     patterns.add<LogicalYPattern>(typeConverter, ctx);
     patterns.add<LogicalMeasurePattern>(typeConverter, ctx);
+    populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
+        patterns, typeConverter);
+    populateCallOpTypeConversionPattern(patterns, typeConverter);
+    populateReturnOpTypeConversionPattern(patterns, typeConverter);
 
-    if (applyFullConversion(mod, target, std::move(patterns)).failed())
+    if (failed(applyPartialConversion(mod, target, std::move(patterns)))) {
+      mod.emitError("ftqc-expand-physical-generic: pass failed");
       signalPassFailure();
+    }
   }
 };
 
