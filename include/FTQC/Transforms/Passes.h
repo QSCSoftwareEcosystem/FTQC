@@ -318,6 +318,9 @@ std::unique_ptr<mlir::Pass> createQPhysToQASM3Pass();
 /// LowerToIQMJSON emitter to re-derive the physical (data+ancilla) layout.
 std::unique_ptr<mlir::Pass> createQPhysToIQMJSONPass();
 
+/** Create the physical-qubit initial-layout pass. With no input file, it is a no-op. */
+std::unique_ptr<mlir::Pass> createQPhysInitLayoutPass();
+
 //===----------------------------------------------------------------------===//
 // Pre-built pipelines
 //===----------------------------------------------------------------------===//
