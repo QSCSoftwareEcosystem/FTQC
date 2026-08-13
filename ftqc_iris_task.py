@@ -667,6 +667,10 @@ def main():
     ap.add_argument("--iqm-lib", default=None,
                     help=f"path to {getlibwithext('libiqm-qdmi-device')}; sets IRIS_LIB_IQM if IRIS "
                          "can't find it on its own")
+    ap.add_argument("--ornl_iqm", action="store_true",
+                    help="Enable to use ORNL IQM crystal QPU")
+    ap.add_argument("--cloud_iqm", action="store_true",
+                    help="Enable to use IQM Cloud QPUs")
     ap.add_argument("--base-url", default=None,
                     help="IQM server URL (sets IQM_BASE_URL for the iris_iqm device)")
     ap.add_argument("--keep-turns", action="store_true",
@@ -696,11 +700,26 @@ def main():
         sys.exit(1)
 
     out_file = Path(args.out) if args.out else qasm_file.with_suffix(".physical.mlir")
+    
+    ornl_iqm_url = "https://qccsw.ccs.ornl.gov"
+    cloud_iqm_url = "https://resonance.iqm.tech"
+    server_url = os.environ.get("IQM_BASE_URL", ornl_iqm_url)
+    if args.base_url:
+        server_url = args.base_url
+        os.environ["IQM_BASE_URL"] = server_url
+    elif args.ornl_iqm:
+        args.base_url = ornl_iqm_url
+        server_url = args.base_url
+        os.environ["IQM_BASE_URL"] = server_url
+    elif args.cloud_iqm:
+        args.base_url = cloud_iqm_url
+        server_url = args.base_url
+        os.environ["IQM_BASE_URL"] = server_url
+    else:
+        args.base_url = server_url
 
     # The IQM device + its library must be wired up BEFORE iris.init() (in run()).
     if args.submit_iqm:
-        if args.base_url:
-            os.environ["IQM_BASE_URL"] = args.base_url
         lib = setup_iqm_env(args.iqm_lib)
         if not (os.environ.get("RESONANCE_API_KEY") or os.environ.get("IQM_TOKEN")):
             print("Warning: no RESONANCE_API_KEY / IQM_TOKEN set — the iris_iqm "
@@ -722,7 +741,7 @@ def main():
         submit_iqm=args.submit_iqm, qc_alias=args.qc_alias, shots=args.shots,
         heralding=args.heralding, keep_turns=args.keep_turns,
         pass_fields=pass_fields, physical=args.physical, route=args.route,
-        server_url=os.environ.get("IQM_BASE_URL"),
+        server_url=server_url,
         token=os.environ.get("RESONANCE_API_KEY") or os.environ.get("IQM_TOKEN"))
 
 if __name__ == "__main__":
