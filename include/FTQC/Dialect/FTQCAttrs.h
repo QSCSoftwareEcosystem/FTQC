@@ -10,7 +10,7 @@
 /// ### Enumerations (from FTQCEnums.h.inc)
 /// | Enum | Values | Usage |
 /// |---|---|---|
-/// | `ECCKind` | `steane`, `surface`, `color_code`, `concat`, `repetition`, `compass` | Identifies the error-correcting code family |
+/// | `ECCKind` | `steane`, `surface`, `color_code`, `concat`, `repetition`, `compass`, `hypergraph_product` | Identifies the error-correcting code family |
 /// | `PauliKind` | `I`, `X`, `Y`, `Z` | Single-qubit Pauli operator |
 /// | `SyndromeBasis` | `X`, `Z` | Stabiliser measurement basis |
 /// | `MagicKind` | `T`, `CCZ` | Magic state type |
@@ -35,8 +35,9 @@
 
 #include "FTQC/Utils/StabilizerUtils.h"
 
-// Pull in the enum declarations first.
+// Pull in the enum and interface declarations first.
 #include "FTQC/Dialect/FTQCEnums.h.inc"
+#include "FTQC/Dialect/FTQCAttrInterfaces.h.inc"
 
 #define GET_ATTRDEF_CLASSES
 #include "FTQC/Dialect/FTQCAttrs.h.inc"
@@ -61,14 +62,10 @@ namespace mlir::ftqc {
 ///
 /// @param kind     ECC family (steane, surface, …).
 /// @param distance Code distance d (must be odd for CSS codes).
-/// @param levels   Concatenation depth.
-/// @param code1    First classical code, used to construct some code families.
-/// @param code2    Second classical code, used to construct some code families.
+/// @param levels   Concatenation depth (default 1).
 /// @return Number of physical data qubits per logical qubit.
 unsigned getPhysicalQubitsForCode(ECCKind kind, unsigned distance,
-                                  unsigned levels,
-                                  ClassicalCodeAttr code1,
-                                  ClassicalCodeAttr code2);
+                                  unsigned levels = 1);
 
 /// @brief Ancilla qubit count per syndrome-extraction round.
 ///
@@ -77,12 +74,8 @@ unsigned getPhysicalQubitsForCode(ECCKind kind, unsigned distance,
 ///
 /// @param kind     ECC family.
 /// @param distance Code distance d.
-/// @param code1    First classical code, used to construct some code families.
-/// @param code2    Second classical code, used to construct some code families.
 /// @return Number of ancilla qubits per round.
-unsigned getAncillaQubitsForCode(ECCKind kind, unsigned distance,
-                                 ClassicalCodeAttr code1,
-                                 ClassicalCodeAttr code2);
+unsigned getAncillaQubitsForCode(ECCKind kind, unsigned distance);
 
 /// @brief Approximate fault-tolerance threshold for a code kind.
 ///

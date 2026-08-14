@@ -62,7 +62,7 @@ namespace {
 // Helper: build a Steane ECCAttr
 //---------------------------------------------------------------------
 static ECCAttr makeSteaneAttr(MLIRContext *ctx, unsigned distance = 3) {
-  return ECCAttr::get(ctx, ECCKind::Steane, distance, 1, {}, {});
+  return ECCAttr::get(ctx, ECCKind::Steane, distance, 1);
 }
 
 static LogicalQubitType makeSteaneQubitType(MLIRContext *ctx,
@@ -244,7 +244,7 @@ mlir::Value mlir::ftqc::buildSteaneEncodeCircuit(mlir::OpBuilder &builder,
   // to build the 7-qubit encoding network.
   // Here we return the logical qubit wrapper.
   auto lqType = LogicalQubitType::get(
-      ctx, ECCAttr::get(ctx, ECCKind::Steane, 3, 1, {}, {}));
+      ctx, ECCAttr::get(ctx, ECCKind::Steane, 3, 1));
   return builder.create<EncodeOp>(loc, lqType, physQubit);
 }
 

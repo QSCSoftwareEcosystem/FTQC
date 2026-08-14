@@ -68,6 +68,42 @@ def MagicKindAttr : I32EnumAttr<
   let genSpecializedAttr = 0;
 }
 
+// Error correcting code
+def ECCInterface : AttrInterface<"ECCInterface"> {
+  let description = [{
+    Common interface implemented by error correcting code descriptors.
+  }];
+  let cppNamespace = "::mlir::ftqc";
+
+  let methods = [
+    InterfaceMethod<[{
+      Code family.
+    }], "::mlir::ftqc::ECCKind", "getKind">,
+    InterfaceMethod<[{
+      Code distance.
+    }], "uint32_t", "getDistance">,
+    InterfaceMethod<[{
+      Number of physical qubits per logical qubit.
+    }], "unsigned", "getPhysicalQubits">,
+    InterfaceMethod<[{
+      Number of ancilla qubits for one syndrome-extraction round.
+    }], "unsigned", "getAncillaQubits">,
+    InterfaceMethod<[{
+      StabilizerCode object describing code parameters, stabilizers, and
+      logical X/Z operators.
+    }], "::mlir::ftqc::StabilizerCode", "makeStabilizerCode">,
+    InterfaceMethod<[{
+      Whether the code is a CSS code (allows transversal H/CNOT/X/Z).
+    }], "bool", "isCSS">,
+    InterfaceMethod<[{
+      Whether the code supports a transversal T gate.
+    }], "bool", "supportsTransversalT">,
+    InterfaceMethod<[{
+      Fault-tolerance threshold (approximate, code-dependent).
+    }], "double", "getFTThreshold">,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct-style Attribute Definitions (ODS AttrDef)
 //===----------------------------------------------------------------------===//
@@ -80,8 +116,9 @@ class FTQC_Attr<string name, string mnem, list<Trait> traits = []>
 //----------------------------------------------------------------------
 // ECCAttr — encodes code kind + distance (+ optional levels for concat)
 //----------------------------------------------------------------------
-def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
-  let summary = "Error correcting code descriptor";
+def FTQC_ECCAttr
+    : FTQC_Attr<"ECC", "ecc", [DeclareAttrInterfaceMethods<ECCInterface>]> {
+  let summary = "Error correcting code descriptor for codes parameterized by distance";
   let description = [{
     Describes an error correcting code with its kind and code distance.
 
@@ -97,32 +134,44 @@ def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
   let parameters = (ins
     "ECCKind"   : $kind,
     "uint32_t"  : $distance,
-    DefaultValuedParameter<"uint32_t", "1"> : $levels,
-    OptionalParameter<"ClassicalCodeAttr"> : $code1,
-    OptionalParameter<"ClassicalCodeAttr"> : $code2
+    DefaultValuedParameter<"uint32_t", "1"> : $levels
   );
 
-  let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? (`,` $code1^)? (`,` $code2^)? `>`";
+  let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? `>`";
+  let genVerifyDecl = 1;
+}
 
-  let extraClassDeclaration = [{
-    /// Number of physical qubits per logical qubit.
-    unsigned getPhysicalQubits() const;
-    /// Number of ancilla qubits for one syndrome-extraction round.
-    unsigned getAncillaQubits() const;
-    /// Whether the code is a CSS code (allows transversal H/CNOT/X/Z).
-    bool isCSS() const;
-    /// Whether the code supports a transversal T gate.
-    bool supportsTransversalT() const;
-    /// Fault-tolerance threshold (approximate, code-dependent).
-    double getFTThreshold() const;
-    StabilizerCode makeStabilizerCode() const;
+//----------------------------------------------------------------------
+// HypergraphProductAttr — code family constructed from two classical codes
+//----------------------------------------------------------------------
+def FTQC_HypergraphProductAttr
+    : FTQC_Attr<"HypergraphProduct", "hypergraph_product",
+                [DeclareAttrInterfaceMethods<ECCInterface>]> {
+  let summary = "Error correcting code descriptor for hypergraph product codes";
+  let description = [{
+    Describes a hypergraph product code constructed from two classical codes.
+
+    Example:
+    ```
+    #cc = #ftqc.classical_code<3, [
+      1, 1, 0,
+      0, 1, 1,
+      1, 0, 1
+    ]>
+    #ftqc.hypergraph_product<#cc, #cc> // [[18,2,3]] toric code
+    ```
   }];
+  let parameters = (ins
+    "ClassicalCodeAttr" : $code1,
+    "ClassicalCodeAttr" : $code2
+  );
+  let assemblyFormat = "`<` $code1 `,` $code2 `>`";
 }
 
 //----------------------------------------------------------------------
 // ClassicalCode — a classical linear binary code
 //----------------------------------------------------------------------
-def FTQC_ClassicalCode : FTQC_Attr<"ClassicalCode", "classical_code"> {
+def FTQC_ClassicalCodeAttr : FTQC_Attr<"ClassicalCode", "classical_code"> {
   let summary = "An [n,k,d] classical linear binary code";
   let parameters = (ins
     "uint32_t" : $n,

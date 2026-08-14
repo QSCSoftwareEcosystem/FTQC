@@ -16,9 +16,7 @@ using namespace mlir::ftqc;
 //===----------------------------------------------------------------------===//
 
 unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
-                                              unsigned levels,
-                                              ClassicalCodeAttr code1,
-                                              ClassicalCodeAttr code2) {
+                                              unsigned levels) {
   unsigned base = 0;
   switch (kind) {
   case ECCKind::Steane:
@@ -44,16 +42,17 @@ unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
     base = d * d;   // compass code ~ surface code
     break;
   case ECCKind::HypergraphProduct:
-    base = code1.getN() * code2.getN()
-      + (code1.getH().size()/code1.getN()) * (code2.getH().size()/code2.getN());
+    // We cannot compute the number of physical qubits in a hypergraph product
+    // code, without knowing the two classical codes from which it is
+    // constructed. This shouldn't matter, since this function is currently only
+    // used from ECCAttr::getPhysicalQubits(), and ECCAttr::verify() prevents
+    // using it with this kind.
     break;
   }
   return base;
 }
 
-unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d,
-                                             ClassicalCodeAttr code1,
-                                             ClassicalCodeAttr code2) {
+unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d) {
   switch (kind) {
   case ECCKind::Steane:
     return 6;   // 3 X + 3 Z stabilizers → 6 ancilla per round
@@ -65,9 +64,6 @@ unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d,
     return 6;   // per level (approximate)
   case ECCKind::Repetition:
     return d - 1;
-  case ECCKind::HypergraphProduct:
-    return (code1.getH().size() / code1.getN()) * code2.getN()
-           + code1.getN() * (code2.getH().size() / code2.getN());
   default:
     return d * d;
   }
@@ -103,13 +99,11 @@ bool mlir::ftqc::hasTransversalT(ECCKind kind) {
 //===----------------------------------------------------------------------===//
 
 unsigned ECCAttr::getPhysicalQubits() const {
-  return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels(),
-                                  getCode1(), getCode2());
+  return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels());
 }
 
 unsigned ECCAttr::getAncillaQubits() const {
-  return getAncillaQubitsForCode(getKind(), getDistance(),
-                                 getCode1(), getCode2());
+  return getAncillaQubitsForCode(getKind(), getDistance());
 }
 
 bool ECCAttr::isCSS() const {
@@ -130,12 +124,60 @@ StabilizerCode ECCAttr::makeStabilizerCode() const {
     return StabilizerCode::makeSteane();
   case ECCKind::Surface:
     return StabilizerCode::makeSurface(getDistance());
-  case ECCKind::HypergraphProduct:
-    return StabilizerCode::makeHypergraphProduct(
-        getCode1().makeClassicalCode(), getCode2().makeClassicalCode());
   default:
     return StabilizerCode(); // TODO: Handle remaining cases.
   }
+}
+
+LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                              ECCKind kind, uint32_t distance,
+                              uint32_t levels) {
+  if (kind == ECCKind::HypergraphProduct) {
+    emitError() << "#ftqc.ecc<hypergraph_product, d> is not supported; "
+                   "use #ftqc.hypergraph_product<code1, code2> instead";
+    return failure();
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// HypergraphProductAttr extra methods
+//===----------------------------------------------------------------------===//
+
+StabilizerCode HypergraphProductAttr::makeStabilizerCode() const {
+  return StabilizerCode::makeHypergraphProduct(getCode1().makeClassicalCode(),
+                                               getCode2().makeClassicalCode());
+}
+
+unsigned HypergraphProductAttr::getPhysicalQubits() const {
+  return getCode1().getN() * getCode2().getN() +
+         (getCode1().getH().size() / getCode1().getN()) *
+             (getCode2().getH().size() / getCode2().getN());
+}
+
+unsigned HypergraphProductAttr::getAncillaQubits() const {
+  return (getCode1().getH().size() / getCode1().getN()) * getCode2().getN() +
+         getCode1().getN() * (getCode2().getH().size() / getCode2().getN());
+}
+
+uint32_t HypergraphProductAttr::getDistance() const {
+  return makeStabilizerCode().getD();
+}
+
+ECCKind HypergraphProductAttr::getKind() const {
+  return ECCKind::HypergraphProduct;
+}
+
+bool HypergraphProductAttr::isCSS() const {
+  return true;
+}
+
+bool HypergraphProductAttr::supportsTransversalT() const {
+  return false;
+}
+
+double HypergraphProductAttr::getFTThreshold() const {
+  return mlir::ftqc::getFTThreshold(ECCKind::HypergraphProduct);
 }
 
 //===----------------------------------------------------------------------===//

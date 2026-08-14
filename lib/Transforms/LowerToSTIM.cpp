@@ -153,7 +153,7 @@ private:
   int nextObs    = 0; ///< Next OBSERVABLE_INCLUDE index.
   int measureCount = 0; ///< Total measurements emitted so far.
 
-  DenseMap<ECCAttr, std::unique_ptr<CodeParams>> codeParams;
+  DenseMap<ECCInterface, std::unique_ptr<CodeParams>> codeParams;
 
   //------------------------------------------------------------------------
   // Block management
