@@ -24,11 +24,11 @@
 /// %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
 ///
 /// // Transversal Hadamard
-/// %out = ftqc.logical_h %lq : <<steane, 3>>
+/// %out = ftqc.logical_h %lq : <#ftqc.ecc<steane, 3>>
 ///
 /// // Steane X-stabiliser syndrome extraction
 /// %q2, %syn = ftqc.steane_x_syndrome %out
-///     : <<steane, 3>> -> (<<steane, 3>>, <6>)
+///     : <#ftqc.ecc<steane, 3>> -> (<#ftqc.ecc<steane, 3>>, <6>)
 /// @endcode
 ///
 /// @note Individual operation semantics are documented in FTQCOps.td.

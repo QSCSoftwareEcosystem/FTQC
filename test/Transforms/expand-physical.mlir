@@ -8,11 +8,11 @@
 
 module {
   func.func @hm() -> i1 {
-    %0 = ftqc.init_zero : <<steane, 3>>
-    %1 = ftqc.logical_h %0 : <<steane, 3>>
-    %o, %xs = ftqc.steane_x_syndrome %1 : <<steane, 3>> -> (<<steane, 3>>, <6>)
-    %o2, %zs = ftqc.steane_z_syndrome %o : <<steane, 3>> -> (<<steane, 3>>, <6>)
-    %2 = ftqc.logical_measure %o2 : (<<steane, 3>>) -> i1
+    %0 = ftqc.init_zero : <#ftqc.ecc<steane, 3>>
+    %1 = ftqc.logical_h %0 : <#ftqc.ecc<steane, 3>>
+    %o, %xs = ftqc.steane_x_syndrome %1 : <#ftqc.ecc<steane, 3>> -> (<#ftqc.ecc<steane, 3>>, <6>)
+    %o2, %zs = ftqc.steane_z_syndrome %o : <#ftqc.ecc<steane, 3>> -> (<#ftqc.ecc<steane, 3>>, <6>)
+    %2 = ftqc.logical_measure %o2 : (<#ftqc.ecc<steane, 3>>) -> i1
     return %2 : i1
   }
 }

@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: func @surface_d3_init
 func.func @surface_d3_init() -> !ftqc.logical_qubit<#ftqc.ecc<surface, 3>> {
-  // CHECK: ftqc.init_zero : <<surface, 3>>
+  // CHECK: ftqc.init_zero : <#ftqc.ecc<surface, 3>>
   %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
   func.return %lq : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
 }

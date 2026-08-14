@@ -5,7 +5,7 @@
 func.func @surface_d5() {
   // d=5: 25 data qubits, 24 ancilla. Syndrome width = 2*(25-1) = 48.
   %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-  // CHECK: <<surface, 5>>
+  // CHECK: <#ftqc.ecc<surface, 5>>
   %lq2, %syn = ftqc.surface_round %lq cycles = 5
       : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
       -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>, !ftqc.syndrome<48>)

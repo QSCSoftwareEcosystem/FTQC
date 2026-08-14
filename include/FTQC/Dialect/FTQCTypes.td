@@ -43,7 +43,7 @@ def FTQC_LogicalQubitType : FTQC_Type<"LogicalQubit", "logical_qubit"> {
   }];
 
   let parameters = (ins "ECCAttr":$code);
-  let assemblyFormat = "`<` $code `>`";
+  let assemblyFormat = "`<` qualified($code) `>`";
 
   let extraClassDeclaration = [{
     /// Physical qubit count for this logical qubit.

@@ -151,22 +151,22 @@ A **dialect** bundles:
 
 ### Single-qubit Clifford (transversal on all codes)
 ```mlir
-%out = ftqc.logical_h %q   : <<steane, 3>>
-%out = ftqc.logical_x %q   : <<steane, 3>>
-%out = ftqc.logical_z %q   : <<steane, 3>>
-%out = ftqc.logical_s %q   : <<color_code, 3>>   // transversal on color only
+%out = ftqc.logical_h %q   : <#ftqc.ecc<steane, 3>>
+%out = ftqc.logical_x %q   : <#ftqc.ecc<steane, 3>>
+%out = ftqc.logical_z %q   : <#ftqc.ecc<steane, 3>>
+%out = ftqc.logical_s %q   : <#ftqc.ecc<color_code, 3>>   // transversal on color only
 ```
 
 ### Two-qubit gates
 ```mlir
-%c, %t = ftqc.logical_cnot %ctrl, %tgt  : (<<steane,3>>, <<steane,3>>) -> (...)
-%a, %b = ftqc.logical_cz   %q0,   %q1   : (<<surface,5>>, <<surface,5>>) -> (...)
+%c, %t = ftqc.logical_cnot %ctrl, %tgt  : (<#ftqc.ecc<steane,3>>, <#ftqc.ecc<steane,3>>) -> (...)
+%a, %b = ftqc.logical_cz   %q0,   %q1   : (<#ftqc.ecc<surface,5>>, <#ftqc.ecc<surface,5>>) -> (...)
 ```
 
 ### Non-Clifford — requires magic state injection
 ```mlir
 %ms  = ftqc.prepare_magic_t : !ftqc.magic_state
-%out = ftqc.logical_t %q, %ms : (<<steane,3>>, !ftqc.magic_state) -> <<steane,3>>
+%out = ftqc.logical_t %q, %ms : (<#ftqc.ecc<steane,3>>, !ftqc.magic_state) -> <#ftqc.ecc<steane,3>>
 
 %ccz = ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
 %a, %b, %c = ftqc.logical_toffoli %c0, %c1, %t, %ccz : (...)
@@ -181,22 +181,22 @@ After each logical gate, syndrome rounds detect errors before they propagate.
 ### Steane Method — transversal ancilla measurement
 ```mlir
 // X-type check: detects Z errors
-%q2, %xsyn = ftqc.steane_x_syndrome %q : <<steane,3>> -> (<<steane,3>>, <6>)
+%q2, %xsyn = ftqc.steane_x_syndrome %q : <#ftqc.ecc<steane,3>> -> (<#ftqc.ecc<steane,3>>, <6>)
 
 // Z-type check: detects X errors
-%q3, %zsyn = ftqc.steane_z_syndrome %q2 : <<steane,3>> -> (<<steane,3>>, <6>)
+%q3, %zsyn = ftqc.steane_z_syndrome %q2 : <#ftqc.ecc<steane,3>> -> (<#ftqc.ecc<steane,3>>, <6>)
 ```
 
 ### Surface Code Rounds
 ```mlir
 %q2, %syn = ftqc.surface_round %q cycles = 3
-    : <<surface,5>> -> (<<surface,5>>, <48>)
+    : <#ftqc.ecc<surface,5>> -> (<#ftqc.ecc<surface,5>>, <48>)
 ```
 
 ### Error Correction
 ```mlir
 // Inline correction (syndromes decoded immediately)
-%corrected = ftqc.correct %q, %xsyn : (<<steane,3>>, <6>) -> <<steane,3>>
+%corrected = ftqc.correct %q, %xsyn : (<#ftqc.ecc<steane,3>>, <6>) -> <#ftqc.ecc<steane,3>>
 
 // Deferred correction via Pauli frame tracking
 %frame = ftqc.create_frame : !ftqc.pauli_frame<1>
@@ -786,7 +786,7 @@ Checks whether the physical error rate is below the code threshold.
 
 ```mlir
 // p = 1e-3 < 1% → circuit is below threshold, no warning
-ftqc.init_zero : <<steane, 3>>
+ftqc.init_zero : <#ftqc.ecc<steane, 3>>
 ```
 
 ### Resource Estimation (`--ftqc-resource-estimate`)
@@ -812,11 +812,11 @@ func.func @qft3_steane(
     %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, ...
 ) -> (...) {
   // H on q0
-  %h0 = ftqc.logical_h %q0 : <<steane, 3>>
+  %h0 = ftqc.logical_h %q0 : <#ftqc.ecc<steane, 3>>
 
   // Controlled-S (Rz(π/2)) via T-gate injection
   %ms0 = ftqc.prepare_magic_t : !ftqc.magic_state
-  %t0a = ftqc.logical_t %h0, %ms0  : (<<steane,3>>, !ftqc.magic_state) -> <<steane,3>>
+  %t0a = ftqc.logical_t %h0, %ms0  : (<#ftqc.ecc<steane,3>>, !ftqc.magic_state) -> <#ftqc.ecc<steane,3>>
   %c0a, %t1a = ftqc.logical_cnot %q1, %t0a : ...
 
   // ... 5 more T gates, 9 CNOTs, 3 Hadamards, 1 SWAP (3 CNOTs)
@@ -986,7 +986,7 @@ llvm-lit build/test/Transforms \
 ```
 
 Key test patterns validated:
-- Type printer abbreviations (`<<steane, 3>>`, `<6>`, `<CCZ>`)
+- Type printer abbreviations (`<#ftqc.ecc<steane, 3>>`, `<6>`, `<CCZ>`)
 - Full pipeline end-to-end on non-trivial circuits
 - `--ftqc-magic-distill` expands `prepare_magic_t` → 15 noisy inputs + `distill_15to1`
 - QASM3 gate names, qubit declarations, FT-op comments

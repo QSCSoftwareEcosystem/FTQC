@@ -31,12 +31,12 @@
 
 module {
   func.func @bell_state_ft() -> (i1, i1) {
-    %q0 = ftqc.init_zero : <<steane, 3>>
-    %q1 = ftqc.init_zero : <<steane, 3>>
-    %q0h = ftqc.logical_h %q0 : <<steane, 3>>
-    %c, %t = ftqc.logical_cnot %q0h, %q1 : (<<steane, 3>>, <<steane, 3>>) -> (<<steane, 3>>, <<steane, 3>>)
-    %m0 = ftqc.logical_measure %c : (<<steane, 3>>) -> i1
-    %m1 = ftqc.logical_measure %t : (<<steane, 3>>) -> i1
+    %q0 = ftqc.init_zero : <#ftqc.ecc<steane, 3>>
+    %q1 = ftqc.init_zero : <#ftqc.ecc<steane, 3>>
+    %q0h = ftqc.logical_h %q0 : <#ftqc.ecc<steane, 3>>
+    %c, %t = ftqc.logical_cnot %q0h, %q1 : (<#ftqc.ecc<steane, 3>>, <#ftqc.ecc<steane, 3>>) -> (<#ftqc.ecc<steane, 3>>, <#ftqc.ecc<steane, 3>>)
+    %m0 = ftqc.logical_measure %c : (<#ftqc.ecc<steane, 3>>) -> i1
+    %m1 = ftqc.logical_measure %t : (<#ftqc.ecc<steane, 3>>) -> i1
     return %m0, %m1 : i1, i1
   }
 }

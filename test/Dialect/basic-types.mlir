@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: func @test_basic_types
 func.func @test_basic_types() {
-  // CHECK: <<steane, 3>>
+  // CHECK: <#ftqc.ecc<steane, 3>>
   %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
 
   // CHECK: <6>

@@ -5,7 +5,7 @@
 func.func @extract_syndrome() {
   %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
   // CHECK: ftqc.extract_syndrome
-  // CHECK-SAME: <<steane, 3>>
+  // CHECK-SAME: <#ftqc.ecc<steane, 3>>
   // CHECK-SAME: <6>
   %lq2, %syn = ftqc.extract_syndrome %lq
       : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
