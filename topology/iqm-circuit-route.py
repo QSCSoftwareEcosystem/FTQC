@@ -111,7 +111,7 @@ def qubit_index(qubit_name: str) -> int:
     return qnum - 1
 
 
-def build_quantum_circuit(circuit: dict[str, Any]) -> QuantumCircuit:
+def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list[int]]:
     instructions = circuit.get("instructions", [])
     if not isinstance(instructions, list):
         raise ValueError("'circuit.instructions' must be a JSON array")
@@ -130,8 +130,10 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> QuantumCircuit:
     if not used_qubits:
         raise ValueError("The input circuit does not contain any qubits")
 
-    idx = {q: qubit_index(q) for q in used_qubits}
-    num_qubits = max(idx.values()) + 1
+    input_qubit_mapping = {q: qubit_index(q) for q in used_qubits}
+    num_qubits = len(input_qubit_mapping)
+    internal_qubit_mapping = {q: i for i, q in enumerate(sorted(used_qubits))}
+    initial_layout = [input_qubit_mapping[q] for q in sorted(used_qubits)]
 
     nmeas = sum(1 for ins in instructions if ins.get("name", "").lower() == "measure")
     qc = QuantumCircuit(num_qubits, nmeas, name=circuit.get("name", "circuit"))
@@ -142,7 +144,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> QuantumCircuit:
         name = ins.get("name", "").lower()
         args = ins.get("args", {})
         locus = ins.get("locus", [])
-        loc = [idx[q] for q in locus]
+        loc = [internal_qubit_mapping[q] for q in locus]
 
         if name == "prx":
             if len(loc) != 1:
@@ -181,7 +183,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> QuantumCircuit:
                 "This script currently accepts prx, cz, and measure."
             )
 
-    return qc
+    return qc, initial_layout
 
 
 def get_backend(url: str, token: str | None, alias: str):
@@ -392,10 +394,12 @@ def main() -> int:
         token = args.token
         alias = args.qc_alias or os.environ.get("IQM_QC_ALIAS", "default")
 
-        qc = build_quantum_circuit(input_circuit)
+        qc, initial_layout = build_quantum_circuit(input_circuit)
 
         backend = get_backend(url, token, alias)
-        transpiled_qc = transpile_to_IQM(qc, backend)
+        print(f"Initial layout: {qc.layout}")
+        transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
+        print(f"Final layout: {transpiled_qc.layout}")
         serialized = backend.serialize_circuit(transpiled_qc)
 
         serialized_instructions = [
