@@ -91,7 +91,7 @@ def ECCInterface : AttrInterface<"ECCInterface"> {
     InterfaceMethod<[{
       StabilizerCode object describing code parameters, stabilizers, and
       logical X/Z operators.
-    }], "::mlir::ftqc::StabilizerCode", "makeStabilizerCode">,
+    }], "const ::mlir::ftqc::StabilizerCode &", "getStabilizerCode">,
     InterfaceMethod<[{
       Whether the code is a CSS code (allows transversal H/CNOT/X/Z).
     }], "bool", "isCSS">,
@@ -139,6 +139,7 @@ def FTQC_ECCAttr
 
   let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? `>`";
   let genVerifyDecl = 1;
+  let genStorageClass = 0;
 }
 
 //----------------------------------------------------------------------
@@ -166,6 +167,7 @@ def FTQC_HypergraphProductAttr
     "ClassicalCodeAttr" : $code2
   );
   let assemblyFormat = "`<` $code1 `,` $code2 `>`";
+  let genStorageClass = 0;
 }
 
 //----------------------------------------------------------------------

@@ -176,7 +176,7 @@ private:
     case ECCKind::Surface:
     case ECCKind::HypergraphProduct:
       if (!codeParams.contains(code)) {
-        StabilizerCode stabCode = code.makeStabilizerCode();
+        StabilizerCode stabCode = code.getStabilizerCode();
         auto params = std::make_unique<CodeParams>();
         params->kind = code.getKind();
         params->numData = stabCode.getN();

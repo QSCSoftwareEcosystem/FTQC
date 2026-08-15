@@ -39,8 +39,15 @@
 #include "FTQC/Dialect/FTQCEnums.h.inc"
 #include "FTQC/Dialect/FTQCAttrInterfaces.h.inc"
 
+namespace mlir::ftqc::detail {
+struct ECCAttrStorage;
+struct HypergraphProductAttrStorage;
+}
+
 #define GET_ATTRDEF_CLASSES
 #include "FTQC/Dialect/FTQCAttrs.h.inc"
+
+#include <tuple>
 
 namespace mlir::ftqc {
 
@@ -112,6 +119,45 @@ bool isCSSCode(ECCKind kind);
 /// @param kind ECC family.
 /// @return True only for `ECCKind::ColorCode` (3D variant).
 bool hasTransversalT(ECCKind kind);
+
+namespace detail {
+
+// MLIR creates a unique instance of the *Storage type for each distinct ECC
+// descriptor attribute. These structs would usually be generated from the
+// TableGen definitions, but we implement them manually to add a StabilizerCode
+// member. This gives us a place to cache the StabilizerCode after building it
+// only once for each distinct code.
+
+template <typename Derived, typename... Params>
+struct AttributeStorageWithStabilizerCode : public AttributeStorage {
+  using KeyTy = std::tuple<Params...>;
+
+  AttributeStorageWithStabilizerCode(const KeyTy &key) : key(key) {}
+
+  static Derived *construct(AttributeStorageAllocator &allocator,
+                            const KeyTy &key) {
+    return new (allocator.allocate<Derived>()) Derived(key);
+  }
+
+  bool operator==(const KeyTy &key) const { return this->key == key; }
+
+  KeyTy getAsKey() const { return key; }
+
+  KeyTy key;
+  StabilizerCode stabilizerCode;
+};
+
+struct ECCAttrStorage : public AttributeStorageWithStabilizerCode<
+    ECCAttrStorage, ECCKind, uint32_t, uint32_t> {
+  ECCAttrStorage(const KeyTy &key);
+};
+
+struct HypergraphProductAttrStorage : public AttributeStorageWithStabilizerCode<
+    HypergraphProductAttrStorage, ClassicalCodeAttr, ClassicalCodeAttr> {
+  HypergraphProductAttrStorage(const KeyTy &key);
+};
+
+} // namespace detail
 
 } // namespace mlir::ftqc
 

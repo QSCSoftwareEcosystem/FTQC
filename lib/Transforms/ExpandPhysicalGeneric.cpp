@@ -126,7 +126,7 @@ struct InitZeroPattern : public OpConversionPattern<InitZeroOp> {
       qubits.push_back(qubit);
     }
     // TODO: Use a fault-tolerant encoding scheme.
-    measureXSyndrome(op.getType().getCode().makeStabilizerCode(), qubits,
+    measureXSyndrome(op.getType().getCode().getStabilizerCode(), qubits,
                      syndrome, nextId, rewriter, loc);
     rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
     return success();
@@ -155,7 +155,7 @@ struct InitPlusPattern : public OpConversionPattern<InitPlusOp> {
       qubits.push_back(qubit);
     }
     // TODO: Use a fault-tolerant encoding scheme.
-    measureZSyndrome(op.getType().getCode().makeStabilizerCode(), qubits,
+    measureZSyndrome(op.getType().getCode().getStabilizerCode(), qubits,
                      syndrome, nextId, rewriter, loc);
     rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
     return success();
@@ -172,7 +172,7 @@ struct ExtractSyndromePattern : public OpConversionPattern<ExtractSyndromeOp> {
   LogicalResult
   matchAndRewrite(ExtractSyndromeOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getLogicalQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> qubits = adaptor.getLogicalQubit(), syndrome;
     measureXSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
     measureZSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
@@ -191,7 +191,7 @@ struct ECRoundPattern : public OpConversionPattern<ECRoundOp> {
   LogicalResult
   matchAndRewrite(ECRoundOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getLogicalQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> qubits = adaptor.getLogicalQubit(), syndrome;
     measureXSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
     measureZSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
@@ -206,7 +206,7 @@ struct LogicalXPattern : public OpConversionPattern<LogicalXOp> {
   LogicalResult
   matchAndRewrite(LogicalXOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> qubits = adaptor.getQubit();
     applyPauliString(code.getLogicalX(), qubits, rewriter, op.getLoc());
     rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
@@ -220,7 +220,7 @@ struct LogicalZPattern : public OpConversionPattern<LogicalZOp> {
   LogicalResult
   matchAndRewrite(LogicalZOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> qubits = adaptor.getQubit();
     applyPauliString(code.getLogicalZ(), qubits, rewriter, op.getLoc());
     rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
@@ -234,7 +234,7 @@ struct LogicalYPattern : public OpConversionPattern<LogicalYOp> {
   LogicalResult
   matchAndRewrite(LogicalYOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> qubits = adaptor.getQubit();
     applyPauliString(code.getLogicalX(), qubits, rewriter, op.getLoc());
     applyPauliString(code.getLogicalZ(), qubits, rewriter, op.getLoc());
@@ -249,7 +249,7 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
   LogicalResult
   matchAndRewrite(LogicalMeasureOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto code = op.getLogicalQubit().getType().getCode().makeStabilizerCode();
+    auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
     auto &paulis = op.getBasis() == 1 ? code.getLogicalX() : code.getLogicalZ();
     Location loc = op.getLoc();
     ValueRange qubits = adaptor.getLogicalQubit();

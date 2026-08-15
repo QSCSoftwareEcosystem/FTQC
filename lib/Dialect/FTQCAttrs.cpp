@@ -95,8 +95,24 @@ bool mlir::ftqc::hasTransversalT(ECCKind kind) {
 }
 
 //===----------------------------------------------------------------------===//
-// ECCAttr extra methods
+// ECCAttr methods
 //===----------------------------------------------------------------------===//
+
+ECCKind ECCAttr::getKind() const {
+  return std::get<0>(getImpl()->key);
+}
+
+uint32_t ECCAttr::getDistance() const {
+  return std::get<1>(getImpl()->key);
+}
+
+uint32_t ECCAttr::getLevels() const {
+  return std::get<2>(getImpl()->key);
+}
+
+const StabilizerCode &ECCAttr::getStabilizerCode() const {
+  return getImpl()->stabilizerCode;
+}
 
 unsigned ECCAttr::getPhysicalQubits() const {
   return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels());
@@ -118,17 +134,6 @@ double ECCAttr::getFTThreshold() const {
   return mlir::ftqc::getFTThreshold(getKind());
 }
 
-StabilizerCode ECCAttr::makeStabilizerCode() const {
-  switch (getKind()) {
-  case ECCKind::Steane:
-    return StabilizerCode::makeSteane();
-  case ECCKind::Surface:
-    return StabilizerCode::makeSurface(getDistance());
-  default:
-    return StabilizerCode(); // TODO: Handle remaining cases.
-  }
-}
-
 LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                               ECCKind kind, uint32_t distance,
                               uint32_t levels) {
@@ -140,28 +145,47 @@ LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key)
+    : AttributeStorageWithStabilizerCode(key) {
+  ECCKind kind = std::get<0>(key);
+  uint32_t distance = std::get<1>(key);
+  switch (kind) {
+  case ECCKind::Steane:
+    stabilizerCode = StabilizerCode::makeSteane();
+    break;
+  case ECCKind::Surface:
+    stabilizerCode = StabilizerCode::makeSurface(distance);
+    break;
+  // TODO: Handle remaining cases.
+  }
+}
+
 //===----------------------------------------------------------------------===//
-// HypergraphProductAttr extra methods
+// HypergraphProductAttr methods
 //===----------------------------------------------------------------------===//
 
-StabilizerCode HypergraphProductAttr::makeStabilizerCode() const {
-  return StabilizerCode::makeHypergraphProduct(getCode1().makeClassicalCode(),
-                                               getCode2().makeClassicalCode());
+ClassicalCodeAttr HypergraphProductAttr::getCode1() const {
+  return std::get<0>(getImpl()->key);
+}
+
+ClassicalCodeAttr HypergraphProductAttr::getCode2() const {
+  return std::get<1>(getImpl()->key);
+}
+
+const StabilizerCode &HypergraphProductAttr::getStabilizerCode() const {
+  return getImpl()->stabilizerCode;
 }
 
 unsigned HypergraphProductAttr::getPhysicalQubits() const {
-  return getCode1().getN() * getCode2().getN() +
-         (getCode1().getH().size() / getCode1().getN()) *
-             (getCode2().getH().size() / getCode2().getN());
+  return getStabilizerCode().getN();
 }
 
 unsigned HypergraphProductAttr::getAncillaQubits() const {
-  return (getCode1().getH().size() / getCode1().getN()) * getCode2().getN() +
-         getCode1().getN() * (getCode2().getH().size() / getCode2().getN());
+  return getStabilizerCode().getNumStabilizers();
 }
 
 uint32_t HypergraphProductAttr::getDistance() const {
-  return makeStabilizerCode().getD();
+  return getStabilizerCode().getD();
 }
 
 ECCKind HypergraphProductAttr::getKind() const {
@@ -178,6 +202,14 @@ bool HypergraphProductAttr::supportsTransversalT() const {
 
 double HypergraphProductAttr::getFTThreshold() const {
   return mlir::ftqc::getFTThreshold(ECCKind::HypergraphProduct);
+}
+
+ftqc::detail::HypergraphProductAttrStorage::HypergraphProductAttrStorage(
+    const KeyTy &key)
+    : AttributeStorageWithStabilizerCode(key) {
+  stabilizerCode = StabilizerCode::makeHypergraphProduct(
+      std::get<0>(key).makeClassicalCode(),
+      std::get<1>(key).makeClassicalCode());
 }
 
 //===----------------------------------------------------------------------===//
