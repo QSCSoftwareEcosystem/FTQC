@@ -177,10 +177,15 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
             qc.measure(loc[0], classical_bit)
             classical_bit += 1
 
+        elif name == "reset":
+            if len(loc) != 1:
+                raise ValueError(f"'reset' requires one qubit: {ins}")
+            qc.reset(loc[0])
+
         else:
             raise ValueError(
                 f"Unsupported input IQM instruction {ins.get('name')!r}. "
-                "This script currently accepts prx, cz, and measure."
+                "This script currently accepts prx, cz, reset, and measure."
             )
 
     return qc, initial_layout
