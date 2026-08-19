@@ -46,13 +46,7 @@ endif()
 if(DEFINED LLVM_BUILD_DIR AND NOT DEFINED MLIR_DIR)
   set(MLIR_DIR "${LLVM_BUILD_DIR}/lib/cmake/mlir")
   set(LLVM_DIR "${LLVM_BUILD_DIR}/lib/cmake/llvm")
-endif()
-
-# Point at llvm-lit from the llvm-project.c014 build if not overridden.
-if(NOT DEFINED LLVM_EXTERNAL_LIT)
-  set(LLVM_EXTERNAL_LIT
-    "/home/nqx/Quantum/quantum-resources/llvm-project.c014/build/bin/llvm-lit"
-    CACHE STRING "Path to the llvm-lit executable")
+  set(LLVM_EXTERNAL_LIT "${LLVM_BUILD_DIR}/build/bin/llvm-lit")
 endif()
 
 find_package(MLIR REQUIRED CONFIG)
