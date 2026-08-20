@@ -43,6 +43,11 @@ add_mlir_library(ftqc_capi SHARED PARTIAL_SOURCES_INTENDED
 # QASM3Importer.h lives alongside ftqc_capi.cpp in src/.
 target_include_directories(ftqc_capi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The importer uses exceptions to abandon malformed input lines.  Override
+# LLVM's default -fno-exceptions without enabling RTTI (LLVM was built without
+# RTTI, so enabling it here would cause missing typeinfo symbols at link time).
+target_compile_options(ftqc_capi PRIVATE -fexceptions)
+
 set_target_properties(ftqc_capi PROPERTIES
   OUTPUT_NAME ftqc
   VERSION     1.0.0
@@ -64,6 +69,7 @@ install(FILES ${CMAKE_SOURCE_DIR}/include/FTQC/ftqc_capi.h
 add_llvm_executable(ftqc-opt PARTIAL_SOURCES_INTENDED ftqc-opt.cpp)
 
 llvm_update_compile_flags(ftqc-opt)
+target_compile_options(ftqc-opt PRIVATE -fexceptions)
 
 # Reuse all MLIR/FTQC deps transitively through ftqc_capi; only add
 # MLIROptLib which is specific to the ftqc-opt driver (not needed in the lib).
@@ -86,4 +92,5 @@ install(TARGETS ftqc-opt DESTINATION bin)
 set(LLVM_LINK_COMPONENTS)   # no LLVM libs needed
 add_llvm_executable(qasm3-import qasm3-import.cpp)
 llvm_update_compile_flags(qasm3-import)
+target_compile_options(qasm3-import PRIVATE -fexceptions)
 install(TARGETS qasm3-import DESTINATION bin)
