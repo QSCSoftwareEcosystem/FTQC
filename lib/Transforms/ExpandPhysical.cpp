@@ -163,6 +163,11 @@ struct FTQCExpandPhysicalPassImpl
         Block data;
         for (int i = 0; i < STEANE_DATA; ++i)
           data.push_back(alloc(b, loc, nextId++, "data"));
+        for (int i = 0; i < STEANE_ANC; ++i) {
+          auto anc = alloc(b, loc, nextId++, "anc");
+          data.push_back(anc);
+          initializedAncilla.push_back(anc);
+        }
         // |0_L> encoder: H on each stabilizer check qubit, then CX to support.
         for (auto &stab : STEANE_STABS) {
           int chk = stab[0];
@@ -174,11 +179,6 @@ struct FTQCExpandPhysicalPassImpl
               data[t] = to;
             }
         }
-        for (int i = 0; i < STEANE_ANC; ++i) {
-          auto anc = alloc(b, loc, nextId++, "anc");
-          data.push_back(anc);
-          initializedAncilla.push_back(anc);
-        }
         mapResultBlock(init.getResult(), std::move(data));
         ancIndices[init.getResult()] = 0; // Start ancilla index at 0 for this logical qubit
         toErase.push_back(op);
@@ -186,6 +186,11 @@ struct FTQCExpandPhysicalPassImpl
         Block data;
         for (int i = 0; i < STEANE_DATA; ++i)
           data.push_back(alloc(b, loc, nextId++, "data"));
+        for (int i = 0; i < STEANE_ANC; ++i) {
+          auto anc = alloc(b, loc, nextId++, "anc");
+          data.push_back(anc);
+          initializedAncilla.push_back(anc);
+        }
         for (auto &stab : STEANE_STABS) {
           int chk = stab[0];
           data[chk] = h(b, loc, data[chk]);
@@ -197,11 +202,6 @@ struct FTQCExpandPhysicalPassImpl
             }
         }
         for (auto &q : data) q = h(b, loc, q); // |+_L> = transversal H
-        for (int i = 0; i < STEANE_ANC; ++i) {
-          auto anc = alloc(b, loc, nextId++, "anc");
-          data.push_back(anc);
-          initializedAncilla.push_back(anc);
-        }
         mapResultBlock(init.getResult(), std::move(data));
         ancIndices[init.getResult()] = 0; // Start ancilla index at 0 for this logical qubit
         toErase.push_back(op);
