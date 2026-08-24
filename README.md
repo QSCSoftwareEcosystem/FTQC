@@ -21,6 +21,7 @@ style: |
 ---
 
 <!-- _class: lead -->
+![Project Logo](docs/logo.jpg)
 
 # FTQC MLIR Dialect
 
