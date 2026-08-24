@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--qec-name",
-        required=True,
+        default="steane",
         help='QEC code name, for example "steane", "surface", or "color_code".',
     )
     parser.add_argument(
@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-init-layout",
-        required=True,
+        default=Path("init-layout.json"),
         type=Path,
         help="Output JSON file for the selected initial layout.",
     )
