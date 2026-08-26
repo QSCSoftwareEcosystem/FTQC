@@ -75,6 +75,66 @@ A **dialect** bundles:
 
 ---
 
+## Two Levels of Dialects
+
+FTQC is organized as **two dialect layers**, bridged by a single lowering pass. Level 1 reasons about *error-corrected* qubits (physical qubits are implicit); Level 2 makes the *hardware* qubits — data **and** ancilla — explicit so every back end lowers one shared physical IR instead of re-deriving the layout in each emitter.
+
+```
+        LEVEL 1 — LOGICAL  (ftqc.*)                 LEVEL 2 — PHYSICAL  (ftqc.qphys.*)
+┌───────────────────────────────────┐   expand   ┌───────────────────────────────────┐
+│ error-corrected qubits, transversal│ ─physical▶ │ hardware qubits (7 data + 6 anc),  │
+│ gates, syndromes, magic states     │            │ physical gates + measurement       │
+└───────────────────────────────────┘            └───────────────────────────────────┘
+        │ encode · protect · compute · estimate            │ map · route · emit
+        ▼                                                  ▼
+   resource estimate / STIM / QIR / QASM3            IQM JSON / QASM3  (per-device)
+```
+
+Progressive lowering: `source → Level 1 (encode, protect, compute, estimate) → --ftqc-expand-physical → Level 2 (physical circuit) → hardware-aware initial mapping → back end (IQM JSON / QASM3 / STIM)`.
+
+### Level 1 — Logical dialect (`ftqc.*`)
+
+Reasons about error-corrected qubits. The ECC code and distance are part of the **type**, so the IR is type-safe about error correction.
+
+- **Types** — `!ftqc.logical_qubit<code>`, `!ftqc.syndrome<n>`, `!ftqc.magic_state`, `!ftqc.pauli_frame<n>`
+- **Passes**
+
+  | Pass | Role |
+  |------|------|
+  | `--ftqc-steane-encode` / `--ftqc-surface-encode` / `--ftqc-color-encode` | Encode each qubit into the chosen ECC; wrap gates in `ftqc.ec_round` |
+  | `--ftqc-insert-syndrome` | Insert `steane_x/z_syndrome` extraction between logical gates |
+  | `--ftqc-transversal-gates` | Verify gates are transversal for the code; decompose non-transversal ones (Steane `S → T·T`) via magic injection |
+  | `--ftqc-magic-distill` | Replace a noisy `prepare_magic_t` with a 15-to-1 distillation circuit |
+  | `--ftqc-insert-correction` | Insert `ftqc.correct` after each syndrome extraction |
+  | `--ftqc-pauli-frame-opt` | Defer physical corrections into classical Pauli-frame tracking (optional) |
+  | `--ftqc-resource-estimate` | Annotate the function with logical/physical qubit & gate counts |
+  | `--ftqc-fault-path` / `--ftqc-threshold` | Analysis: leading-order fault paths; pseudo-threshold estimate |
+
+  Convenience: `--ftqc-steane-pipeline`, `--ftqc-surface-pipeline` chain the Level-1 stages.
+
+### Bridge — `--ftqc-expand-physical`
+
+The single L1 → L2 lowering pass. Unfolds each `!ftqc.logical_qubit` into a block of `!ftqc.qphys_qubit` values (Steane `[[7,1,3]]`: **7 data + 3 X-ancilla + 3 Z-ancilla**) and rewrites logical gates and syndrome ops into explicit physical gate + measure circuits.
+
+### Level 2 — Physical dialect (`ftqc.qphys.*`)
+
+Hardware qubits with ordinary quantum value-semantics; the substrate every back end emits.
+
+- **Type** — `!ftqc.qphys_qubit` (one physical qubit)
+- **Ops** — `qphys.alloc {id, role="data"|"x_anc"|"z_anc"}`, `qphys.{reset,h,x,z,s,t,cx,cz,swap}`, `qphys.measure`
+- **Passes**
+
+  | Pass | Role |
+  |------|------|
+  | `--ftqc-qphys-init-layout="input-file=layout.json"` | Rewrite each `qphys.alloc` `id` to a hardware qubit index from an initial-layout JSON |
+  | `--ftqc-qphys-to-iqm-json` | Emit IQM JSON — locus `QB<id+1>`, native gates `prx` / `cz` / `measure` |
+  | `--ftqc-qphys-to-qasm3` | Emit physical-qubit OpenQASM 3.0 |
+  | routing / SWAP (via `qphys.swap`) | Map onto a device coupling graph *(planned)* |
+
+> The older **direct** back ends (`--ftqc-lower-to-{qasm3,stim,qir,iqm-json,iqs-cpp,lattice-surgery,quantum}`) still lower straight from Level 1; `--ftqc-lower-to-iqm-json="physical=true"` expands the physical layout *inside* the emitter. The Level-2 `qphys` path factors that expansion out into shared IR so multiple back ends reuse it.
+
+---
+
 ## FTQC Type System
 
 ### Logical Qubits — parameterized by ECC code and distance
@@ -262,11 +322,19 @@ Replace ftqc.correct with deferred Pauli frame tracking
     ▼  --ftqc-resource-estimate
 Count T/CNOT/EC rounds; derive physical qubits + logical error rate from ECC type
     │
-    ├──▶  --ftqc-lower-to-qasm3    → OpenQASM 3.0 text
+    ├──▶  --ftqc-lower-to-qasm3    → OpenQASM 3.0 text        (direct, Level 1)
     ├──▶  --ftqc-lower-to-stim     → STIM stabilizer circuit + MWPM QEC
     ├──▶  --ftqc-lower-to-qir      → QIR Base Profile LLVM IR
-    └──▶  --ftqc-lower-to-iqm-json → IQM Resonance hardware JSON
+    ├──▶  --ftqc-lower-to-iqm-json → IQM Resonance hardware JSON
+    │
+    └──▶  --ftqc-expand-physical   → Level 2 physical dialect (ftqc.qphys.*)
+              │
+              ▼  --ftqc-qphys-init-layout  (optional hardware mapping)
+              ├──▶  --ftqc-qphys-to-iqm-json → IQM JSON from shared physical IR
+              └──▶  --ftqc-qphys-to-qasm3    → physical-qubit OpenQASM 3.0
 ```
+
+See [Two Levels of Dialects](#two-levels-of-dialects) for the per-level type/op/pass breakdown.
 
 ---
 
