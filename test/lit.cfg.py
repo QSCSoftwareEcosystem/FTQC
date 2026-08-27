@@ -4,6 +4,8 @@ import lit.formats
 import lit.llvm
 import os
 import shutil
+import subprocess
+import sys
 
 # Initialize the LLVM lit helper — idempotent if the site config already ran it.
 lit.llvm.initialize(lit_config, config)
@@ -12,7 +14,7 @@ from lit.llvm import llvm_config
 config.name = "FTQC"
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
-config.suffixes = [".mlir"]
+config.suffixes = [".mlir", ".py"]
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root   = getattr(config, "ftqc_obj_root", config.test_source_root)
 
@@ -80,3 +82,65 @@ if _ftqc_tools:
     config.environment["PATH"] = _ftqc_tools + os.pathsep + _base_path
 else:
     config.environment["PATH"] = _base_path
+
+# ── Optional LightStim adapter regression tests ───────────────────────────────
+# Keep the normal FTQC suite usable without the external LightStim checkout.
+# When its Python runtime is importable, discover and run the Python adapter test
+# through the same llvm-lit/check-ftqc entry point as the MLIR regressions.
+_python_executable = (
+    os.environ.get("LIGHTSTIM_PYTHON")
+    or getattr(config, "python_executable", "")
+    or sys.executable
+)
+
+_lightstim_env = os.environ.copy()
+_lightstim_candidates = []
+if os.environ.get("LIGHTSTIM_REPO"):
+    _lightstim_candidates.append(os.environ["LIGHTSTIM_REPO"])
+else:
+    _source_root = getattr(
+        config,
+        "ftqc_src_root",
+        os.path.dirname(config.test_source_root),
+    )
+    _lightstim_candidates.extend(
+        os.path.join(os.path.dirname(_source_root), name)
+        for name in ("LightStim", "lightstim")
+    )
+
+for _candidate in _lightstim_candidates:
+    _candidate = os.path.abspath(os.path.expanduser(_candidate))
+    if os.path.isfile(os.path.join(_candidate, "lightstim", "__init__.py")):
+        _existing_pythonpath = _lightstim_env.get("PYTHONPATH", "")
+        _lightstim_env["PYTHONPATH"] = (
+            _candidate
+            + (os.pathsep + _existing_pythonpath if _existing_pythonpath else "")
+        )
+        if not os.environ.get("LIGHTSTIM_PYTHON"):
+            for _venv_name in ("venv", ".venv"):
+                _venv_python = os.path.join(_candidate, _venv_name, "bin", "python")
+                if os.path.isfile(_venv_python) and os.access(_venv_python, os.X_OK):
+                    _python_executable = _venv_python
+                    break
+        break
+
+config.substitutions.append(
+    ("%lightstim_python", '"{}"'.format(_python_executable))
+)
+
+try:
+    _lightstim_import = subprocess.run(
+        [_python_executable, "-c", "import stim, lightstim"],
+        cwd=getattr(config, "ftqc_src_root", os.path.dirname(config.test_source_root)),
+        env=_lightstim_env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+except OSError:
+    pass
+else:
+    if _lightstim_import.returncode == 0:
+        config.available_features.add("lightstim-python")
+        if "PYTHONPATH" in _lightstim_env:
+            config.environment["PYTHONPATH"] = _lightstim_env["PYTHONPATH"]
