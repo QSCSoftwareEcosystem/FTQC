@@ -14,14 +14,14 @@
 
 module {
   func.func @clifford_all() -> i1 {
-    %lq  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %x0  = ftqc.logical_x %lq  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %y0  = ftqc.logical_y %x0  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %z0  = ftqc.logical_z %y0  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %h0  = ftqc.logical_h %z0  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %s0  = ftqc.logical_s %h0  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %lq  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %x0  = ftqc.logical_x %lq  : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %y0  = ftqc.logical_y %x0  : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %z0  = ftqc.logical_z %y0  : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %h0  = ftqc.logical_h %z0  : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %s0  = ftqc.logical_s %h0  : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %b   = ftqc.logical_measure %s0
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     func.return %b : i1
   }
 }

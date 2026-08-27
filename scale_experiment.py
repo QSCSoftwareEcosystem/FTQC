@@ -20,8 +20,8 @@ FTQC_OPT = REPO / "build" / "src" / "ftqc-opt"
 OUT_CSV  = REPO / "latex" / "scale_data.csv"
 OUT_TEX  = REPO / "latex" / "scale_plots.tex"
 
-ST = "!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>"
-SU = "!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>"
+ST = "!ftqc.logical_qubit<#ftqc.ecc<steane>>"
+SU = "!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>"
 
 PIPELINE = [
     "--ftqc-insert-syndrome",

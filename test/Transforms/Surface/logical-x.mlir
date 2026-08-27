@@ -3,9 +3,9 @@
 
 // CHECK-LABEL: func @surface_logical_x
 func.func @surface_logical_x() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
   // CHECK: ftqc.logical_x
-  %lq2 = ftqc.logical_x %lq : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  %lq2 = ftqc.logical_x %lq : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
   func.return
 }

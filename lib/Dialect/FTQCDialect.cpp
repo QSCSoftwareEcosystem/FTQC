@@ -21,9 +21,6 @@
 // Pull in enum implementations (symbolize/stringify for ECCKind, MagicKind, etc.)
 #include "FTQC/Dialect/FTQCEnums.cpp.inc"
 
-// Pull in attribute interface definitions.
-#include "FTQC/Dialect/FTQCAttrInterfaces.cpp.inc"
-
 // Pull in attribute definitions.
 #define GET_ATTRDEF_CLASSES
 #include "FTQC/Dialect/FTQCAttrs.cpp.inc"

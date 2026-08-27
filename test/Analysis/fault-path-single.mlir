@@ -4,12 +4,12 @@
 // CHECK: Fault path analysis for @single_qubit_fault_paths
 // CHECK-LABEL: func @single_qubit_fault_paths
 func.func @single_qubit_fault_paths() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %h = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %h = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %lq2, %syn = ftqc.ec_round %h
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
   %bit = ftqc.logical_measure %lq2
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   func.return
 }

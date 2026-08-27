@@ -16,20 +16,20 @@ func.func @prepare_ccz() {
 }
 
 // CHECK-LABEL: func @logical_s
-func.func @logical_s(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
+func.func @logical_s(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
   // CHECK: ftqc.logical_s
-  %out = ftqc.logical_s %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %out = ftqc.logical_s %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }
 
 // CHECK-LABEL: func @logical_t_with_magic
-func.func @logical_t_with_magic(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
+func.func @logical_t_with_magic(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
   %ms = ftqc.prepare_magic_t : !ftqc.magic_state
   // CHECK: ftqc.logical_t
   %out = ftqc.logical_t %lq, %ms
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

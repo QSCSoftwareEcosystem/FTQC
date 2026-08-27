@@ -3,11 +3,11 @@
 
 // CHECK-LABEL: func @steane_z_correct
 func.func @steane_z_correct() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %lq2, %zsyn = ftqc.steane_z_syndrome %lq
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<3>)
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<3>)
   // CHECK: ftqc.correct
-  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }

@@ -42,7 +42,7 @@ SteaneTypeConverter::SteaneTypeConverter(MLIRContext *ctx, unsigned distance) {
   // Identity for all standard types.
   addConversion([](Type t) { return t; });
 
-  // !quantum.bit → !ftqc.logical_qubit<#ftqc.ecc<steane, d>>
+  // !quantum.bit → !ftqc.logical_qubit<#ftqc.ecc<steane, dist = d>>
   addConversion([ctx, distance](Type t) -> std::optional<Type> {
     if (t.getIntOrFloatBitWidth() == 1)
       return std::nullopt;  // not a quantum bit marker; skip
@@ -62,7 +62,7 @@ namespace {
 // Helper: build a Steane ECCAttr
 //---------------------------------------------------------------------
 static ECCAttr makeSteaneAttr(MLIRContext *ctx, unsigned distance = 3) {
-  return ECCAttr::get(ctx, ECCKind::Steane, distance, 1);
+  return ECCAttr::get(ctx, ECCKind::Steane, distance);
 }
 
 static LogicalQubitType makeSteaneQubitType(MLIRContext *ctx,
@@ -244,7 +244,7 @@ mlir::Value mlir::ftqc::buildSteaneEncodeCircuit(mlir::OpBuilder &builder,
   // to build the 7-qubit encoding network.
   // Here we return the logical qubit wrapper.
   auto lqType = LogicalQubitType::get(
-      ctx, ECCAttr::get(ctx, ECCKind::Steane, 3, 1));
+      ctx, ECCAttr::get(ctx, ECCKind::Steane, 3));
   return builder.create<EncodeOp>(loc, lqType, physQubit);
 }
 

@@ -3,14 +3,14 @@
 
 // CHECK-LABEL: func @test_basic_types
 func.func @test_basic_types() {
-  // CHECK: <#ftqc.ecc<steane, 3>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  // CHECK: <<steane>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // CHECK: <6>
   %lq2, %syn = ftqc.extract_syndrome %lq
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
 
-  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  ftqc.dealloc %lq2 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }

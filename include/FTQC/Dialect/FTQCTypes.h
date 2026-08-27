@@ -11,20 +11,20 @@
 ///
 /// | MLIR type | Mnemonic | Description |
 /// |---|---|---|
-/// | `LogicalQubitType` | `!ftqc.logical_qubit<#ftqc.ecc<kind,d>>` | One logical qubit encoded in ECC `kind` at distance `d` |
+/// | `LogicalQubitType` | `!ftqc.logical_qubit<#ftqc.ecc<kind,...>>` | One logical qubit encoded in ECC `kind` with parameters `...` |
 /// | `SyndromeType` | `!ftqc.syndrome<w>` | A `w`-bit classical syndrome vector from one stabiliser round |
 /// | `MagicStateType` | `!ftqc.magic_state<kind>` | A distilled magic state of type `kind` (T or CCZ) |
 /// | `PauliFrameType` | `!ftqc.pauli_frame<n>` | Classical Pauli frame tracking deferred corrections on `n` qubits |
 ///
 /// ### Relationship to ECC attributes
-/// `LogicalQubitType` carries an `ECCAttr` parameter (`#ftqc.ecc<kind, d>`)
-/// that encodes the ECC family and code distance.  All passes that operate on
+/// `LogicalQubitType` carries an `ECCAttr` parameter (`#ftqc.ecc<kind, ...>`)
+/// that encodes the ECC family and parameters.  All passes that operate on
 /// logical qubits query this attribute to select the right encoding strategy.
 ///
 /// ### Example
 /// @code{.mlir}
 /// // A Steane [[7,1,3]] logical qubit
-/// !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+/// !ftqc.logical_qubit<#ftqc.ecc<steane>>
 ///
 /// // A 6-bit syndrome register (3 X + 3 Z stabilisers for Steane code)
 /// !ftqc.syndrome<6>

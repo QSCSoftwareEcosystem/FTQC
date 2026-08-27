@@ -11,13 +11,13 @@
 
 module {
   func.func @t_gate() -> i1 {
-    %lq  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %lq  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %ms  = ftqc.prepare_magic_t : !ftqc.magic_state
     %t0  = ftqc.logical_t %lq, %ms
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-        -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+        -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %b   = ftqc.logical_measure %t0
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     func.return %b : i1
   }
 }

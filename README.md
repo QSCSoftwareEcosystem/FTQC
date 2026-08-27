@@ -69,7 +69,7 @@ MLIR is a reusable compiler infrastructure for representing and transforming pro
 A **dialect** bundles:
 - **Types** — `!ftqc.logical_qubit`, `!ftqc.syndrome`, `!ftqc.magic_state`
 - **Ops** — `ftqc.logical_h`, `ftqc.steane_x_syndrome`, `ftqc.logical_toffoli`
-- **Attributes** — `#ftqc.ecc<steane, 3>`, `#ftqc.code_props<7, 1, 3>`
+- **Attributes** — `#ftqc.ecc<steane>`, `#ftqc.code_props<7, 1, 3>`
 - **Passes** — analysis and transformation passes on the IR
 
 ---
@@ -79,9 +79,9 @@ A **dialect** bundles:
 ### Logical Qubits — parameterized by ECC code and distance
 
 ```mlir
-!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>     // Steane [[7,1,3]]
-!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>    // Surface d=5
-!ftqc.logical_qubit<#ftqc.ecc<color_code, 3>> // Triangular color code
+!ftqc.logical_qubit<#ftqc.ecc<steane>>               // Steane [[7,1,3]]
+!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>     // Surface d=5
+!ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>> // Triangular color code
 ```
 
 ### Syndrome Types — width depends on code and distance
@@ -151,22 +151,22 @@ A **dialect** bundles:
 
 ### Single-qubit Clifford (transversal on all codes)
 ```mlir
-%out = ftqc.logical_h %q   : <#ftqc.ecc<steane, 3>>
-%out = ftqc.logical_x %q   : <#ftqc.ecc<steane, 3>>
-%out = ftqc.logical_z %q   : <#ftqc.ecc<steane, 3>>
-%out = ftqc.logical_s %q   : <#ftqc.ecc<color_code, 3>>   // transversal on color only
+%out = ftqc.logical_h %q   : <<steane>>
+%out = ftqc.logical_x %q   : <<steane>>
+%out = ftqc.logical_z %q   : <<steane>>
+%out = ftqc.logical_s %q   : <<color_code, dist = 3>>   // transversal on color only
 ```
 
 ### Two-qubit gates
 ```mlir
-%c, %t = ftqc.logical_cnot %ctrl, %tgt  : (<#ftqc.ecc<steane,3>>, <#ftqc.ecc<steane,3>>) -> (...)
-%a, %b = ftqc.logical_cz   %q0,   %q1   : (<#ftqc.ecc<surface,5>>, <#ftqc.ecc<surface,5>>) -> (...)
+%c, %t = ftqc.logical_cnot %ctrl, %tgt  : (<<steane>>, <<steane>>) -> (...)
+%a, %b = ftqc.logical_cz   %q0,   %q1   : (<<surface,dist=5>>, <<surface,dist=5>>) -> (...)
 ```
 
 ### Non-Clifford — requires magic state injection
 ```mlir
 %ms  = ftqc.prepare_magic_t : !ftqc.magic_state
-%out = ftqc.logical_t %q, %ms : (<#ftqc.ecc<steane,3>>, !ftqc.magic_state) -> <#ftqc.ecc<steane,3>>
+%out = ftqc.logical_t %q, %ms : (<<steane>>, !ftqc.magic_state) -> <<steane>>
 
 %ccz = ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
 %a, %b, %c = ftqc.logical_toffoli %c0, %c1, %t, %ccz : (...)
@@ -181,22 +181,22 @@ After each logical gate, syndrome rounds detect errors before they propagate.
 ### Steane Method — transversal ancilla measurement
 ```mlir
 // X-type check: detects Z errors
-%q2, %xsyn = ftqc.steane_x_syndrome %q : <#ftqc.ecc<steane,3>> -> (<#ftqc.ecc<steane,3>>, <6>)
+%q2, %xsyn = ftqc.steane_x_syndrome %q : <<steane>> -> (<<steane>>, <6>)
 
 // Z-type check: detects X errors
-%q3, %zsyn = ftqc.steane_z_syndrome %q2 : <#ftqc.ecc<steane,3>> -> (<#ftqc.ecc<steane,3>>, <6>)
+%q3, %zsyn = ftqc.steane_z_syndrome %q2 : <<steane>> -> (<<steane>>, <6>)
 ```
 
 ### Surface Code Rounds
 ```mlir
 %q2, %syn = ftqc.surface_round %q cycles = 3
-    : <#ftqc.ecc<surface,5>> -> (<#ftqc.ecc<surface,5>>, <48>)
+    : <<surface,dist=5>> -> (<<surface,dist=5>>, <48>)
 ```
 
 ### Error Correction
 ```mlir
 // Inline correction (syndromes decoded immediately)
-%corrected = ftqc.correct %q, %xsyn : (<#ftqc.ecc<steane,3>>, <6>) -> <#ftqc.ecc<steane,3>>
+%corrected = ftqc.correct %q, %xsyn : (<<steane>>, <6>) -> <<steane>>
 
 // Deferred correction via Pauli frame tracking
 %frame = ftqc.create_frame : !ftqc.pauli_frame<1>
@@ -591,7 +591,7 @@ Each logical qubit is expanded to a contiguous block of physical qubits.
 
 ### Physical expansion — Steane [[7,1,3]]
 
-Each `!ftqc.logical_qubit<#ftqc.ecc<steane,3>>` → **7 physical QIR qubits**.
+Each `!ftqc.logical_qubit<#ftqc.ecc<steane>>` → **7 physical QIR qubits**.
 
 | FTQC op | QIR expansion |
 |---------|--------------|
@@ -605,7 +605,7 @@ Each `!ftqc.logical_qubit<#ftqc.ecc<steane,3>>` → **7 physical QIR qubits**.
 
 ### Physical expansion — Surface code (distance $d$)
 
-Each `!ftqc.logical_qubit<#ftqc.ecc<surface,d>>` → **$d^2$ physical QIR qubits** (row-major).
+Each `!ftqc.logical_qubit<#ftqc.ecc<surface,dist=d>>` → **$d^2$ physical QIR qubits** (row-major).
 
 | FTQC op | QIR expansion |
 |---------|--------------|
@@ -786,7 +786,7 @@ Checks whether the physical error rate is below the code threshold.
 
 ```mlir
 // p = 1e-3 < 1% → circuit is below threshold, no warning
-ftqc.init_zero : <#ftqc.ecc<steane, 3>>
+ftqc.init_zero : <<steane>>
 ```
 
 ### Resource Estimation (`--ftqc-resource-estimate`)
@@ -809,14 +809,14 @@ Distillation qubits inferred from T-gate count if no explicit `distill_15to1` op
 
 ```mlir
 func.func @qft3_steane(
-    %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, ...
+    %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane>>, ...
 ) -> (...) {
   // H on q0
-  %h0 = ftqc.logical_h %q0 : <#ftqc.ecc<steane, 3>>
+  %h0 = ftqc.logical_h %q0 : <<steane>>
 
   // Controlled-S (Rz(π/2)) via T-gate injection
   %ms0 = ftqc.prepare_magic_t : !ftqc.magic_state
-  %t0a = ftqc.logical_t %h0, %ms0  : (<#ftqc.ecc<steane,3>>, !ftqc.magic_state) -> <#ftqc.ecc<steane,3>>
+  %t0a = ftqc.logical_t %h0, %ms0  : (<<steane>>, !ftqc.magic_state) -> <<steane>>
   %c0a, %t1a = ftqc.logical_cnot %q1, %t0a : ...
 
   // ... 5 more T gates, 9 CNOTs, 3 Hadamards, 1 SWAP (3 CNOTs)
@@ -986,7 +986,7 @@ llvm-lit build/test/Transforms \
 ```
 
 Key test patterns validated:
-- Type printer abbreviations (`<#ftqc.ecc<steane, 3>>`, `<6>`, `<CCZ>`)
+- Type printer abbreviations (`<<steane>>`, `<6>`, `<CCZ>`)
 - Full pipeline end-to-end on non-trivial circuits
 - `--ftqc-magic-distill` expands `prepare_magic_t` → 15 noisy inputs + `distill_15to1`
 - QASM3 gate names, qubit declarations, FT-op comments

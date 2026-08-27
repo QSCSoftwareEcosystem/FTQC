@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 /// @file FTQCAttrs.h
-/// @brief Declarations for all FTQC dialect attributes and ECC helper utilities.
+/// @brief Declarations for all FTQC dialect attributes.
 ///
 /// ### Enumerations (from FTQCEnums.h.inc)
 /// | Enum | Values | Usage |
@@ -18,13 +18,9 @@
 /// ### Attributes (from FTQCAttrs.h.inc)
 /// | Attribute | Mnemonic | Fields | Description |
 /// |---|---|---|---|
-/// | `ECCAttr` | `#ftqc.ecc` | `kind`, `distance`, `levels` | Identifies the QEC code parameterising a logical qubit |
+/// | `ECCAttr` | `#ftqc.ecc` | `kind`, `dist`, `levels`, `code1`, `code2` | Identifies the QEC code parameterising a logical qubit |
 /// | `CodePropertiesAttr` | `#ftqc.code_props` | `n`, `k`, `d` | Static [[n,k,d]] parameters |
 /// | `DistillationParamsAttr` | `#ftqc.distill_params` | `inputCount`, `outputCount` | Distillation protocol shape |
-///
-/// ### ECC helper utilities
-/// Free functions that compute code-specific properties from an `ECCKind` +
-/// distance pair without requiring an `MLIRContext`:
 
 #ifndef FTQC_ATTRS_H
 #define FTQC_ATTRS_H
@@ -35,130 +31,56 @@
 
 #include "FTQC/Utils/StabilizerUtils.h"
 
-// Pull in the enum and interface declarations first.
+// Pull in the enum declarations first.
 #include "FTQC/Dialect/FTQCEnums.h.inc"
-#include "FTQC/Dialect/FTQCAttrInterfaces.h.inc"
 
 namespace mlir::ftqc::detail {
 struct ECCAttrStorage;
-struct HypergraphProductAttrStorage;
 }
 
 #define GET_ATTRDEF_CLASSES
 #include "FTQC/Dialect/FTQCAttrs.h.inc"
 
+#include <optional>
 #include <tuple>
 
-namespace mlir::ftqc {
+namespace mlir::ftqc::detail {
 
-//===----------------------------------------------------------------------===//
-// Helper utilities for ECC attribute queries
-//===----------------------------------------------------------------------===//
+// MLIR creates a unique ECCAttrStorage instance for each distinct #ftqc.ecc
+// attribute. This struct would usually be generated from the TableGen
+// definition, but we implement it manually to add a StabilizerCode member.
+// This gives us a place to cache the StabilizerCode after building it only
+// once for each distinct code.
 
-/// @brief Total physical qubit count for a given ECC.
-///
-/// Returns the number of physical data qubits required to encode one logical
-/// qubit using @p kind at code distance @p distance.  For concatenated codes,
-/// @p levels specifies the number of concatenation levels.
-///
-/// | Code    | Formula                              |
-/// |---------|--------------------------------------|
-/// | Steane  | 7^levels                             |
-/// | Surface | d^2                                  |
-/// | Color   | (3d^2 - 3d + 1) / 2  (triangular)  |
-///
-/// @param kind     ECC family (steane, surface, …).
-/// @param distance Code distance d (must be odd for CSS codes).
-/// @param levels   Concatenation depth (default 1).
-/// @return Number of physical data qubits per logical qubit.
-unsigned getPhysicalQubitsForCode(ECCKind kind, unsigned distance,
-                                  unsigned levels = 1);
+struct ECCAttrStorage : public AttributeStorage {
+  using KeyTy = std::tuple<
+    ECCKind,                 // kind
+    std::optional<uint32_t>, // dist
+    std::optional<uint32_t>, // levels
+    ClassicalCodeAttr,       // code1
+    ClassicalCodeAttr        // code2
+  >;
 
-/// @brief Ancilla qubit count per syndrome-extraction round.
-///
-/// Returns the number of ancilla qubits consumed in a single round of syndrome
-/// measurement for the given code.  These qubits are reset between rounds.
-///
-/// @param kind     ECC family.
-/// @param distance Code distance d.
-/// @return Number of ancilla qubits per round.
-unsigned getAncillaQubitsForCode(ECCKind kind, unsigned distance);
+  ECCAttrStorage(const KeyTy &key);
 
-/// @brief Approximate fault-tolerance threshold for a code kind.
-///
-/// Returns the depolarising-noise threshold below which error-correction
-/// improves fidelity (i.e. p_phys < p_th).  Values are from the literature:
-///
-/// | Code              | Threshold (approx.) |
-/// |-------------------|---------------------|
-/// | Steane [[7,1,3]]  | 1 %                 |
-/// | Surface code      | 1 %                 |
-/// | 2D color code     | 0.5–1.3 %           |
-/// | Concatenated      | 0.5 %               |
-///
-/// @param kind ECC family.
-/// @return Threshold as a probability in [0, 1].
-double getFTThreshold(ECCKind kind);
-
-/// @brief Returns true if the code belongs to the CSS (Calderbank-Shor-Steane)
-///        family.
-///
-/// CSS codes have separate X and Z stabiliser generators, enabling
-/// straightforward syndrome extraction with transversal CNOT ancillas.
-///
-/// @param kind ECC family.
-/// @return True for steane, surface, color_code, repetition; false otherwise.
-bool isCSSCode(ECCKind kind);
-
-/// @brief Returns true if the code supports a transversal T gate.
-///
-/// A transversal T allows fault-tolerant T-gate application without magic-state
-/// distillation.  Currently only the 3D color code has this property; for all
-/// other codes, T gates require magic-state injection (see MagicStateDistillation.h).
-///
-/// @param kind ECC family.
-/// @return True only for `ECCKind::ColorCode` (3D variant).
-bool hasTransversalT(ECCKind kind);
-
-namespace detail {
-
-// MLIR creates a unique instance of the *Storage type for each distinct ECC
-// descriptor attribute. These structs would usually be generated from the
-// TableGen definitions, but we implement them manually to add a StabilizerCode
-// member. This gives us a place to cache the StabilizerCode after building it
-// only once for each distinct code.
-
-template <typename Derived, typename... Params>
-struct AttributeStorageWithStabilizerCode : public AttributeStorage {
-  using KeyTy = std::tuple<Params...>;
-
-  AttributeStorageWithStabilizerCode(const KeyTy &key) : key(key) {}
-
-  static Derived *construct(AttributeStorageAllocator &allocator,
-                            const KeyTy &key) {
-    return new (allocator.allocate<Derived>()) Derived(key);
+  static ECCAttrStorage *construct(AttributeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    return new (allocator.allocate<ECCAttrStorage>()) ECCAttrStorage(key);
   }
 
-  bool operator==(const KeyTy &key) const { return this->key == key; }
+  bool operator==(const KeyTy &key) const { return getAsKey() == key; }
 
-  KeyTy getAsKey() const { return key; }
+  KeyTy getAsKey() const {
+    return std::make_tuple(kind, dist, levels, code1, code2);
+  }
 
-  KeyTy key;
+  ECCKind kind;
+  std::optional<uint32_t> dist;
+  std::optional<uint32_t> levels;
+  ClassicalCodeAttr code1, code2;
   StabilizerCode stabilizerCode;
 };
 
-struct ECCAttrStorage : public AttributeStorageWithStabilizerCode<
-    ECCAttrStorage, ECCKind, uint32_t, uint32_t> {
-  ECCAttrStorage(const KeyTy &key);
-};
-
-struct HypergraphProductAttrStorage : public AttributeStorageWithStabilizerCode<
-    HypergraphProductAttrStorage, ClassicalCodeAttr, ClassicalCodeAttr> {
-  HypergraphProductAttrStorage(const KeyTy &key);
-};
-
-} // namespace detail
-
-} // namespace mlir::ftqc
+} // namespace mlir::ftqc::detail
 
 #endif // FTQC_ATTRS_H

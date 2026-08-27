@@ -4,9 +4,9 @@
 // CHECK-LABEL: func @below_threshold
 func.func @below_threshold() {
   // p = 1e-3 < 1% threshold → should pass without warning.
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %h  = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  ftqc.dealloc %h : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %h  = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  ftqc.dealloc %h : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }
 // CHECK-NOT: warning: circuit may be above

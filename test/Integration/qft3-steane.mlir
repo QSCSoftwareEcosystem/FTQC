@@ -21,107 +21,107 @@
 // CHECK:       ftqc.logical_cnot
 
 func.func @qft3_steane(
-    %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %q1 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %q2 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) {
+    %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %q1 : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %q2 : !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>) {
 
   //--- QFT on q0 ----------------------------------------------------------
   // H on q0
   %h0 = ftqc.logical_h %q0
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // Controlled-S (Rz(π/2)) from q1 → q0: implemented as CNOT + T + CNOT + T†
   // Decomposition: CRz(π/2) = CNOT · (I⊗T†) · CNOT · (I⊗T) · (T†⊗I)
   // [DEBUG] Actual implementation: (I⊗T) · CNOT · (I⊗T) · CNOT
   %magic_t_0 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0a = ftqc.logical_t %h0, %magic_t_0
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c0a, %t1a = ftqc.logical_cnot %q1, %t0a
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   %magic_t_1 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0b = ftqc.logical_t %t1a, %magic_t_1
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c0b, %t1b = ftqc.logical_cnot %c0a, %t0b
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   // Controlled-T (Rz(π/4)) from q2 → q0
   %magic_t_2 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0c = ftqc.logical_t %t1b, %magic_t_2
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c0c, %t2a = ftqc.logical_cnot %q2, %t0c
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   %magic_t_3 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0d = ftqc.logical_t %t2a, %magic_t_3
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c0d, %t2b = ftqc.logical_cnot %c0c, %t0d
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   //--- QFT on q1 ----------------------------------------------------------
   %h1 = ftqc.logical_h %c0b
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // Controlled-S from q2 → q1
   %magic_t_4 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t1c = ftqc.logical_t %h1, %magic_t_4
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c1a, %t2c = ftqc.logical_cnot %t2b, %t1c
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   %magic_t_5 = ftqc.prepare_magic_t : !ftqc.magic_state
   %t1d = ftqc.logical_t %t2c, %magic_t_5
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %c1b, %t2d = ftqc.logical_cnot %c1a, %t1d
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   //--- QFT on q2 ----------------------------------------------------------
   %h2 = ftqc.logical_h %t2d
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   //--- SWAP q0 ↔ q2 (3 CNOTs) ---------------------------------------------
   %s0a, %s2a = ftqc.logical_cnot %c0d, %h2
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   %s2b, %s0b = ftqc.logical_cnot %s2a, %s0a
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   %s0c, %s2c = ftqc.logical_cnot %s0b, %s2b
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   func.return %s0c, %c1b, %s2c
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

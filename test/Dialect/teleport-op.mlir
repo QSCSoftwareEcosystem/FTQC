@@ -2,13 +2,13 @@
 // Test: Gate teleportation operation.
 
 // CHECK-LABEL: func @gate_teleport
-func.func @gate_teleport(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, i1) {
+func.func @gate_teleport(%lq: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, i1) {
   %ms = ftqc.prepare_magic_t : !ftqc.magic_state
   // CHECK: ftqc.gate_teleport
   %out, %mbit = ftqc.gate_teleport %lq, %ms
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, i1)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, i1)
   func.return %out, %mbit
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, i1
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>, i1
 }

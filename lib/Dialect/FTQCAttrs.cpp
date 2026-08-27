@@ -12,102 +12,27 @@ using namespace mlir;
 using namespace mlir::ftqc;
 
 //===----------------------------------------------------------------------===//
-// Helper: physical qubit count per code
-//===----------------------------------------------------------------------===//
-
-unsigned mlir::ftqc::getPhysicalQubitsForCode(ECCKind kind, unsigned d,
-                                              unsigned levels) {
-  unsigned base = 0;
-  switch (kind) {
-  case ECCKind::Steane:
-    base = 7;   // [[7,1,3]] regardless of d (d=3 only valid)
-    break;
-  case ECCKind::Surface:
-    base = d * d;   // rotated surface code: d^2 data qubits
-    break;
-  case ECCKind::ColorCode:
-    // 2D triangular color code: roughly (3d^2 - 3d + 1)/2 physical per logical
-    base = (3 * d * d - 3 * d + 2) / 2;
-    break;
-  case ECCKind::Concatenated:
-    // k levels of Steane: 7^levels
-    base = 1;
-    for (unsigned i = 0; i < levels; ++i)
-      base *= 7;
-    break;
-  case ECCKind::Repetition:
-    base = d;   // d-qubit repetition code
-    break;
-  case ECCKind::Compass:
-    base = d * d;   // compass code ~ surface code
-    break;
-  case ECCKind::HypergraphProduct:
-    // We cannot compute the number of physical qubits in a hypergraph product
-    // code, without knowing the two classical codes from which it is
-    // constructed. This shouldn't matter, since this function is currently only
-    // used from ECCAttr::getPhysicalQubits(), and ECCAttr::verify() prevents
-    // using it with this kind.
-    break;
-  }
-  return base;
-}
-
-unsigned mlir::ftqc::getAncillaQubitsForCode(ECCKind kind, unsigned d) {
-  switch (kind) {
-  case ECCKind::Steane:
-    return 6;   // 3 X + 3 Z stabilizers → 6 ancilla per round
-  case ECCKind::Surface:
-    return (d * d - 1);  // (d^2-1) plaquette ancilla
-  case ECCKind::ColorCode:
-    return (d * d - 1) / 2;  // roughly half the physical qubit count
-  case ECCKind::Concatenated:
-    return 6;   // per level (approximate)
-  case ECCKind::Repetition:
-    return d - 1;
-  default:
-    return d * d;
-  }
-}
-
-double mlir::ftqc::getFTThreshold(ECCKind kind) {
-  switch (kind) {
-  case ECCKind::Steane:      return 1.0e-2;
-  case ECCKind::Surface:     return 1.0e-2;
-  case ECCKind::ColorCode:   return 1.0e-2;
-  case ECCKind::Concatenated:return 5.0e-3;
-  case ECCKind::Repetition:  return 0.5;
-  default:                   return 1.0e-3;
-  }
-}
-
-bool mlir::ftqc::isCSSCode(ECCKind kind) {
-  return kind == ECCKind::Steane ||
-         kind == ECCKind::Surface ||
-         kind == ECCKind::ColorCode ||
-         kind == ECCKind::HypergraphProduct;
-}
-
-bool mlir::ftqc::hasTransversalT(ECCKind kind) {
-  // Only 3D color codes support transversal T; 2D color codes support
-  // a transversal Hadamard but T requires magic state injection in general.
-  // For FTQC purposes we mark ColorCode as supporting it via code-switching.
-  return kind == ECCKind::ColorCode;
-}
-
-//===----------------------------------------------------------------------===//
 // ECCAttr methods
 //===----------------------------------------------------------------------===//
 
 ECCKind ECCAttr::getKind() const {
-  return std::get<0>(getImpl()->key);
+  return getImpl()->kind;
 }
 
-uint32_t ECCAttr::getDistance() const {
-  return std::get<1>(getImpl()->key);
+std::optional<uint32_t> ECCAttr::getDist() const {
+  return getImpl()->dist;
 }
 
-uint32_t ECCAttr::getLevels() const {
-  return std::get<2>(getImpl()->key);
+std::optional<uint32_t> ECCAttr::getLevels() const {
+  return getImpl()->levels;
+}
+
+ClassicalCodeAttr ECCAttr::getCode1() const {
+  return getImpl()->code1;
+}
+
+ClassicalCodeAttr ECCAttr::getCode2() const {
+  return getImpl()->code2;
 }
 
 const StabilizerCode &ECCAttr::getStabilizerCode() const {
@@ -115,101 +40,136 @@ const StabilizerCode &ECCAttr::getStabilizerCode() const {
 }
 
 unsigned ECCAttr::getPhysicalQubits() const {
-  return getPhysicalQubitsForCode(getKind(), getDistance(), getLevels());
+  return getStabilizerCode().getN();
 }
 
 unsigned ECCAttr::getAncillaQubits() const {
-  return getAncillaQubitsForCode(getKind(), getDistance());
+  return getStabilizerCode().getNumStabilizers();
 }
 
-bool ECCAttr::isCSS() const {
-  return mlir::ftqc::isCSSCode(getKind());
-}
-
-bool ECCAttr::supportsTransversalT() const {
-  return mlir::ftqc::hasTransversalT(getKind());
+unsigned ECCAttr::getDistance() const {
+  return getStabilizerCode().getD();
 }
 
 double ECCAttr::getFTThreshold() const {
-  return mlir::ftqc::getFTThreshold(getKind());
+  // Approximate fault-tolerance threshold for a code kind.  Returns the
+  // depolarising-noise threshold below which error-correction improves fidelity
+  // (i.e. p_phys < p_th).  Values are from the literature:
+  //
+  // | Code              | Threshold (approx.) |
+  // |-------------------|---------------------|
+  // | Steane [[7,1,3]]  | 1 %                 |
+  // | Surface code      | 1 %                 |
+  // | 2D color code     | 0.5–1.3 %           |
+  // | Concatenated      | 0.5 %               |
+  switch (getKind()) {
+  case ECCKind::Steane:       return 1.0e-2;
+  case ECCKind::Surface:      return 1.0e-2;
+  case ECCKind::ColorCode:    return 1.0e-2;
+  case ECCKind::Concatenated: return 5.0e-3;
+  case ECCKind::Repetition:   return 0.5;
+  default:                    return 1.0e-3;
+  }
 }
 
 LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
-                              ECCKind kind, uint32_t distance,
-                              uint32_t levels) {
-  if (kind == ECCKind::HypergraphProduct) {
-    emitError() << "#ftqc.ecc<hypergraph_product, d> is not supported; "
-                   "use #ftqc.hypergraph_product<code1, code2> instead";
-    return failure();
+                              ECCKind kind,
+                              std::optional<uint32_t> dist,
+                              std::optional<uint32_t> levels,
+                              ClassicalCodeAttr code1,
+                              ClassicalCodeAttr code2) {
+  switch (kind) {
+  case ECCKind::Steane:
+    break;
+
+  case ECCKind::Surface:
+  case ECCKind::ColorCode:
+  case ECCKind::Repetition:
+  case ECCKind::Compass:
+    if (!dist) {
+      emitError() << "this ECC kind requires a 'dist' parameter";
+      return failure();
+    }
+    break;
+
+  case ECCKind::Concatenated:
+    if (!levels) {
+      emitError() << "this ECC kind requires a 'levels' parameter";
+      return failure();
+    }
+    break;
+
+  case ECCKind::HypergraphProduct:
+    if (!code1 || !code2) {
+      emitError() << "this ECC kind requires 'code1' and 'code2' parameters";
+      return failure();
+    }
+    break;
   }
   return success();
 }
 
-ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key)
-    : AttributeStorageWithStabilizerCode(key) {
-  ECCKind kind = std::get<0>(key);
-  uint32_t distance = std::get<1>(key);
+namespace {
+
+// Makes a StabilizerCode with the correct (given) [[n,k,d]] parameters and
+// number of stabilizers, but without the correct parity-check matrices and
+// logical operators. This will work for passes which only care about those
+// parameters, but not for passes that need the Pauli strings, like
+// --ftqc-expand-physical-generic.
+// TODO: Replace all uses of this function by proper StabilizerCode builders.
+StabilizerCode makeDummyCode(unsigned n, unsigned k, unsigned d,
+                             unsigned numXStabilizers,
+                             unsigned numZStabilizers) {
+  std::vector<BinaryRow> Hx(numXStabilizers, BinaryRow(n, 0));
+  std::vector<BinaryRow> Hz(numZStabilizers, BinaryRow(n, 0));
+  return StabilizerCode::fromCSS(n, k, d, std::move(Hx), std::move(Hz));
+}
+
+} // namespace
+
+ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key) {
+  std::tie(kind, dist, levels, code1, code2) = key;
+
   switch (kind) {
   case ECCKind::Steane:
     stabilizerCode = StabilizerCode::makeSteane();
     break;
   case ECCKind::Surface:
-    stabilizerCode = StabilizerCode::makeSurface(distance);
+    stabilizerCode = StabilizerCode::makeSurface(*dist);
     break;
-  // TODO: Handle remaining cases.
+  case ECCKind::ColorCode: { // 2D triangular color code
+    unsigned n =
+        (3 * *dist * *dist - 3 * *dist + 2) / 2; // roughly (3d^2 - 3d + 1)/2
+    unsigned numStabilizers =
+        (*dist * *dist - 1) / 2; // roughly half the physical qubit count
+    stabilizerCode =
+        makeDummyCode(n, 1, *dist, numStabilizers / 2, numStabilizers / 2);
+    break;
   }
-}
-
-//===----------------------------------------------------------------------===//
-// HypergraphProductAttr methods
-//===----------------------------------------------------------------------===//
-
-ClassicalCodeAttr HypergraphProductAttr::getCode1() const {
-  return std::get<0>(getImpl()->key);
-}
-
-ClassicalCodeAttr HypergraphProductAttr::getCode2() const {
-  return std::get<1>(getImpl()->key);
-}
-
-const StabilizerCode &HypergraphProductAttr::getStabilizerCode() const {
-  return getImpl()->stabilizerCode;
-}
-
-unsigned HypergraphProductAttr::getPhysicalQubits() const {
-  return getStabilizerCode().getN();
-}
-
-unsigned HypergraphProductAttr::getAncillaQubits() const {
-  return getStabilizerCode().getNumStabilizers();
-}
-
-uint32_t HypergraphProductAttr::getDistance() const {
-  return getStabilizerCode().getD();
-}
-
-ECCKind HypergraphProductAttr::getKind() const {
-  return ECCKind::HypergraphProduct;
-}
-
-bool HypergraphProductAttr::isCSS() const {
-  return true;
-}
-
-bool HypergraphProductAttr::supportsTransversalT() const {
-  return false;
-}
-
-double HypergraphProductAttr::getFTThreshold() const {
-  return mlir::ftqc::getFTThreshold(ECCKind::HypergraphProduct);
-}
-
-ftqc::detail::HypergraphProductAttrStorage::HypergraphProductAttrStorage(
-    const KeyTy &key)
-    : AttributeStorageWithStabilizerCode(key) {
-  stabilizerCode = StabilizerCode::makeHypergraphProduct(
-      std::get<0>(key).makeClassicalCode(),
-      std::get<1>(key).makeClassicalCode());
+  case ECCKind::Concatenated: { // concatenated Steane code
+    unsigned d = 1, n = 1, numStabilizers = 0;
+    for (uint32_t i = 0; i < *levels; ++i) {
+      numStabilizers += 6 * n;
+      n *= 7;
+      d *= 3;
+    }
+    stabilizerCode =
+        makeDummyCode(n, 1, d, numStabilizers / 2, numStabilizers / 2);
+    break;
+  }
+  case ECCKind::Repetition:
+    stabilizerCode = makeDummyCode(*dist, 1, 1, 0, *dist - 1);
+    break;
+  case ECCKind::Compass: { // compass code ~ surface code
+    unsigned n = *dist * *dist;
+    stabilizerCode = makeDummyCode(n, 1, *dist, (n - 1) / 2, (n - 1) / 2);
+    break;
+  }
+  case ECCKind::HypergraphProduct:
+    stabilizerCode = StabilizerCode::makeHypergraphProduct(
+        code1.makeClassicalCode(), code2.makeClassicalCode());
+    break;
+  }
 }
 
 //===----------------------------------------------------------------------===//

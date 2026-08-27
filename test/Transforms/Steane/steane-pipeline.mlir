@@ -7,28 +7,28 @@
 
 // CHECK-LABEL: func @three_qubit_ft
 func.func @three_qubit_ft() {
-  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
-  %h0 = ftqc.logical_h %lq0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %h0 = ftqc.logical_h %lq0 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   // CHECK: ftqc.logical_h
 
   %c0, %t0 = ftqc.logical_cnot %h0, %lq1
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   // CHECK: ftqc.logical_cnot
 
   %ms = ftqc.prepare_magic_t : !ftqc.magic_state
   %t0_after = ftqc.logical_t %t0, %ms
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   // CHECK: ftqc.logical_t
 
-  ftqc.dealloc %c0      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  ftqc.dealloc %t0_after : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  ftqc.dealloc %lq2     : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  ftqc.dealloc %c0      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  ftqc.dealloc %t0_after : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  ftqc.dealloc %lq2     : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }

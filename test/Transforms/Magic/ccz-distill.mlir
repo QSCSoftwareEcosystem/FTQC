@@ -3,12 +3,12 @@
 
 // CHECK-LABEL: func @ccz_distill_and_toffoli
 func.func @ccz_distill_and_toffoli(
-    %ctrl0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %ctrl1: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %tgt:   !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) {
+    %ctrl0: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %ctrl1: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %tgt:   !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>) {
   // Prepare noisy CCZ states for distillation.
   %raw0 = ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
   %raw1 = ftqc.prepare_magic_ccz : !ftqc.magic_state<CCZ>
@@ -23,15 +23,15 @@ func.func @ccz_distill_and_toffoli(
 
   // CHECK: ftqc.logical_toffoli
   %c0, %c1, %t2 = ftqc.logical_toffoli %ctrl0, %ctrl1, %tgt, %distilled
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>,
          !ftqc.magic_state<CCZ>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
   func.return %c0, %c1, %t2
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

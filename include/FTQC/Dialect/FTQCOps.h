@@ -21,14 +21,14 @@
 /// ### Assembly syntax examples
 /// @code{.mlir}
 /// // Initialise a Steane [[7,1,3]] logical qubit
-/// %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+/// %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 ///
 /// // Transversal Hadamard
-/// %out = ftqc.logical_h %lq : <#ftqc.ecc<steane, 3>>
+/// %out = ftqc.logical_h %lq : <<steane>>
 ///
 /// // Steane X-stabiliser syndrome extraction
 /// %q2, %syn = ftqc.steane_x_syndrome %out
-///     : <#ftqc.ecc<steane, 3>> -> (<#ftqc.ecc<steane, 3>>, <6>)
+///     : <<steane>> -> (<<steane>>, <6>)
 /// @endcode
 ///
 /// @note Individual operation semantics are documented in FTQCOps.td.

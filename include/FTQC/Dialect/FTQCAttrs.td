@@ -68,42 +68,6 @@ def MagicKindAttr : I32EnumAttr<
   let genSpecializedAttr = 0;
 }
 
-// Error correcting code
-def ECCInterface : AttrInterface<"ECCInterface"> {
-  let description = [{
-    Common interface implemented by error correcting code descriptors.
-  }];
-  let cppNamespace = "::mlir::ftqc";
-
-  let methods = [
-    InterfaceMethod<[{
-      Code family.
-    }], "::mlir::ftqc::ECCKind", "getKind">,
-    InterfaceMethod<[{
-      Code distance.
-    }], "uint32_t", "getDistance">,
-    InterfaceMethod<[{
-      Number of physical qubits per logical qubit.
-    }], "unsigned", "getPhysicalQubits">,
-    InterfaceMethod<[{
-      Number of ancilla qubits for one syndrome-extraction round.
-    }], "unsigned", "getAncillaQubits">,
-    InterfaceMethod<[{
-      StabilizerCode object describing code parameters, stabilizers, and
-      logical X/Z operators.
-    }], "const ::mlir::ftqc::StabilizerCode &", "getStabilizerCode">,
-    InterfaceMethod<[{
-      Whether the code is a CSS code (allows transversal H/CNOT/X/Z).
-    }], "bool", "isCSS">,
-    InterfaceMethod<[{
-      Whether the code supports a transversal T gate.
-    }], "bool", "supportsTransversalT">,
-    InterfaceMethod<[{
-      Fault-tolerance threshold (approximate, code-dependent).
-    }], "double", "getFTThreshold">,
-  ];
-}
-
 //===----------------------------------------------------------------------===//
 // Struct-style Attribute Definitions (ODS AttrDef)
 //===----------------------------------------------------------------------===//
@@ -114,60 +78,61 @@ class FTQC_Attr<string name, string mnem, list<Trait> traits = []>
 }
 
 //----------------------------------------------------------------------
-// ECCAttr — encodes code kind + distance (+ optional levels for concat)
+// ECCAttr — encodes code kind + kind-dependent parameters
 //----------------------------------------------------------------------
-def FTQC_ECCAttr
-    : FTQC_Attr<"ECC", "ecc", [DeclareAttrInterfaceMethods<ECCInterface>]> {
-  let summary = "Error correcting code descriptor for codes parameterized by distance";
+def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
+  let summary = "Error correcting code descriptor";
   let description = [{
-    Describes an error correcting code with its kind and code distance.
+    Describes an error correcting code with its kind and parameters.
 
     Examples:
     ```
-    #ftqc.ecc<steane, 3>        // Steane [[7,1,3]]
-    #ftqc.ecc<surface, 3>       // Distance-3 rotated surface code
-    #ftqc.ecc<color_code, 5>    // Distance-5 color code
-    #ftqc.ecc<concat, 3, 2>     // 2-level concatenated Steane
-    ```
-  }];
+    #ftqc.ecc<steane>               // Steane [[7,1,3]]
+    #ftqc.ecc<surface, dist = 3>    // Distance-3 rotated surface code
+    #ftqc.ecc<color_code, dist = 5> // Distance-5 color code
+    #ftqc.ecc<concat, levels = 2>   // 2-level concatenated Steane
 
-  let parameters = (ins
-    "ECCKind"   : $kind,
-    "uint32_t"  : $distance,
-    DefaultValuedParameter<"uint32_t", "1"> : $levels
-  );
-
-  let assemblyFormat = "`<` $kind `,` $distance (`,` $levels^)? `>`";
-  let genVerifyDecl = 1;
-  let genStorageClass = 0;
-}
-
-//----------------------------------------------------------------------
-// HypergraphProductAttr — code family constructed from two classical codes
-//----------------------------------------------------------------------
-def FTQC_HypergraphProductAttr
-    : FTQC_Attr<"HypergraphProduct", "hypergraph_product",
-                [DeclareAttrInterfaceMethods<ECCInterface>]> {
-  let summary = "Error correcting code descriptor for hypergraph product codes";
-  let description = [{
-    Describes a hypergraph product code constructed from two classical codes.
-
-    Example:
-    ```
     #cc = #ftqc.classical_code<3, [
       1, 1, 0,
       0, 1, 1,
       1, 0, 1
     ]>
-    #ftqc.hypergraph_product<#cc, #cc> // [[18,2,3]] toric code
+    #ftqc.ecc<hypergraph_product, code1 = #cc, code2 = #cc> // Distance-3 toric code
     ```
   }];
+
   let parameters = (ins
-    "ClassicalCodeAttr" : $code1,
-    "ClassicalCodeAttr" : $code2
+    "ECCKind" : $kind,
+    OptionalParameter<"std::optional<uint32_t>"> : $dist,
+    OptionalParameter<"std::optional<uint32_t>"> : $levels,
+    OptionalParameter<"ClassicalCodeAttr"> : $code1,
+    OptionalParameter<"ClassicalCodeAttr"> : $code2
   );
-  let assemblyFormat = "`<` $code1 `,` $code2 `>`";
+
+  let builders = [
+    AttrBuilder<(ins "ECCKind":$kind, "std::optional<uint32_t>":$dist), [{
+      return Base::get($_ctxt, kind, dist, std::nullopt, nullptr, nullptr);
+    }]>,
+  ];
+
+  let assemblyFormat = "`<` $kind (`,` struct($dist, $levels, $code1, $code2)^)? `>`";
+  let genVerifyDecl = 1;
   let genStorageClass = 0;
+
+  let extraClassDeclaration = [{
+    /// Number of physical qubits per logical qubit.
+    unsigned getPhysicalQubits() const;
+    /// Number of ancilla qubits for one syndrome-extraction round.
+    unsigned getAncillaQubits() const;
+    /// Code distance. This is defined for all kinds, while getDist() returns an
+    /// optional parameter only required for some kinds.
+    unsigned getDistance() const;
+    /// Fault-tolerance threshold (approximate, code-dependent).
+    double getFTThreshold() const;
+    /// StabilizerCode object describing code parameters, stabilizers, and
+    /// logical X/Z operators.
+    const ::mlir::ftqc::StabilizerCode &getStabilizerCode() const;
+  }];
 }
 
 //----------------------------------------------------------------------

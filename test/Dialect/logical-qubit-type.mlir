@@ -3,40 +3,40 @@
 
 // CHECK-LABEL: func @steane_qubit
 func.func @steane_qubit() {
-  // CHECK: ftqc.init_zero : <#ftqc.ecc<steane, 3>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  // CHECK: ftqc.init_zero : <<steane>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }
 
 // CHECK-LABEL: func @surface_qubit_d3
 func.func @surface_qubit_d3() {
-  // CHECK: <#ftqc.ecc<surface, 3>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  // CHECK: <<surface, dist = 3>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
   func.return
 }
 
 // CHECK-LABEL: func @surface_qubit_d5
 func.func @surface_qubit_d5() {
-  // CHECK: <#ftqc.ecc<surface, 5>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+  // CHECK: <<surface, dist = 5>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
   func.return
 }
 
 // CHECK-LABEL: func @color_code_qubit
 func.func @color_code_qubit() {
-  // CHECK: <#ftqc.ecc<color_code, 3>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
+  // CHECK: <<color_code, dist = 3>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
   func.return
 }
 
 // CHECK-LABEL: func @concat_qubit
 func.func @concat_qubit() {
-  // CHECK: <#ftqc.ecc<concat, 3, 2>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, 3, 2>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<concat, 3, 2>>
+  // CHECK: <<concat, levels = 2>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
   func.return
 }

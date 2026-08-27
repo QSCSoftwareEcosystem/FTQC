@@ -3,10 +3,10 @@
 
 // CHECK-LABEL: func @transversal_x_steane
 func.func @transversal_x_steane(
-    %lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
+    %lq: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
   // X is transversal on all CSS codes.
   // CHECK: ftqc.logical_x
-  %out = ftqc.logical_x %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %out = ftqc.logical_x %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

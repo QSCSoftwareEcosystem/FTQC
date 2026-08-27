@@ -5,7 +5,7 @@ Steane [[7,1,3]] Physical Circuit Simulation via Qiskit Aer
 Simulates fault-tolerant circuits encoded in the Steane 7-qubit code.
 The encoding is derived from the FTQC dialect's Steane ECC annotation:
 
-  !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
 Physical circuit construction (no FTQC pass does this automatically yet):
   - 1 logical qubit → 7 physical data qubits

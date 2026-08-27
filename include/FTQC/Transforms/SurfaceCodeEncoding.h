@@ -51,7 +51,7 @@ void populateSurfaceEncodePatterns(mlir::RewritePatternSet &patterns,
 
 /// @brief Type converter for surface-code encoding.
 ///
-/// Maps `!quantum.bit` → `!ftqc.logical_qubit<#ftqc.ecc<surface, d>>`.
+/// Maps `!quantum.bit` → `!ftqc.logical_qubit<#ftqc.ecc<surface, dist = d>>`.
 class SurfaceTypeConverter : public mlir::TypeConverter {
 public:
   /// @param ctx      MLIR context.

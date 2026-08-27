@@ -5,11 +5,11 @@
 // Simulated input: a function with a single-qubit H gate.
 // CHECK-LABEL: func @single_h_encoded
 func.func @single_h_encoded() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %out = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %out = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   // CHECK: ftqc.logical_h
-  // CHECK: <#ftqc.ecc<steane, 3>>
+  // CHECK: <<steane>>
   %bit = ftqc.logical_measure %out
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   func.return
 }

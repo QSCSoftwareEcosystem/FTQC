@@ -3,13 +3,13 @@
 
 // CHECK-LABEL: func @pauli_frame_deferred
 func.func @pauli_frame_deferred() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %lq2, %syn = ftqc.extract_syndrome %lq
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
   %lq3 = ftqc.correct %lq2, %syn
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
-      -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
+      -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
   // After --ftqc-pauli-frame-opt, correct is replaced by frame update.
   // CHECK: ftqc.pauli_frame_update
   // CHECK-NOT: ftqc.correct

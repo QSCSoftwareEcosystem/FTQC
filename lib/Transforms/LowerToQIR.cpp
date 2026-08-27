@@ -8,8 +8,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Steane [[7,1,3]]:
 // ═══════════════════════════════════════════════════════════════════════════
-// Each `!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>` is lowered to a BLOCK of
-// 7 physical qubits in QIR.  The logical operations are lowered as follows:
+// Each `!ftqc.logical_qubit<#ftqc.ecc<steane>>` is lowered to a BLOCK of 7
+// physical qubits in QIR.  The logical operations are lowered as follows:
 //
 //   ftqc.init_zero  → 7 physical qubits + Steane [[7,1,3]] encoding circuit:
 //                       h q[0]; h q[1]; h q[3];
@@ -34,8 +34,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Surface Code (distance d):
 // ═══════════════════════════════════════════════════════════════════════════
-// Each `!ftqc.logical_qubit<#ftqc.ecc<surface, d>>` is lowered to a BLOCK of
-// d² physical qubits arranged in a d×d rotated lattice.  The logical
+// Each `!ftqc.logical_qubit<#ftqc.ecc<surface, dist = d>>` is lowered to a
+// BLOCK of d² physical qubits arranged in a d×d rotated lattice.  The logical
 // operations are lowered as follows (with qubits indexed row-major as
 // q[r][c] = base + r*d + c):
 //

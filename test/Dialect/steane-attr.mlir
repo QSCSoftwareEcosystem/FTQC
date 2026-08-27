@@ -3,9 +3,9 @@
 
 // CHECK-LABEL: func @steane_attr
 func.func @steane_attr() {
-  // CHECK: <#ftqc.ecc<steane, 3>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  // CHECK: <<steane>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return
 }
 

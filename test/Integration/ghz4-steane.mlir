@@ -73,50 +73,50 @@
 
 func.func @ghz4_steane() -> (i1, i1, i1, i1) {
   // ── Allocate four Steane [[7,1,3]] logical qubits ──────────────────────
-  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq3 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq3 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // ── Step 1: H on q0 ────────────────────────────────────────────────────
   // q0: |0⟩ → (|0⟩ + |1⟩) / √2
   %h0 = ftqc.logical_h %lq0
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // ── Step 2: CNOT(q0 → q1) ──────────────────────────────────────────────
   // State: (|00⟩ + |11⟩) / √2  ⊗ |0⟩|0⟩
   %c0, %t1 = ftqc.logical_cnot %h0, %lq1
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   // ── Step 3: CNOT(q1 → q2) ──────────────────────────────────────────────
   // State: (|000⟩ + |111⟩) / √2  ⊗ |0⟩
   %c1, %t2 = ftqc.logical_cnot %t1, %lq2
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   // ── Step 4: CNOT(q2 → q3) ──────────────────────────────────────────────
   // State: (|0000⟩ + |1111⟩) / √2
   %c2, %t3 = ftqc.logical_cnot %t2, %lq3
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   // ── Measure all four qubits ─────────────────────────────────────────────
   // Outcomes are perfectly correlated: (0,0,0,0) or (1,1,1,1)
   %b0 = ftqc.logical_measure %c0
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   %b1 = ftqc.logical_measure %c1
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   %b2 = ftqc.logical_measure %t2
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   %b3 = ftqc.logical_measure %t3
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
 
   func.return %b0, %b1, %b2, %b3 : i1, i1, i1, i1
 }

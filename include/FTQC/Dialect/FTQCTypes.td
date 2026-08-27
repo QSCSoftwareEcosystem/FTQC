@@ -22,7 +22,7 @@ class FTQC_Type<string name, string mnem, list<Trait> traits = []>
 }
 
 //===----------------------------------------------------------------------===//
-// LogicalQubitType — !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+// LogicalQubitType — !ftqc.logical_qubit<#ftqc.ecc<steane>>
 //===----------------------------------------------------------------------===//
 
 def FTQC_LogicalQubitType : FTQC_Type<"LogicalQubit", "logical_qubit"> {
@@ -36,13 +36,13 @@ def FTQC_LogicalQubitType : FTQC_Type<"LogicalQubit", "logical_qubit"> {
 
     Examples:
     ```
-    !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-    !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
+    !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+    !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
     ```
   }];
 
-  let parameters = (ins "ECCInterface":$code);
+  let parameters = (ins "ECCAttr":$code);
   let assemblyFormat = "`<` $code `>`";
 
   let extraClassDeclaration = [{
@@ -54,15 +54,11 @@ def FTQC_LogicalQubitType : FTQC_Type<"LogicalQubit", "logical_qubit"> {
     unsigned getDistance() const {
       return getCode().getDistance();
     }
-    /// Whether the code supports a transversal T gate.
-    bool supportsTransversalT() const {
-      return getCode().supportsTransversalT();
-    }
   }];
 }
 
 //===----------------------------------------------------------------------===//
-// LogicalRegType — !ftqc.logical_reg<n, #ftqc.ecc<steane, 3>>
+// LogicalRegType — !ftqc.logical_reg<n, #ftqc.ecc<steane>>
 //===----------------------------------------------------------------------===//
 
 def FTQC_LogicalRegType : FTQC_Type<"LogicalReg", "logical_reg"> {
@@ -70,7 +66,7 @@ def FTQC_LogicalRegType : FTQC_Type<"LogicalReg", "logical_reg"> {
   let description = [{
     A fixed-size array of logical qubits, analogous to `!quantum.reg`.
 
-    Example: `!ftqc.logical_reg<7, #ftqc.ecc<steane, 3>>`
+    Example: `!ftqc.logical_reg<7, #ftqc.ecc<steane>>`
   }];
 
   let parameters = (ins "unsigned":$size, "ECCAttr":$code);

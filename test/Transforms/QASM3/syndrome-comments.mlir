@@ -13,16 +13,16 @@
 
 module {
   func.func @syndrome_chain() -> i1 {
-    %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %h0 = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %h0 = ftqc.logical_h %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %out_x, %syn_x = ftqc.steane_x_syndrome %h0
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
     %out_z, %syn_z = ftqc.steane_z_syndrome %out_x
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
     %b = ftqc.logical_measure %out_z
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     func.return %b : i1
   }
 }

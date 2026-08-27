@@ -6,14 +6,14 @@
 //       and surface code (d=5) variant.
 
 // CHECK-LABEL: func.func @bell
-// CHECK:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+// CHECK:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, dist = 3>>
 // CHECK:         ftqc.logical_h
 // CHECK:         ftqc.logical_cnot
 // CHECK:         ftqc.logical_measure
 // CHECK:         func.return
 
 // SURFACE-LABEL: func.func @bell
-// SURFACE:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+// SURFACE:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
 // SURFACE:         ftqc.logical_h
 // SURFACE:         ftqc.logical_cnot
 // SURFACE:         ftqc.logical_measure

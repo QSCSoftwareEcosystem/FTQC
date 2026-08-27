@@ -4,10 +4,10 @@
 
 // CHECK-LABEL: func @shor_insertion
 func.func @shor_insertion() {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %z = ftqc.logical_z %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %z = ftqc.logical_z %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   // CHECK: ftqc.steane_x_syndrome
   %bit = ftqc.logical_measure %z
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   func.return
 }

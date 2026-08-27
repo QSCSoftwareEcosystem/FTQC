@@ -14,19 +14,19 @@
 
 module {
   func.func @grover_oracle() -> (i1, i1) {
-    %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-    %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-    %h0  = ftqc.logical_h %lq0 : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-    %h1  = ftqc.logical_h %lq1 : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+    %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+    %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+    %h0  = ftqc.logical_h %lq0 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+    %h1  = ftqc.logical_h %lq1 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
     %r0, %r1 = ftqc.logical_cz %h0, %h1
-        : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
-           !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>)
-        -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
-            !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>)
+        : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
+           !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>)
+        -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
+            !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>)
     %b0 = ftqc.logical_measure %r0
-        : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>) -> i1
     %b1 = ftqc.logical_measure %r1
-        : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>) -> i1
     func.return %b0, %b1 : i1, i1
   }
 }

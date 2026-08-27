@@ -57,7 +57,7 @@ void populateSteaneEncodePatterns(mlir::RewritePatternSet &patterns,
 /// @brief Type converter for Steane encoding.
 ///
 /// Maps physical-qubit types to FTQC logical-qubit types:
-/// - `!quantum.bit`      → `!ftqc.logical_qubit<#ftqc.ecc<steane, d>>`
+/// - `!quantum.bit`      → `!ftqc.logical_qubit<#ftqc.ecc<steane, dist = d>>`
 /// - `!quantum.reg<n>`   → `n` logical qubits of the same ECC type
 ///
 /// Used together with `populateSteaneEncodePatterns()` inside a

@@ -138,26 +138,26 @@ GHZ3_MLIR="${WORKDIR}/ghz3.mlir"
 cat > "$GHZ3_MLIR" << 'MLIR'
 module {
   func.func @ghz3() -> (i1, i1, i1) {
-    %q0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %q1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %q2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %h0 = ftqc.logical_h %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %q0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %q1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %q2 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %h0 = ftqc.logical_h %q0 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %c0, %t1 = ftqc.logical_cnot %h0, %q1
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-            !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+           !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+            !ftqc.logical_qubit<#ftqc.ecc<steane>>)
     %c1, %t2 = ftqc.logical_cnot %t1, %q2
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-            !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+           !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+            !ftqc.logical_qubit<#ftqc.ecc<steane>>)
     %m0 = ftqc.logical_measure %c0
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     %m1 = ftqc.logical_measure %c1
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     %m2 = ftqc.logical_measure %t2
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     return %m0, %m1, %m2 : i1, i1, i1
   }
 }

@@ -3,24 +3,24 @@
 
 // CHECK-LABEL: func @color_d3
 func.func @color_d3() {
-  // CHECK: <#ftqc.ecc<color_code, 3>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
-  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
+  // CHECK: <<color_code, dist = 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
+  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
   func.return
 }
 
 // CHECK-LABEL: func @color_d5
 func.func @color_d5() {
-  // CHECK: <#ftqc.ecc<color_code, 5>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, 5>>
-  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<color_code, 5>>
+  // CHECK: <<color_code, dist = 5>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 5>>
+  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 5>>
   func.return
 }
 
 // CHECK-LABEL: func @concat_2levels
 func.func @concat_2levels() {
-  // CHECK: <#ftqc.ecc<concat, 3, 2>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, 3, 2>>
-  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<concat, 3, 2>>
+  // CHECK: <<concat, levels = 2>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
+  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
   func.return
 }

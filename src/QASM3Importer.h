@@ -240,7 +240,7 @@ class Emitter {
 
   std::string qt() const {
     return "!ftqc.logical_qubit<#ftqc.ecc<" + eccKind +
-           ", " + std::to_string(eccDist) + ">>";
+           ", dist = " + std::to_string(eccDist) + ">>";
   }
 
   std::vector<int> expand(const QRef &q) const {

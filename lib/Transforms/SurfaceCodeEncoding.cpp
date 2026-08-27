@@ -37,7 +37,7 @@ SurfaceTypeConverter::SurfaceTypeConverter(MLIRContext *ctx, unsigned distance) 
 namespace {
 
 static ECCAttr makeSurfaceAttr(MLIRContext *ctx, unsigned d) {
-  return ECCAttr::get(ctx, ECCKind::Surface, d, 1);
+  return ECCAttr::get(ctx, ECCKind::Surface, d);
 }
 
 static LogicalQubitType makeSurfaceQubitType(MLIRContext *ctx, unsigned d) {

@@ -21,25 +21,25 @@
 
 func.func @bell_state_ft() -> (i1, i1) {
   // Allocate two Steane-encoded logical qubits
-  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %lq1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // Logical H on qubit 0: |0> -> (|0> + |1>)/√2
   %h0 = ftqc.logical_h %lq0
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 
   // Logical CNOT creates entanglement: |+>|0> -> (|00> + |11>)/√2
   %c, %t = ftqc.logical_cnot %h0, %lq1
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>)
 
   // Measure both qubits: should give correlated outcomes (00 or 11)
   %b0 = ftqc.logical_measure %c
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   %b1 = ftqc.logical_measure %t
-      : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
 
   func.return %b0, %b1 : i1, i1
 }

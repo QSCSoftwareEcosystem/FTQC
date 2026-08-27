@@ -5,7 +5,7 @@
 // and that CNOT and H gates map correctly.
 
 // CHECK-LABEL: func.func @qft3
-// CHECK:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+// CHECK:         ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, dist = 3>>
 // CHECK:         ftqc.logical_h
 // CHECK:         ftqc.prepare_magic_t : !ftqc.magic_state
 // CHECK:         ftqc.logical_t

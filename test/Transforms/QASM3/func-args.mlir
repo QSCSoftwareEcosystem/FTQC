@@ -12,20 +12,20 @@
 
 module {
   func.func @circuit_with_args(
-      %q0  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
+      %q0  : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
       %cls : i1,
-      %q2  : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) {
+      %q2  : !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>) {
     %h0 = ftqc.logical_h %q0
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     %c, %t = ftqc.logical_cnot %h0, %q2
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-           !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-            !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+           !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+            !ftqc.logical_qubit<#ftqc.ecc<steane>>)
     func.return %c, %t
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>
   }
 }

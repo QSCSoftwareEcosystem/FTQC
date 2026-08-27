@@ -38,7 +38,7 @@ def FTQC_EncodeOp : FTQC_Op<"encode"> {
     Example:
     ```mlir
     %lq = ftqc.encode %phys : !quantum.bit
-        -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+        -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
     ```
   }];
 
@@ -58,7 +58,7 @@ def FTQC_DecodeOp : FTQC_Op<"decode"> {
 
     Example:
     ```mlir
-    %phys = ftqc.decode %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %phys = ftqc.decode %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
         -> !quantum.bit
     ```
   }];
@@ -77,8 +77,8 @@ def FTQC_InitZeroOp : FTQC_Op<"init_zero"> {
 
     Example:
     ```mlir
-    %lq = ftqc.init_zero {code = #ftqc.ecc<steane, 3>}
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %lq = ftqc.init_zero {code = #ftqc.ecc<steane>}
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     ```
   }];
 
@@ -94,7 +94,7 @@ def FTQC_InitPlusOp : FTQC_Op<"init_plus"> {
 
     Example:
     ```mlir
-    %lq = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+    %lq = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<steane>>
     ```
   }];
   let results = (outs FTQC_LogicalQubitType:$logicalQubit);
@@ -128,8 +128,8 @@ def FTQC_ExtractSyndromeOp : FTQC_Op<"extract_syndrome"> {
     Example:
     ```mlir
     %lq_out, %syn = ftqc.extract_syndrome %lq_in {basis = #ftqc.X}
-        : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-        -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
+        : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+        -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
     ```
   }];
 
@@ -238,8 +238,8 @@ def FTQC_CorrectOp : FTQC_Op<"correct"> {
     Example:
     ```mlir
     %lq_corrected = ftqc.correct %lq, %syn
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane,3>>, !ftqc.syndrome<6>)
-        -> !ftqc.logical_qubit<#ftqc.ecc<steane,3>>
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
+        -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
     ```
   }];
 
@@ -384,8 +384,8 @@ def FTQC_LogicalTOp : FTQC_Op<"logical_t"> {
     ```mlir
     %ms   = ftqc.prepare_magic_t : !ftqc.magic_state
     %lq1  = ftqc.logical_t %lq0, %ms
-        : (!ftqc.logical_qubit<#ftqc.ecc<steane,3>>, !ftqc.magic_state)
-        -> !ftqc.logical_qubit<#ftqc.ecc<steane,3>>
+        : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state)
+        -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
     ```
   }];
 
