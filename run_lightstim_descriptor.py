@@ -8,19 +8,41 @@ import contextlib
 import copy
 import io
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
 
 
-LIGHTSTIM_REPO = Path(__file__).resolve().parents[1] / "lightstim"
-if str(LIGHTSTIM_REPO) not in sys.path:
-    sys.path.insert(0, str(LIGHTSTIM_REPO))
+def _configure_lightstim_path() -> None:
+    """Prefer an explicit or sibling LightStim checkout when one is present."""
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = []
+    if configured := os.environ.get("LIGHTSTIM_REPO"):
+        configured_path = Path(configured).expanduser()
+        if not (configured_path / "lightstim" / "__init__.py").is_file():
+            raise RuntimeError(
+                f"LIGHTSTIM_REPO does not contain a LightStim checkout: {configured_path}"
+            )
+        candidates.append(configured_path)
+    candidates.extend((repo_root / "LightStim", repo_root / "lightstim"))
+
+    for candidate in candidates:
+        if (candidate / "lightstim" / "__init__.py").is_file():
+            candidate_text = str(candidate.resolve())
+            if candidate_text in sys.path:
+                sys.path.remove(candidate_text)
+            sys.path.insert(0, candidate_text)
+            return
+
+
+_configure_lightstim_path()
 
 from lightstim.noise.config import NoiseConfig
-from lightstim.protocols.atomic_timeline import AtomicTimelineError, AtomicTimelineExperiment
 from lightstim.protocols.two_patch_ls import TwoPatchLSExperiment
 from lightstim.simulation.decoder_backend import DecoderConfig, SimulationPipeline
+
+from lightstim_atomic_adapter import AtomicTimelineError, AtomicTimelineExperiment
 
 
 LEGACY_FORMAT = "ftqc-lightstim-experiment"
@@ -180,10 +202,10 @@ def validate_atomic_descriptor(descriptor: dict[str, Any]) -> None:
 
         if patch["code"] != "unrotated_surface_code":
             raise DescriptorError("atomic adapter currently supports only code='unrotated_surface_code'")
-        if patch["initial_basis"] not in ("X", "Y", "Z"):
-            raise DescriptorError(f"patches[{index}].initial_basis must be X/Y/Z")
-        if patch["measurement_basis"] not in ("X", "Y", "Z"):
-            raise DescriptorError(f"patches[{index}].measurement_basis must be X/Y/Z")
+        if patch["initial_basis"] not in ("X", "Z"):
+            raise DescriptorError(f"patches[{index}].initial_basis must be X or Z")
+        if patch["measurement_basis"] not in ("X", "Z"):
+            raise DescriptorError(f"patches[{index}].measurement_basis must be X or Z")
         if len(patch["offset"]) != 2:
             raise DescriptorError(f"patches[{index}].offset must contain two numbers")
 
@@ -298,6 +320,10 @@ def check_noiseless_circuit(descriptor: dict[str, Any]) -> None:
     if shots <= 0:
         return
     circuit = build_circuit(descriptor, noisy=False)
+    if circuit.num_observables == 0:
+        raise RuntimeError(
+            "Circuit has no logical observables; an LER from this descriptor would be meaningless."
+        )
     sampler = circuit.compile_detector_sampler()
     dets, obs = sampler.sample(shots=shots, separate_observables=True)
     if dets.any() or obs.any():

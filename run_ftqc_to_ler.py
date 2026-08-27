@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -95,9 +96,28 @@ def parse_ler_report_text(output_text: str) -> dict[str, Any]:
     return report
 
 
+def _default_lightstim_python(ftqc_root: Path) -> Path:
+    if configured := os.environ.get("LIGHTSTIM_PYTHON"):
+        return Path(configured).expanduser()
+
+    research_root = ftqc_root.parent
+    for repo_name in ("LightStim", "lightstim"):
+        for venv_name in ("venv", ".venv"):
+            candidate = research_root / repo_name / venv_name / "bin" / "python"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate
+    return Path(sys.executable)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be an integer >= 1")
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
-    repo_root = Path(__file__).resolve().parents[1]
-    ftqc_root = repo_root / "ftqc"
+    ftqc_root = Path(__file__).resolve().parent
 
     parser = argparse.ArgumentParser(description="Run FTQC MLIR -> LightStim -> LER in one command.")
     parser.add_argument("mlir_input", type=Path, help="Path to FTQC MLIR input file.")
@@ -110,19 +130,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--python",
         type=Path,
-        default=Path(sys.executable),
-        help="Python executable used to run integrate/run_lightstim_descriptor.py.",
+        default=_default_lightstim_python(ftqc_root),
+        help="Python executable used to run run_lightstim_descriptor.py.",
     )
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "out",
+        default=ftqc_root / "out",
         help="Output directory for emitted descriptor/artifacts.",
     )
 
     parser.add_argument("--patch-spacing", type=int, default=10)
-    parser.add_argument("--default-se-rounds", type=int, default=1)
-    parser.add_argument("--surgery-rounds", type=int, default=5)
+    parser.add_argument("--default-se-rounds", type=_positive_int, default=1)
+    parser.add_argument("--surgery-rounds", type=_positive_int, default=5)
     parser.add_argument("--physical-error-rate", type=float, default=1e-3)
     parser.add_argument("--decoder", default="pymatching")
     parser.add_argument("--decoder-backend", default="cpu")

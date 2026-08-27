@@ -87,6 +87,7 @@ private:
   DenseMap<unsigned, std::string> readoutBasisByPatch_;
   std::string funcName_;
   unsigned couplerCounter_ = 0;
+  bool needsSERound_ = false;
 
   static std::string jsonEscape(StringRef text) {
     std::string out;
@@ -146,6 +147,7 @@ private:
     readoutBasisByPatch_.clear();
     funcName_.clear();
     couplerCounter_ = 0;
+    needsSERound_ = false;
   }
 
   LogicalQubitType logicalType(Value value) {
@@ -229,6 +231,7 @@ private:
     std::string gate = "{\"gate\": \"" + gateName.str() + "\", \"patches\": " +
                        patchArrayJSON(patchIndices) + "}";
     pendingGates_.push_back(gate);
+    needsSERound_ = true;
   }
 
   void flushUnitaryBlock() {
@@ -244,17 +247,21 @@ private:
     timelineOps_.push_back("{\"op\": \"syndrome_extraction\", \"rounds\": " +
                            std::to_string(rounds) +
                            ", \"optimize_repeat\": true}");
+    needsSERound_ = false;
   }
 
   void appendInitializeEvent(unsigned patchIdx, StringRef basis) {
     timelineOps_.push_back("{\"op\": \"initialize\", \"patch\": \"" +
                            patches_[patchIdx].id + "\", \"basis\": \"" +
                            basis.str() + "\"}");
+    needsSERound_ = true;
   }
 
   void appendReadoutEventIfNeeded() {
     if (readoutOrder_.empty())
       return;
+    if (needsSERound_)
+      appendSyndromeEvent(defaultSERounds_);
     std::vector<std::string> meas;
     meas.reserve(readoutOrder_.size());
     for (unsigned idx : readoutOrder_) {
@@ -381,6 +388,11 @@ private:
             patches_[*p1].offsetY = 0;
           }
 
+          // LightStim requires a non-merged extraction round after patch
+          // initialization or a logical unitary, before corridor activation.
+          if (needsSERound_)
+            appendSyndromeEvent(defaultSERounds_);
+
           std::string coupler = "coupler_" + std::to_string(couplerCounter_++);
           timelineOps_.push_back(
               "{\"op\": \"activate_coupler\", \"name\": \"" + coupler +
@@ -454,6 +466,15 @@ private:
 
   LogicalResult analyzeModule(ModuleOp mod) {
     reset();
+
+    if (defaultSERounds_ == 0) {
+      mod.emitError("LightStim atomic export: default-se-rounds must be >= 1");
+      return failure();
+    }
+    if (surgeryRounds_ == 0) {
+      mod.emitError("LightStim atomic export: surgery-rounds must be >= 1");
+      return failure();
+    }
 
     std::vector<func::FuncOp> funcs;
     for (auto func : mod.getOps<func::FuncOp>())

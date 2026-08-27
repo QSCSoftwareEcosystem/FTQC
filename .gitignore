@@ -7,3 +7,5 @@ CMakeCache.txt
 docs/html/
 install/
 out/
+__pycache__/
+*.py[cod]
