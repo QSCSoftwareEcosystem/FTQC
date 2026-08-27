@@ -314,6 +314,18 @@ std::unique_ptr<mlir::Pass> createExpandPhysicalPass();
 /// rather than broken IR.
 std::unique_ptr<mlir::Pass> createExpandPhysicalGenericPass();
 
+/// @brief Create the physical qubit reuse pass (`--ftqc-qphys-qubit-reuse`).
+///
+/// Renumbers physical qubits to use IDs in the range [0, max-qubits). Once this
+/// limit is reached, new allocations reuse a free ID from the least recently
+/// used qubit, so that as many operations can be performed in parallel as
+/// possible. This pass fails if the number of live qubits ever exceeds
+/// max-qubits; no attempt is currently made to reorder operations to get under
+/// the limit. No attempt is currently made to track qubits across blocks, so
+/// each function must have a single block and only use qubits allocated in that
+/// block.
+std::unique_ptr<mlir::Pass> createQPhysQubitReusePass();
+
 /// @brief Create the qphys → OpenQASM 3.0 lowering (`--ftqc-qphys-to-qasm3`).
 ///
 /// Demonstrates lowering a *physical* IR (post `--ftqc-expand-physical`) to a

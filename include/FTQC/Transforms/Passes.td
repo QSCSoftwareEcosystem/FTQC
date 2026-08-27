@@ -623,6 +623,25 @@ def FTQCExpandPhysicalGenericPass : Pass<"ftqc-expand-physical-generic", "mlir::
   let dependentDialects = ["mlir::ftqc::FTQCDialect", "mlir::arith::ArithDialect"];
 }
 
+def FTQCQPhysQubitReusePass : Pass<"ftqc-qphys-qubit-reuse", "mlir::func::FuncOp"> {
+  let summary = "Renumber qubits to fit within max-qubits, reusing free qubits";
+  let description = [{
+    Renumbers physical qubits to use IDs in the range [0, max-qubits). Once this
+    limit is reached, new allocations reuse a free ID from the least recently
+    used qubit, so that as many operations can be performed in parallel as
+    possible. This pass fails if the number of live qubits ever exceeds
+    max-qubits; no attempt is currently made to reorder operations to get under
+    the limit. No attempt is currently made to track qubits across blocks, so
+    each function must have a single block and only use qubits allocated in that
+    block.
+  }];
+  let options = [
+    Option<"maxQubits", "max-qubits", "uint64_t", "0",
+           "Maximum number of qubits to use in the output circuit">
+  ];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+}
+
 def FTQCQPhysToQASM3Pass : Pass<"ftqc-qphys-to-qasm3", "mlir::ModuleOp"> {
   let summary = "Lower the physical qphys IR to OpenQASM 3.0";
   let description = [{
