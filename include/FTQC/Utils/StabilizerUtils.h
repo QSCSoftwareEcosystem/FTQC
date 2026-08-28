@@ -190,6 +190,28 @@ public:
   /// @return `StabilizerCode` representing the [[d², 1, d]] rotated surface code.
   static StabilizerCode makeSurface(unsigned d);
 
+  /// @brief Construct a concatenated code.
+  ///
+  /// The concatenation of an [[N,K,D]] outer code and an [[n,1,d]] inner code
+  /// is constructed by using logical qubits encoded using the inner code as
+  /// "physical" qubits for the outer code. It uses Nn physical qubits to encode
+  /// K logical qubits, with code distance at least Dd.
+  ///
+  /// @param outer The outer stabilizer code.
+  /// @param inner The inner stabilizer code.
+  /// @return `StabilizerCode` representing the concatenated code.
+  static StabilizerCode makeConcatenated(const StabilizerCode &outer,
+                                         const StabilizerCode &inner);
+
+  /// @brief Construct an n-qubit repetition code.
+  ///
+  /// The repetition code is an [[n,1,1]] code, because it protects against bit
+  /// flips, but not phase flips.
+  ///
+  /// @param n Number of physical qubits.
+  /// @return `StabilizerCode` representing the n-qubit repetition code.
+  static StabilizerCode makeRepetition(unsigned n);
+
   /// @brief Construct the [[4,2,2]] error-detecting code.
   ///
   /// The [[4,2,2]] code detects any single-qubit error but cannot correct it.

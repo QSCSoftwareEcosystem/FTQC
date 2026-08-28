@@ -146,19 +146,16 @@ ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key) {
         makeDummyCode(n, 1, *dist, numStabilizers / 2, numStabilizers / 2);
     break;
   }
-  case ECCKind::Concatenated: { // concatenated Steane code
-    unsigned d = 1, n = 1, numStabilizers = 0;
-    for (uint32_t i = 0; i < *levels; ++i) {
-      numStabilizers += 6 * n;
-      n *= 7;
-      d *= 3;
-    }
-    stabilizerCode =
-        makeDummyCode(n, 1, d, numStabilizers / 2, numStabilizers / 2);
+  case ECCKind::Concatenated: {
+    auto steane = StabilizerCode::makeSteane();
+    // The trivial [[1,1,1]] code serves as identity for concatenation.
+    stabilizerCode = StabilizerCode::makeSurface(1);
+    for (uint32_t i = 0; i < *levels; ++i)
+      stabilizerCode = StabilizerCode::makeConcatenated(steane, stabilizerCode);
     break;
   }
   case ECCKind::Repetition:
-    stabilizerCode = makeDummyCode(*dist, 1, 1, 0, *dist - 1);
+    stabilizerCode = StabilizerCode::makeRepetition(*dist);
     break;
   case ECCKind::Compass: { // compass code ~ surface code
     unsigned n = *dist * *dist;

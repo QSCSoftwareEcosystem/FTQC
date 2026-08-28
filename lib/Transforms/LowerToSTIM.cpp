@@ -167,14 +167,10 @@ private:
     blk.obsId = nextObs++;
 
     auto code = dyn_cast<LogicalQubitType>(v.getType()).getCode();
-    switch (code.getKind()) {
-    case ECCKind::Steane:
+    if (code.getKind() == ECCKind::Steane) {
       blk.code = &STEANE_PARAMS;
-      break;
-
-    // TODO: Logical gates are not yet emitted correctly for these code families.
-    case ECCKind::Surface:
-    case ECCKind::HypergraphProduct:
+    } else {
+      // TODO: Logical gates are not yet emitted correctly for these code families.
       if (!codeParams.contains(code)) {
         StabilizerCode stabCode = code.getStabilizerCode();
         auto params = std::make_unique<CodeParams>();
@@ -197,10 +193,6 @@ private:
         codeParams[code] = std::move(params);
       }
       blk.code = codeParams[code].get();
-      break;
-
-    default:
-      break;
     }
 
     nextQubit += blk.numData() + blk.numSyndrome();

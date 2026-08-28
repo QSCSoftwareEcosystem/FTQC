@@ -5,10 +5,10 @@
 // `ftqc.qphys.*` physical gate + measure circuits.  Data and ancilla qubits
 // become explicit, labeled SSA values (role = "data" / "x_anc" / "z_anc").
 //
-// Scope: Steane, surface, and hypergraph product codes.  Currently syndrome
-// extraction, logical Pauli gates, qubit initialization and measurement are
-// supported.  Other logical ops cause the pass to error out rather than emit
-// physically wrong or dangling IR.
+// Scope: Steane, surface, concatenated, repetition, and hypergraph product
+// codes.  Currently syndrome extraction, logical Pauli gates, qubit
+// initialization and measurement are supported.  Other logical ops cause the
+// pass to error out rather than emit physically wrong or dangling IR.
 //
 //===----------------------------------------------------------------------===//
 

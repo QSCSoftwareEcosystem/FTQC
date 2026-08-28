@@ -213,6 +213,84 @@ StabilizerCode StabilizerCode::makeSurface(unsigned d) {
   return code;
 }
 
+StabilizerCode StabilizerCode::makeConcatenated(const StabilizerCode &outer,
+                                                const StabilizerCode &inner) {
+  assert(inner.k_ == 1);
+  // This function assumes that the logical X operators of both outer and inner
+  // are products of only X and I operators, and that the logical Z operators of
+  // both outer and inner are products of only Z and I operators. It is always
+  // possible to construct the logical operators for a CSS code in this way, and
+  // this assumption currently holds for all codes constructed in this file, but
+  // need not hold in general.
+
+  unsigned n = outer.n_ * inner.n_;
+  unsigned d = outer.d_ * inner.d_; // Lower bound
+
+  std::vector<BinaryRow> Hx(outer.Hx_.size() + outer.n_ * inner.Hx_.size(),
+                            BinaryRow(n, 0));
+  for (unsigned i = 0; i < outer.Hx_.size(); ++i)
+    for (unsigned j = 0; j < outer.n_; ++j)
+      if (outer.Hx_[i][j])
+        for (unsigned k = 0; k < inner.n_; ++k)
+          if (inner.logX_[0][k] == Pauli::X)
+            Hx[i][j * inner.n_ + k] = 1;
+  for (unsigned i = 0; i < outer.n_; ++i) {
+    for (unsigned j = 0; j < inner.Hx_.size(); ++j) {
+      auto &row = Hx[outer.Hx_.size() + i * inner.Hx_.size() + j];
+      for (unsigned k = 0; k < inner.n_; ++k)
+        row[i * inner.n_ + k] = inner.Hx_[j][k];
+    }
+  }
+
+  std::vector<BinaryRow> Hz(outer.Hz_.size() + outer.n_ * inner.Hz_.size(),
+                            BinaryRow(n, 0));
+  for (unsigned i = 0; i < outer.Hz_.size(); ++i)
+    for (unsigned j = 0; j < outer.n_; ++j)
+      if (outer.Hz_[i][j])
+        for (unsigned k = 0; k < inner.n_; ++k)
+          if (inner.logZ_[0][k] == Pauli::Z)
+            Hz[i][j * inner.n_ + k] = 1;
+  for (unsigned i = 0; i < outer.n_; ++i) {
+    for (unsigned j = 0; j < inner.Hz_.size(); ++j) {
+      auto &row = Hz[outer.Hz_.size() + i * inner.Hz_.size() + j];
+      for (unsigned k = 0; k < inner.n_; ++k)
+        row[i * inner.n_ + k] = inner.Hz_[j][k];
+    }
+  }
+
+  auto code =
+      StabilizerCode::fromCSS(n, inner.k_, d, std::move(Hx), std::move(Hz));
+
+  code.logX_.resize(inner.k_, PauliString(n, Pauli::I));
+  for (unsigned i = 0; i < outer.k_; ++i)
+    for (unsigned j = 0; j < outer.n_; ++j)
+      if (outer.logX_[i][j] == Pauli::X)
+        for (unsigned k = 0; k < inner.n_; ++k)
+          code.logX_[i][j * inner.n_ + k] = inner.logX_[0][k];
+
+  code.logZ_.resize(inner.k_, PauliString(n, Pauli::I));
+  for (unsigned i = 0; i < outer.k_; ++i)
+    for (unsigned j = 0; j < outer.n_; ++j)
+      if (outer.logZ_[i][j] == Pauli::Z)
+        for (unsigned k = 0; k < inner.n_; ++k)
+          code.logZ_[i][j * inner.n_ + k] = inner.logZ_[0][k];
+
+  return code;
+}
+
+StabilizerCode StabilizerCode::makeRepetition(unsigned n) {
+  std::vector<BinaryRow> Hz(n - 1, BinaryRow(n, 0));
+  for (unsigned i = 0; i < n - 1; ++i) {
+    Hz[i][i] = 1;
+    Hz[i][i + 1] = 1;
+  }
+  auto code = StabilizerCode::fromCSS(n, 1, 1, {}, std::move(Hz));
+  code.logX_.emplace_back(n, Pauli::X);
+  code.logZ_.emplace_back(n, Pauli::I);
+  code.logZ_.back()[0] = Pauli::Z;
+  return code;
+}
+
 StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
                                                      const ClassicalCode &code2) {
   ClassicalCode codeT1 = code1.transposeCode(), codeT2 = code2.transposeCode();

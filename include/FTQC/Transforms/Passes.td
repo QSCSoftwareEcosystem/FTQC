@@ -615,10 +615,10 @@ def FTQCExpandPhysicalGenericPass : Pass<"ftqc-expand-physical-generic", "mlir::
     `!ftqc.logical_qubit` becomes a block of `!ftqc.qphys_qubit` values, and
     logical gates / syndrome ops become physical gate + measure circuits.
     Currently syndrome extraction, logical Pauli gates, qubit initialization and
-    measurement are supported, using Steane, surface, or hypergraph product
-    codes.  This materializes the data and ancilla qubits as explicit, labeled
-    SSA values so routing/SWAP and the back-end lowerings can operate on one
-    physical IR.
+    measurement are supported, using Steane, surface, concatenated, repetition,
+    or hypergraph product codes.  This materializes the data and ancilla qubits
+    as explicit, labeled SSA values so routing/SWAP and the back-end lowerings
+    can operate on one physical IR.
   }];
   let dependentDialects = ["mlir::ftqc::FTQCDialect", "mlir::arith::ArithDialect"];
 }
