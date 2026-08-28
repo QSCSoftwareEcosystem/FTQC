@@ -24,7 +24,7 @@
 /// any pass that needs to build Steane circuits programmatically:
 /// @code{.cpp}
 /// RewritePatternSet patterns(&ctx);
-/// populateSteaneEncodePatterns(patterns, /*distance=*/3, /*insertEC=*/true);
+/// populateSteaneEncodePatterns(patterns, /*insertEC=*/true);
 /// @endcode
 
 #ifndef FTQC_TRANSFORMS_STEANEENCODING_H
@@ -43,21 +43,18 @@ namespace ftqc {
 ///        Steane-code operations.
 ///
 /// Converts physical-qubit ops from a generic `quantum` dialect into FTQC
-/// logical operations parameterised with `#ftqc.ecc<steane, @p distance>`.
+/// logical operations parameterised with `#ftqc.ecc<steane>`.
 ///
 /// @param patterns  Pattern set to add the conversion patterns to.
-/// @param distance  Code distance; currently only 3 (\[\[7,1,3\]\]) is
-///                  fully supported.
 /// @param insertEC  If true, syndrome extraction ops are inserted after each
 ///                  logical gate during the lowering.
 void populateSteaneEncodePatterns(mlir::RewritePatternSet &patterns,
-                                  unsigned distance = 3,
                                   bool insertEC = true);
 
 /// @brief Type converter for Steane encoding.
 ///
 /// Maps physical-qubit types to FTQC logical-qubit types:
-/// - `!quantum.bit`      → `!ftqc.logical_qubit<#ftqc.ecc<steane, dist = d>>`
+/// - `!quantum.bit`      → `!ftqc.logical_qubit<#ftqc.ecc<steane>>`
 /// - `!quantum.reg<n>`   → `n` logical qubits of the same ECC type
 ///
 /// Used together with `populateSteaneEncodePatterns()` inside a
@@ -65,8 +62,7 @@ void populateSteaneEncodePatterns(mlir::RewritePatternSet &patterns,
 class SteaneTypeConverter : public mlir::TypeConverter {
 public:
   /// @param ctx      MLIR context used to construct FTQC types.
-  /// @param distance Steane code distance (default 3).
-  explicit SteaneTypeConverter(mlir::MLIRContext *ctx, unsigned distance = 3);
+  explicit SteaneTypeConverter(mlir::MLIRContext *ctx);
 };
 
 /// @brief Build the 7-qubit Steane-code encoding circuit for a logical |0⟩_L.

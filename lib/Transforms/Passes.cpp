@@ -40,11 +40,10 @@ void mlir::ftqc::registerFTQCPasses() {
 }
 
 void mlir::ftqc::buildSteaneEncodePipeline(OpPassManager &pm,
-                                            unsigned distance,
                                             bool insertEC,
                                             const std::string &synMethod) {
   // Module-level encoding.
-  pm.addPass(createSteaneEncodePass(distance, insertEC, 3));
+  pm.addPass(createSteaneEncodePass(insertEC, 3));
   // Function-level syndrome + correction.
   auto &funcPM = pm.nest<func::FuncOp>();
   if (insertEC) {

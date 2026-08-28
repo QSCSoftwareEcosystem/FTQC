@@ -112,8 +112,7 @@ static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
 
     // Encoding passes
     if (cfg->steane_encode) {
-        unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;
-        pm.addPass(mlir::ftqc::createSteaneEncodePass(dist, false, 3));
+        pm.addPass(mlir::ftqc::createSteaneEncodePass(false, 3));
     }
     if (cfg->surface_encode) {
         unsigned dist = cfg->ecc_dist > 0 ? (unsigned)cfg->ecc_dist : 3u;

@@ -78,14 +78,11 @@ namespace ftqc {
 std::unique_ptr<mlir::Pass> createSteaneEncodePass();
 
 /// @brief Create the Steane encoding pass with explicit options.
-/// @param distance Code distance (must be 3 for [[7,1,3]]; reserved for future
-///                 concatenation).
 /// @param insertEC If true, insert syndrome and correction rounds during
 ///                 encoding.
 /// @param ecRounds Number of syndrome rounds to insert per gate.
-std::unique_ptr<mlir::Pass> createSteaneEncodePass(unsigned distance,
-                                                    bool insertEC,
-                                                    unsigned ecRounds);
+std::unique_ptr<mlir::Pass> createSteaneEncodePass(bool insertEC,
+                                                   unsigned ecRounds);
 
 /// @brief Create the surface-code encoding pass with default options (d=3,
 ///        lattice surgery enabled).
@@ -352,19 +349,17 @@ std::unique_ptr<mlir::Pass> createQPhysInitLayoutPass();
 /// @brief Build the full Steane \[\[7,1,3\]\] fault-tolerant lowering pipeline.
 ///
 /// Pipeline (in order):
-///  1. `ftqc-steane-encode` — encode at distance @p distance
+///  1. `ftqc-steane-encode`
 ///  2. `ftqc-insert-syndrome` (if @p insertEC) — @p syndromeMethod rounds
 ///  3. `ftqc-insert-correction` (if @p insertEC)
 ///  4. `ftqc-transversal-gates`
 ///  5. `ftqc-resource-estimate`
 ///
 /// @param pm             Pass manager to append passes to.
-/// @param distance       Steane code distance (default 3).
 /// @param insertEC       Insert syndrome extraction and correction (default true).
 /// @param syndromeMethod Syndrome method passed to createInsertSyndromePass()
 ///                       (default `"steane"`).
 void buildSteaneEncodePipeline(mlir::OpPassManager &pm,
-                               unsigned distance = 3,
                                bool insertEC = true,
                                const std::string &syndromeMethod = "steane");
 

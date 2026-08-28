@@ -38,12 +38,12 @@ using namespace mlir::ftqc;
 // SteaneTypeConverter
 //===----------------------------------------------------------------------===//
 
-SteaneTypeConverter::SteaneTypeConverter(MLIRContext *ctx, unsigned distance) {
+SteaneTypeConverter::SteaneTypeConverter(MLIRContext *ctx) {
   // Identity for all standard types.
   addConversion([](Type t) { return t; });
 
-  // !quantum.bit → !ftqc.logical_qubit<#ftqc.ecc<steane, dist = d>>
-  addConversion([ctx, distance](Type t) -> std::optional<Type> {
+  // !quantum.bit → !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  addConversion([](Type t) -> std::optional<Type> {
     if (t.getIntOrFloatBitWidth() == 1)
       return std::nullopt;  // not a quantum bit marker; skip
     // We rely on the fact that quantum.bit is a specific dialect type.
@@ -61,21 +61,19 @@ namespace {
 //---------------------------------------------------------------------
 // Helper: build a Steane ECCAttr
 //---------------------------------------------------------------------
-static ECCAttr makeSteaneAttr(MLIRContext *ctx, unsigned distance = 3) {
-  return ECCAttr::get(ctx, ECCKind::Steane, distance);
+static ECCAttr makeSteaneAttr(MLIRContext *ctx) {
+  return ECCAttr::get(ctx, ECCKind::Steane, std::nullopt);
 }
 
-static LogicalQubitType makeSteaneQubitType(MLIRContext *ctx,
-                                             unsigned distance = 3) {
-  return LogicalQubitType::get(ctx, makeSteaneAttr(ctx, distance));
+static LogicalQubitType makeSteaneQubitType(MLIRContext *ctx) {
+  return LogicalQubitType::get(ctx, makeSteaneAttr(ctx));
 }
 
 //---------------------------------------------------------------------
 // Pattern: quantum.custom "H" → ftqc.logical_h
 //---------------------------------------------------------------------
 struct HGatePattern : public mlir::RewritePattern {
-  HGatePattern(MLIRContext *ctx, unsigned distance)
-      : RewritePattern("quantum.custom", 1, ctx), distance_(distance) {}
+  HGatePattern(MLIRContext *ctx) : RewritePattern("quantum.custom", 1, ctx) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -87,23 +85,20 @@ struct HGatePattern : public mlir::RewritePattern {
     if (op->getNumOperands() != 1)
       return mlir::failure();
 
-    auto lqType = makeSteaneQubitType(rewriter.getContext(), distance_);
+    auto lqType = makeSteaneQubitType(rewriter.getContext());
     if (!isa<LogicalQubitType>(op->getOperand(0).getType()))
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<LogicalHOp>(op, lqType, op->getOperand(0));
     return mlir::success();
   }
-
-  unsigned distance_;
 };
 
 //---------------------------------------------------------------------
 // Pattern: quantum.custom "CNOT" → ftqc.logical_cnot
 //---------------------------------------------------------------------
 struct CNOTPattern : public mlir::RewritePattern {
-  CNOTPattern(MLIRContext *ctx, unsigned distance)
-      : RewritePattern("quantum.custom", 1, ctx), distance_(distance) {}
+  CNOTPattern(MLIRContext *ctx) : RewritePattern("quantum.custom", 1, ctx) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -114,7 +109,7 @@ struct CNOTPattern : public mlir::RewritePattern {
     if (op->getNumOperands() != 2)
       return mlir::failure();
 
-    auto lqType = makeSteaneQubitType(rewriter.getContext(), distance_);
+    auto lqType = makeSteaneQubitType(rewriter.getContext());
     auto ctrl = op->getOperand(0), tgt = op->getOperand(1);
     if (!isa<LogicalQubitType>(ctrl.getType()) ||
         !isa<LogicalQubitType>(tgt.getType()))
@@ -125,16 +120,13 @@ struct CNOTPattern : public mlir::RewritePattern {
     (void)newOp;
     return mlir::success();
   }
-
-  unsigned distance_;
 };
 
 //---------------------------------------------------------------------
 // Pattern: quantum.custom "T" → prepare_magic_t + ftqc.logical_t
 //---------------------------------------------------------------------
 struct TGatePattern : public mlir::RewritePattern {
-  TGatePattern(MLIRContext *ctx, unsigned distance)
-      : RewritePattern("quantum.custom", 2, ctx), distance_(distance) {}
+  TGatePattern(MLIRContext *ctx) : RewritePattern("quantum.custom", 2, ctx) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -145,7 +137,7 @@ struct TGatePattern : public mlir::RewritePattern {
     if (op->getNumOperands() != 1)
       return mlir::failure();
 
-    auto lqType = makeSteaneQubitType(rewriter.getContext(), distance_);
+    auto lqType = makeSteaneQubitType(rewriter.getContext());
     auto qubit  = op->getOperand(0);
     if (!isa<LogicalQubitType>(qubit.getType()))
       return mlir::failure();
@@ -156,16 +148,13 @@ struct TGatePattern : public mlir::RewritePattern {
     rewriter.replaceOpWithNewOp<LogicalTOp>(op, lqType, qubit, magic);
     return mlir::success();
   }
-
-  unsigned distance_;
 };
 
 //---------------------------------------------------------------------
 // Pattern: quantum.custom "X" → ftqc.logical_x
 //---------------------------------------------------------------------
 struct XGatePattern : public mlir::RewritePattern {
-  XGatePattern(MLIRContext *ctx, unsigned distance)
-      : RewritePattern("quantum.custom", 1, ctx), distance_(distance) {}
+  XGatePattern(MLIRContext *ctx) : RewritePattern("quantum.custom", 1, ctx) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -173,21 +162,19 @@ struct XGatePattern : public mlir::RewritePattern {
     auto gn = op->getAttrOfType<StringAttr>("gate_name");
     if (!gn || gn.getValue() != "X")
       return mlir::failure();
-    auto lqType = makeSteaneQubitType(rewriter.getContext(), distance_);
+    auto lqType = makeSteaneQubitType(rewriter.getContext());
     if (!isa<LogicalQubitType>(op->getOperand(0).getType()))
       return mlir::failure();
     rewriter.replaceOpWithNewOp<LogicalXOp>(op, lqType, op->getOperand(0));
     return mlir::success();
   }
-  unsigned distance_;
 };
 
 //---------------------------------------------------------------------
 // Pattern: quantum.custom "Z" → ftqc.logical_z
 //---------------------------------------------------------------------
 struct ZGatePattern : public mlir::RewritePattern {
-  ZGatePattern(MLIRContext *ctx, unsigned distance)
-      : RewritePattern("quantum.custom", 1, ctx), distance_(distance) {}
+  ZGatePattern(MLIRContext *ctx) : RewritePattern("quantum.custom", 1, ctx) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -195,13 +182,12 @@ struct ZGatePattern : public mlir::RewritePattern {
     auto gn = op->getAttrOfType<StringAttr>("gate_name");
     if (!gn || gn.getValue() != "Z")
       return mlir::failure();
-    auto lqType = makeSteaneQubitType(rewriter.getContext(), distance_);
+    auto lqType = makeSteaneQubitType(rewriter.getContext());
     if (!isa<LogicalQubitType>(op->getOperand(0).getType()))
       return mlir::failure();
     rewriter.replaceOpWithNewOp<LogicalZOp>(op, lqType, op->getOperand(0));
     return mlir::success();
   }
-  unsigned distance_;
 };
 
 } // anonymous namespace
@@ -211,14 +197,13 @@ struct ZGatePattern : public mlir::RewritePattern {
 //===----------------------------------------------------------------------===//
 
 void mlir::ftqc::populateSteaneEncodePatterns(RewritePatternSet &patterns,
-                                              unsigned distance,
                                               bool insertEC) {
   MLIRContext *ctx = patterns.getContext();
-  patterns.add<HGatePattern>(ctx, distance);
-  patterns.add<CNOTPattern>(ctx, distance);
-  patterns.add<TGatePattern>(ctx, distance);
-  patterns.add<XGatePattern>(ctx, distance);
-  patterns.add<ZGatePattern>(ctx, distance);
+  patterns.add<HGatePattern>(ctx);
+  patterns.add<CNOTPattern>(ctx);
+  patterns.add<TGatePattern>(ctx);
+  patterns.add<XGatePattern>(ctx);
+  patterns.add<ZGatePattern>(ctx);
 }
 
 //===----------------------------------------------------------------------===//
@@ -244,7 +229,7 @@ mlir::Value mlir::ftqc::buildSteaneEncodeCircuit(mlir::OpBuilder &builder,
   // to build the 7-qubit encoding network.
   // Here we return the logical qubit wrapper.
   auto lqType = LogicalQubitType::get(
-      ctx, ECCAttr::get(ctx, ECCKind::Steane, 3));
+      ctx, ECCAttr::get(ctx, ECCKind::Steane, std::nullopt));
   return builder.create<EncodeOp>(loc, lqType, physQubit);
 }
 
@@ -260,8 +245,8 @@ struct FTQCSteaneEncodePassImpl
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FTQCSteaneEncodePassImpl)
 
   FTQCSteaneEncodePassImpl() = default;
-  FTQCSteaneEncodePassImpl(unsigned distance, bool insertEC, unsigned ecRounds)
-      : distance_(distance), insertEC_(insertEC), ecRounds_(ecRounds) {}
+  FTQCSteaneEncodePassImpl(bool insertEC, unsigned ecRounds)
+      : insertEC_(insertEC), ecRounds_(ecRounds) {}
 
   llvm::StringRef getArgument() const override {
     return "ftqc-steane-encode";
@@ -277,9 +262,9 @@ struct FTQCSteaneEncodePassImpl
     // For each function, convert quantum operations to FTQC.
     mod.walk([&](mlir::func::FuncOp func) {
       mlir::RewritePatternSet patterns(ctx);
-      populateSteaneEncodePatterns(patterns, distance_, insertEC_);
+      populateSteaneEncodePatterns(patterns, insertEC_);
 
-            if (mlir::failed(
+      if (mlir::failed(
               mlir::applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
         func.emitError("Steane encoding pass failed");
         signalPassFailure();
@@ -309,7 +294,6 @@ struct FTQCSteaneEncodePassImpl
     });
   }
 
-  unsigned distance_ = 3;
   bool     insertEC_ = true;
   unsigned ecRounds_ = 3;
 };
@@ -321,6 +305,6 @@ std::unique_ptr<mlir::Pass> mlir::ftqc::createSteaneEncodePass() {
 }
 
 std::unique_ptr<mlir::Pass> mlir::ftqc::createSteaneEncodePass(
-    unsigned distance, bool insertEC, unsigned ecRounds) {
-  return std::make_unique<FTQCSteaneEncodePassImpl>(distance, insertEC, ecRounds);
+    bool insertEC, unsigned ecRounds) {
+  return std::make_unique<FTQCSteaneEncodePassImpl>(insertEC, ecRounds);
 }
