@@ -160,6 +160,11 @@ StabilizerCode StabilizerCode::make422() {
   // Z stabilizer: Z0Z1Z2Z3
   BinaryRow xRow(4, 1), zRow(4, 1);
   auto code = StabilizerCode::fromCSS(4, 2, 2, {xRow}, {zRow});
+  // Iceberg code logical operators, with qubits 0 and 3 as top and bottom.
+  code.logX_.push_back({Pauli::X, Pauli::X, Pauli::I, Pauli::I});
+  code.logX_.push_back({Pauli::X, Pauli::I, Pauli::X, Pauli::I});
+  code.logZ_.push_back({Pauli::I, Pauli::Z, Pauli::I, Pauli::Z});
+  code.logZ_.push_back({Pauli::I, Pauli::I, Pauli::Z, Pauli::Z});
   return code;
 }
 
@@ -196,7 +201,7 @@ StabilizerCode StabilizerCode::makeSurface(unsigned d) {
     }
   }
 
-  auto code = StabilizerCode::fromCSS(n, 1, d, Hx, Hz);
+  auto code = StabilizerCode::fromCSS(n, 1, d, std::move(Hx), std::move(Hz));
 
   code.logX_.emplace_back(n, Pauli::I);
   code.logZ_.emplace_back(n, Pauli::I);
@@ -248,7 +253,7 @@ StabilizerCode StabilizerCode::makeHypergraphProduct(const ClassicalCode &code1,
     }
   }
 
-  auto code = StabilizerCode::fromCSS(n, k, d, Hx, Hz);
+  auto code = StabilizerCode::fromCSS(n, k, d, std::move(Hx), std::move(Hz));
 
   auto basis1 = code1.getBasis();
   auto basis2 = code2.getBasis();
@@ -365,11 +370,13 @@ const PauliString& StabilizerCode::getLogicalZ(unsigned logicalIdx) const {
   return logZ_[logicalIdx];
 }
 
-std::string StabilizerCode::toString(bool includeMatrices) const {
+std::string StabilizerCode::toString(bool includeMatrices,
+                                     bool includeLogicalOps) const {
   std::ostringstream ss;
   ss << "[[" << n_ << "," << k_ << "," << d_ << "]] code\n";
   ss << "  " << Hx_.size() << " X stabilizers, "
      << Hz_.size() << " Z stabilizers\n";
+
   if (includeMatrices) {
     ss << "  Hx =\n";
     for (auto &row : Hx_) {
@@ -386,6 +393,22 @@ std::string StabilizerCode::toString(bool includeMatrices) const {
       ss << "\n";
     }
   }
+
+  if (includeLogicalOps) {
+    for (unsigned i = 0; i < k_; ++i) {
+      ss << "  X" << i << " =";
+      for (unsigned j = 0; j < n_; ++j)
+        if (logX_[i][j] != Pauli::I)
+          ss << " " << "IXYZ"[int(logX_[i][j])] << j;
+      ss << "\n";
+      ss << "  Z" << i << " =";
+      for (unsigned j = 0; j < n_; ++j)
+        if (logZ_[i][j] != Pauli::I)
+          ss << " " << "IXYZ"[int(logZ_[i][j])] << j;
+      ss << "\n";
+    }
+  }
+
   return ss.str();
 }
 
@@ -393,6 +416,7 @@ std::string StabilizerCode::toGraphviz() const {
   std::ostringstream ss;
   ss << "graph {\n"
      << "  layout=neato;\n";
+
   for (size_t i = 0; i < Hx_.size(); ++i) {
     ss << "  x" << i << " [color=red];\n"
        << "  x" << i << " -- {";
@@ -401,6 +425,7 @@ std::string StabilizerCode::toGraphviz() const {
         ss << " d" << j;
     ss << " };\n";
   }
+
   for (size_t i = 0; i < Hz_.size(); ++i) {
     ss << "  z" << i << " [color=green];\n"
        << "  z" << i << " -- {";
@@ -409,6 +434,7 @@ std::string StabilizerCode::toGraphviz() const {
         ss << " d" << j;
     ss << " };\n";
   }
+
   ss << "}\n";
   return ss.str();
 }

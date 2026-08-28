@@ -279,8 +279,10 @@ public:
 
   /// @brief Serialise the code to a human-readable description.
   /// @param includeMatrices Whether to include the parity-check matrices.
+  /// @param includeLogicalOps Whether to include the logical X and Z operators.
   /// @return String showing [[n,k,d]] parameters and parity-check matrices.
-  std::string toString(bool includeMatrices = false) const;
+  std::string toString(bool includeMatrices = false,
+                       bool includeLogicalOps = false) const;
 
   /// @brief Serialize the code's Tanner graph to Graphviz format.
   std::string toGraphviz() const;
