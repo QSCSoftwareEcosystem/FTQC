@@ -41,13 +41,16 @@ static const int STEANE_STABS[3][4] = {
     {3, 4, 5, 6},
 };
 static constexpr int STEANE_DATA = 7;
+static constexpr int STEANE_ANC = 3;
 
-using Block = SmallVector<Value, 7>;
+using Block = SmallVector<Value, STEANE_DATA + STEANE_ANC>;
 
 struct FTQCExpandPhysicalPassImpl
     : public PassWrapper<FTQCExpandPhysicalPassImpl,
                          OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FTQCExpandPhysicalPassImpl)
+
+  SmallVector<Value> initializedAncilla; // Ancilla qubits that are already in |0> state
 
   StringRef getArgument() const override { return "ftqc-expand-physical"; }
   StringRef getDescription() const override {
@@ -61,6 +64,9 @@ struct FTQCExpandPhysicalPassImpl
     return b.create<QPhysAllocOp>(loc, qType(b), b.getI64IntegerAttr(id),
                                   b.getStringAttr(role))
         .getQubit();
+  }
+  Value reset(OpBuilder &b, Location loc, Value q) {
+    return b.create<QPhysResetOp>(loc, q.getType(), q).getOut();
   }
   Value h(OpBuilder &b, Location loc, Value q) {
     return b.create<QPhysHOp>(loc, q.getType(), q).getOut();
@@ -89,9 +95,15 @@ struct FTQCExpandPhysicalPassImpl
   }
 
   // --- syndrome-extraction subcircuits (mutate the data block in place) -----
-  void xSyndrome(OpBuilder &b, Location loc, Block &data, int &nextId) {
+  void xSyndrome(OpBuilder &b, Location loc, Block &data, int &nextId, int &ancIndex) {
     for (auto &stab : STEANE_STABS) {
-      Value anc = alloc(b, loc, nextId++, "x_anc");
+      Value anc = data[STEANE_DATA + ancIndex];  // Use pre-allocated ancilla qubits
+      if (!llvm::is_contained(initializedAncilla, anc)) {
+        anc = reset(b, loc, anc);
+      } else {
+        auto it = llvm::find(initializedAncilla, anc);
+        initializedAncilla.erase(it);
+      }  
       anc = h(b, loc, anc);
       for (int t : stab) {          // X-stab: ancilla controls the data
         auto [ao, dto] = cx(b, loc, anc, data[t]);
@@ -99,17 +111,27 @@ struct FTQCExpandPhysicalPassImpl
         data[t] = dto;
       }
       anc = h(b, loc, anc);
+      data[STEANE_DATA + ancIndex] = anc; // Store back the updated ancilla
+      if( ++ancIndex >= STEANE_ANC) ancIndex = 0; // wrap around if we exceed the number of ancilla
       (void)measure(b, loc, anc, "sx");
     }
   }
-  void zSyndrome(OpBuilder &b, Location loc, Block &data, int &nextId) {
+  void zSyndrome(OpBuilder &b, Location loc, Block &data, int &nextId, int &ancIndex) {
     for (auto &stab : STEANE_STABS) {
-      Value anc = alloc(b, loc, nextId++, "z_anc");
+      Value anc = data[STEANE_DATA + ancIndex];  // Use pre-allocated ancilla qubits
+      if (!llvm::is_contained(initializedAncilla, anc)) {
+        anc = reset(b, loc, anc);
+      } else {
+        auto it = llvm::find(initializedAncilla, anc);
+        initializedAncilla.erase(it);
+      }
       for (int t : stab) {          // Z-stab: data controls the ancilla
         auto [dto, ao] = cx(b, loc, data[t], anc);
         data[t] = dto;
         anc = ao;
       }
+      data[STEANE_DATA + ancIndex] = anc; // Store back the updated ancilla
+      if( ++ancIndex >= STEANE_ANC) ancIndex = 0; // wrap around if we exceed the number of ancilla
       (void)measure(b, loc, anc, "sz");
     }
   }
@@ -120,6 +142,8 @@ struct FTQCExpandPhysicalPassImpl
 
     // logical-qubit SSA value  ->  its physical data-qubit block.
     llvm::DenseMap<Value, Block> blocks;
+    // logical-qubit SSA value  ->  its physical ancilla-qubit index.
+    llvm::DenseMap<Value, int> ancIndices;
     int nextId = 0;
     SmallVector<Operation *> toErase;
     bool failed = false;
@@ -139,6 +163,11 @@ struct FTQCExpandPhysicalPassImpl
         Block data;
         for (int i = 0; i < STEANE_DATA; ++i)
           data.push_back(alloc(b, loc, nextId++, "data"));
+        for (int i = 0; i < STEANE_ANC; ++i) {
+          auto anc = alloc(b, loc, nextId++, "anc");
+          data.push_back(anc);
+          initializedAncilla.push_back(anc);
+        }
         // |0_L> encoder: H on each stabilizer check qubit, then CX to support.
         for (auto &stab : STEANE_STABS) {
           int chk = stab[0];
@@ -151,11 +180,17 @@ struct FTQCExpandPhysicalPassImpl
             }
         }
         mapResultBlock(init.getResult(), std::move(data));
+        ancIndices[init.getResult()] = 0; // Start ancilla index at 0 for this logical qubit
         toErase.push_back(op);
       } else if (auto init = dyn_cast<InitPlusOp>(op)) {
         Block data;
         for (int i = 0; i < STEANE_DATA; ++i)
           data.push_back(alloc(b, loc, nextId++, "data"));
+        for (int i = 0; i < STEANE_ANC; ++i) {
+          auto anc = alloc(b, loc, nextId++, "anc");
+          data.push_back(anc);
+          initializedAncilla.push_back(anc);
+        }
         for (auto &stab : STEANE_STABS) {
           int chk = stab[0];
           data[chk] = h(b, loc, data[chk]);
@@ -168,11 +203,13 @@ struct FTQCExpandPhysicalPassImpl
         }
         for (auto &q : data) q = h(b, loc, q); // |+_L> = transversal H
         mapResultBlock(init.getResult(), std::move(data));
+        ancIndices[init.getResult()] = 0; // Start ancilla index at 0 for this logical qubit
         toErase.push_back(op);
       } else if (isa<LogicalHOp, LogicalXOp, LogicalZOp, LogicalSOp,
                      LogicalYOp>(op)) {
         Block blk = blocks.lookup(op->getOperand(0));
-        for (auto &q : blk) {
+        for(int i = 0; i < STEANE_DATA; ++i) {
+          auto &q = blk[i];
           if (isa<LogicalHOp>(op)) q = h(b, loc, q);
           else if (isa<LogicalXOp>(op)) q = x(b, loc, q);
           else if (isa<LogicalZOp>(op)) q = z(b, loc, q);
@@ -198,19 +235,25 @@ struct FTQCExpandPhysicalPassImpl
         toErase.push_back(op);
       } else if (isa<SteaneXSyndromeOp>(op)) {
         Block data = blocks.lookup(op->getOperand(0));
-        xSyndrome(b, loc, data, nextId);
+        int ancIndex = ancIndices.lookup(op->getOperand(0));
+        xSyndrome(b, loc, data, nextId, ancIndex);
         mapResultBlock(op->getResult(0), std::move(data));
+        ancIndices[op->getResult(0)] = ancIndex; // Update the ancilla index for this logical qubit
         toErase.push_back(op);
       } else if (isa<SteaneZSyndromeOp>(op)) {
         Block data = blocks.lookup(op->getOperand(0));
-        zSyndrome(b, loc, data, nextId);
+        int ancIndex = ancIndices.lookup(op->getOperand(0));
+        zSyndrome(b, loc, data, nextId, ancIndex);
         mapResultBlock(op->getResult(0), std::move(data));
+        ancIndices[op->getResult(0)] = ancIndex; // Update the ancilla index for this logical qubit
         toErase.push_back(op);
       } else if (isa<ECRoundOp>(op)) {
         Block data = blocks.lookup(op->getOperand(0));
-        xSyndrome(b, loc, data, nextId);
-        zSyndrome(b, loc, data, nextId);
+        int ancIndex = ancIndices.lookup(op->getOperand(0));
+        xSyndrome(b, loc, data, nextId, ancIndex);
+        zSyndrome(b, loc, data, nextId, ancIndex);
         mapResultBlock(op->getResult(0), std::move(data));
+        ancIndices[op->getResult(0)] = ancIndex; // Update the ancilla index for this logical qubit
         toErase.push_back(op);
       } else if (auto meas = dyn_cast<LogicalMeasureOp>(op)) {
         Block data = blocks.lookup(op->getOperand(0));
