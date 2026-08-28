@@ -23,8 +23,12 @@ std::optional<uint32_t> ECCAttr::getDist() const {
   return getImpl()->dist;
 }
 
-std::optional<uint32_t> ECCAttr::getLevels() const {
-  return getImpl()->levels;
+ECCAttr ECCAttr::getOuter() const {
+  return getImpl()->outer;
+}
+
+ECCAttr ECCAttr::getInner() const {
+  return getImpl()->inner;
 }
 
 ClassicalCodeAttr ECCAttr::getCode1() const {
@@ -75,7 +79,8 @@ double ECCAttr::getFTThreshold() const {
 LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                               ECCKind kind,
                               std::optional<uint32_t> dist,
-                              std::optional<uint32_t> levels,
+                              ECCAttr outer,
+                              ECCAttr inner,
                               ClassicalCodeAttr code1,
                               ClassicalCodeAttr code2) {
   switch (kind) {
@@ -93,8 +98,8 @@ LogicalResult ECCAttr::verify(function_ref<InFlightDiagnostic()> emitError,
     break;
 
   case ECCKind::Concatenated:
-    if (!levels) {
-      emitError() << "this ECC kind requires a 'levels' parameter";
+    if (!outer || !inner) {
+      emitError() << "this ECC kind requires 'outer' and 'inner' parameters";
       return failure();
     }
     break;
@@ -128,7 +133,7 @@ StabilizerCode makeDummyCode(unsigned n, unsigned k, unsigned d,
 } // namespace
 
 ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key) {
-  std::tie(kind, dist, levels, code1, code2) = key;
+  std::tie(kind, dist, outer, inner, code1, code2) = key;
 
   switch (kind) {
   case ECCKind::Steane:
@@ -146,14 +151,10 @@ ftqc::detail::ECCAttrStorage::ECCAttrStorage(const KeyTy &key) {
         makeDummyCode(n, 1, *dist, numStabilizers / 2, numStabilizers / 2);
     break;
   }
-  case ECCKind::Concatenated: {
-    auto steane = StabilizerCode::makeSteane();
-    // The trivial [[1,1,1]] code serves as identity for concatenation.
-    stabilizerCode = StabilizerCode::makeSurface(1);
-    for (uint32_t i = 0; i < *levels; ++i)
-      stabilizerCode = StabilizerCode::makeConcatenated(steane, stabilizerCode);
+  case ECCKind::Concatenated:
+    stabilizerCode = StabilizerCode::makeConcatenated(
+        outer.getStabilizerCode(), inner.getStabilizerCode());
     break;
-  }
   case ECCKind::Repetition:
     stabilizerCode = StabilizerCode::makeRepetition(*dist);
     break;

@@ -19,8 +19,8 @@ func.func @color_d5() {
 
 // CHECK-LABEL: func @concat_2levels
 func.func @concat_2levels() {
-  // CHECK: <<concat, levels = 2>>
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
-  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
+  // CHECK: <<concat, outer = <steane>, inner = <steane>>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, outer = <steane>, inner = <steane>>>
+  ftqc.dealloc %lq : !ftqc.logical_qubit<#ftqc.ecc<concat, outer = <steane>, inner = <steane>>>
   func.return
 }

@@ -18,7 +18,7 @@
 /// ### Attributes (from FTQCAttrs.h.inc)
 /// | Attribute | Mnemonic | Fields | Description |
 /// |---|---|---|---|
-/// | `ECCAttr` | `#ftqc.ecc` | `kind`, `dist`, `levels`, `code1`, `code2` | Identifies the QEC code parameterising a logical qubit |
+/// | `ECCAttr` | `#ftqc.ecc` | `kind`, `dist`, `outer`, `inner`, `code1`, `code2` | Identifies the QEC code parameterising a logical qubit |
 /// | `CodePropertiesAttr` | `#ftqc.code_props` | `n`, `k`, `d` | Static [[n,k,d]] parameters |
 /// | `DistillationParamsAttr` | `#ftqc.distill_params` | `inputCount`, `outputCount` | Distillation protocol shape |
 
@@ -56,7 +56,8 @@ struct ECCAttrStorage : public AttributeStorage {
   using KeyTy = std::tuple<
     ECCKind,                 // kind
     std::optional<uint32_t>, // dist
-    std::optional<uint32_t>, // levels
+    ECCAttr,                 // outer
+    ECCAttr,                 // inner
     ClassicalCodeAttr,       // code1
     ClassicalCodeAttr        // code2
   >;
@@ -71,12 +72,12 @@ struct ECCAttrStorage : public AttributeStorage {
   bool operator==(const KeyTy &key) const { return getAsKey() == key; }
 
   KeyTy getAsKey() const {
-    return std::make_tuple(kind, dist, levels, code1, code2);
+    return std::make_tuple(kind, dist, outer, inner, code1, code2);
   }
 
   ECCKind kind;
   std::optional<uint32_t> dist;
-  std::optional<uint32_t> levels;
+  ECCAttr outer, inner;
   ClassicalCodeAttr code1, code2;
   StabilizerCode stabilizerCode;
 };

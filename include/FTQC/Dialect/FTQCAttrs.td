@@ -87,11 +87,10 @@ def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
 
     Examples:
     ```
-    #ftqc.ecc<steane>               // Steane [[7,1,3]]
-    #ftqc.ecc<surface, dist = 3>    // Distance-3 rotated surface code
-    #ftqc.ecc<color_code, dist = 5> // Distance-5 color code
-    #ftqc.ecc<concat, levels = 2>   // 2-level concatenated Steane
-
+    #ftqc.ecc<steane>                                       // Steane [[7,1,3]]
+    #ftqc.ecc<surface, dist = 3>                            // Distance-3 rotated surface code
+    #ftqc.ecc<color_code, dist = 5>                         // Distance-5 color code
+    #ftqc.ecc<concat, outer = <steane>, inner = <steane>>   // 2-level concatenated Steane
     #cc = #ftqc.classical_code<3, [
       1, 1, 0,
       0, 1, 1,
@@ -104,18 +103,19 @@ def FTQC_ECCAttr : FTQC_Attr<"ECC", "ecc"> {
   let parameters = (ins
     "ECCKind" : $kind,
     OptionalParameter<"std::optional<uint32_t>"> : $dist,
-    OptionalParameter<"std::optional<uint32_t>"> : $levels,
+    OptionalParameter<"ECCAttr"> : $outer,
+    OptionalParameter<"ECCAttr"> : $inner,
     OptionalParameter<"ClassicalCodeAttr"> : $code1,
     OptionalParameter<"ClassicalCodeAttr"> : $code2
   );
 
   let builders = [
     AttrBuilder<(ins "ECCKind":$kind, "std::optional<uint32_t>":$dist), [{
-      return Base::get($_ctxt, kind, dist, std::nullopt, nullptr, nullptr);
+      return Base::get($_ctxt, kind, dist, nullptr, nullptr, nullptr, nullptr);
     }]>,
   ];
 
-  let assemblyFormat = "`<` $kind (`,` struct($dist, $levels, $code1, $code2)^)? `>`";
+  let assemblyFormat = "`<` $kind (`,` struct($dist, $outer, $inner, $code1, $code2)^)? `>`";
   let genVerifyDecl = 1;
   let genStorageClass = 0;
 

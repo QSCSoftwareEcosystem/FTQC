@@ -35,8 +35,8 @@ func.func @color_code_qubit() {
 
 // CHECK-LABEL: func @concat_qubit
 func.func @concat_qubit() {
-  // CHECK: <<concat, levels = 2>>
-  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
-  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<concat, levels = 2>>
+  // CHECK: <<concat, outer = <steane>, inner = <steane>>>
+  %0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<concat, outer = <steane>, inner = <steane>>>
+  ftqc.dealloc %0 : !ftqc.logical_qubit<#ftqc.ecc<concat, outer = <steane>, inner = <steane>>>
   func.return
 }
