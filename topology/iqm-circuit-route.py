@@ -47,7 +47,7 @@ from qiskit import QuantumCircuit
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 
-
+DEBUG_PRINT = 1
 _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
 
 
@@ -252,7 +252,31 @@ def count_serialized_operations(serialized_instructions: list[dict[str, Any]]) -
 
 
 def _instruction_qubit_indices(circuit: QuantumCircuit, instruction: Any) -> tuple[int, ...]:
-    return tuple(circuit.find_bit(q).index for q in instruction.qubits)
+    """Return the instruction qubit indices in backend hardware coordinates.
+
+    The transpiled circuit may carry a final layout mapping virtual qubit
+    indices to physical backend qubits.  Use that mapping when present so
+    backend.target lookups use hardware qubit indices instead of the transient
+    virtual indices used within the transpiled circuit.
+    """
+    # circuit.find_bit().index returns the virtual qubit index used in the transpiled QuantumCircuit.
+    # qargs = tuple(circuit.find_bit(q).index for q in instruction.qubits)
+    qargs = None
+
+    layout = getattr(circuit, "layout", None)
+    if layout is None:
+        return qargs
+	
+    output_qubit_list = getattr(layout, "_output_qubit_list", None)
+    if output_qubit_list is None:
+        return qargs
+
+    qargs = tuple(output_qubit_list.index(q) for q in instruction.qubits)
+
+    if DEBUG_PRINT >= 2:
+        print(f"[physical qargs] {qargs}", file=sys.stderr)
+
+    return qargs
 
 
 def estimate_fidelity_from_target(
@@ -287,6 +311,7 @@ def estimate_fidelity_from_target(
     log_fidelity = 0.0
     with_error = 0
     without_error = 0
+    invalid_error = 0
 
     # Operations that do not correspond to physical device execution should
     # not prevent an otherwise valid estimate.
@@ -297,30 +322,58 @@ def estimate_fidelity_from_target(
         if name in ignored_names:
             continue
 
+        if DEBUG_PRINT >= 2:
+            print(f"[Logical instruction] {inst}", file=sys.stderr)
         qargs = _instruction_qubit_indices(transpiled_qc, inst)
+
+        if qargs is None:
+            return {
+                "estimated_fidelity": None,
+                "estimated_error": None,
+                "fidelity_estimation_method": None,
+                "fidelity_estimation_complete": False,
+                "operations_with_error_data": 0,
+                "operations_without_error_data": len(transpiled_qc.data),
+            }
 
         try:
             properties = target[name][qargs]
         except (KeyError, TypeError, AttributeError):
             properties = None
+            if( name == "cz" and len(qargs) == 2):
+                # Try the reverse qubit order for CZ, which is symmetric.
+                try:
+                    properties = target[name][qargs[::-1]]
+                except (KeyError, TypeError, AttributeError):
+                    properties = None
 
+        if DEBUG_PRINT >= 2:
+            print(f"[Properties] {name}: {properties}", file=sys.stderr)
         error = getattr(properties, "error", None) if properties is not None else None
 
         if error is None:
             without_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Error not provided] {name} {qargs}", file=sys.stderr)
             continue
 
         try:
             error = float(error)
         except (TypeError, ValueError):
-            without_error += 1
+            invalid_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Invalid error] {name} {qargs}", file=sys.stderr)
             continue
 
         if not math.isfinite(error) or error < 0.0 or error > 1.0:
-            without_error += 1
+            invalid_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Out of bounds error] {name} {qargs}", file=sys.stderr)
             continue
 
         with_error += 1
+        if DEBUG_PRINT >= 2:
+            print(f"[With error] {name} {qargs}", file=sys.stderr)
 
         if error == 1.0:
             log_fidelity = -math.inf
@@ -328,9 +381,9 @@ def estimate_fidelity_from_target(
             # Accumulate in log space to avoid unnecessary underflow.
             log_fidelity += math.log1p(-error)
 
-    complete = (without_error == 0 and with_error > 0)
+    complete = (invalid_error == 0 and without_error == 0 and with_error > 0)
 
-    if complete:
+    if (invalid_error == 0 and with_error > 0):
         fidelity = 0.0 if log_fidelity == -math.inf else math.exp(log_fidelity)
         estimated_error = 1.0 - fidelity
     else:
@@ -342,7 +395,7 @@ def estimate_fidelity_from_target(
         "estimated_error": estimated_error,
         "fidelity_estimation_method": (
             "product_of_independent_instruction_fidelities"
-            if complete
+            if (invalid_error == 0 and with_error > 0)
             else None
         ),
         "fidelity_estimation_complete": complete,
@@ -402,9 +455,9 @@ def main() -> int:
         qc, initial_layout = build_quantum_circuit(input_circuit)
 
         backend = get_backend(url, token, alias)
-        print(f"Initial layout: {qc.layout}")
         transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
-        print(f"Final layout: {transpiled_qc.layout}")
+        if DEBUG_PRINT >= 1:
+            print(f"Circuit layout: {transpiled_qc.layout}")
         serialized = backend.serialize_circuit(transpiled_qc)
 
         serialized_instructions = [
