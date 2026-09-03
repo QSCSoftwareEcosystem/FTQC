@@ -261,12 +261,12 @@ def _instruction_qubit_indices(circuit: QuantumCircuit, instruction: Any) -> tup
     """
     # circuit.find_bit().index returns the virtual qubit index used in the transpiled QuantumCircuit.
     # qargs = tuple(circuit.find_bit(q).index for q in instruction.qubits)
-    qargs = None
+    qargs: tuple[int, ...] = ()
 
     layout = getattr(circuit, "layout", None)
     if layout is None:
         return qargs
-	
+
     output_qubit_list = getattr(layout, "_output_qubit_list", None)
     if output_qubit_list is None:
         return qargs
@@ -326,7 +326,7 @@ def estimate_fidelity_from_target(
             print(f"[Logical instruction] {inst}", file=sys.stderr)
         qargs = _instruction_qubit_indices(transpiled_qc, inst)
 
-        if qargs is None:
+        if qargs is None or qargs == ():
             return {
                 "estimated_fidelity": None,
                 "estimated_error": None,
