@@ -60,8 +60,15 @@ struct ResourceReport {
   uint64_t logicalTGates        = 0; ///< Number of logical T gates (require magic states).
   uint64_t logicalCnotGates     = 0; ///< Number of logical CNOT gates.
   uint64_t logicalCliffordGates = 0; ///< Other single-qubit Clifford gates (H, S, X, Z, Y).
+  uint64_t toffoliGates         = 0; ///< logical_toffoli (+ Toffoli-equivalent of any raw logical_mcx).
+  uint64_t cczStates            = 0; ///< CCZ magic states prepared (prepare_magic_ccz).
+  uint64_t cczDistillationRounds = 0; ///< Explicit CCZ distillation factories (distill_ccz).
   uint64_t logicalMeasurements  = 0; ///< Number of `ftqc.logical_measure` ops.
   uint64_t ecRounds             = 0; ///< Total syndrome-extraction rounds inserted.
+
+  /// Total T-count including Toffolis at the standard Clifford+T cost of 7 T
+  /// per Toffoli (Nielsen & Chuang).  This is the reported T-equivalent metric.
+  uint64_t totalTCount() const { return logicalTGates + 7u * toffoliGates; }
 
   //------------------------------------------------------------------------
   // Physical resource counts (derived after encoding)
