@@ -10,7 +10,11 @@ Example:
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON \
         --token $IQM_TOKEN --base-url https://qccsw.ccs.ornl.gov \
-        --qc-alias [my-quantum-computer]
+    --qc-alias [my-quantum-computer] --shots 1024
+
+The optional --shots argument is an integer number of backend shots. A
+positive value submits the transpiled circuit to the backend; the default
+value, 0, skips backend submission.
 
 Output:
     inputCircuit-transpiled.JSON
@@ -79,6 +83,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="IQM authentication token (default: $IQM_TOKEN).",
     )
+    parser.add_argument(
+        "--shots",
+        type=int,
+        default=0,
+        help="Number of shots to submit (default: 0; use 0 to skip submission).",
+    )
     return parser.parse_args()
 
 
@@ -111,7 +121,9 @@ def qubit_index(qubit_name: str) -> int:
     return qnum - 1
 
 
-def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list[int]]:
+def build_quantum_circuit(
+    circuit: dict[str, Any],
+) -> tuple[QuantumCircuit, list[int], dict[str, int]]:
     instructions = circuit.get("instructions", [])
     if not isinstance(instructions, list):
         raise ValueError("'circuit.instructions' must be a JSON array")
@@ -139,6 +151,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
     qc = QuantumCircuit(num_qubits, nmeas, name=circuit.get("name", "circuit"))
 
     classical_bit = 0
+    key_to_cbit = {}
 
     for ins in instructions:
         name = ins.get("name", "").lower()
@@ -175,6 +188,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
             if len(loc) != 1:
                 raise ValueError(f"'measure' requires one qubit: {ins}")
             qc.measure(loc[0], classical_bit)
+            key_to_cbit[args.get("key", "c%d" % classical_bit)] = classical_bit
             classical_bit += 1
 
         elif name == "reset":
@@ -188,7 +202,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
                 "This script currently accepts prx, cz, reset, and measure."
             )
 
-    return qc, initial_layout
+    return qc, initial_layout, key_to_cbit
 
 
 def get_backend(url: str, token: str | None, alias: str):
@@ -452,12 +466,17 @@ def main() -> int:
         token = args.token
         alias = args.qc_alias or os.environ.get("IQM_QC_ALIAS", "default")
 
-        qc, initial_layout = build_quantum_circuit(input_circuit)
+        qc, initial_layout, key_to_cbit = build_quantum_circuit(input_circuit)
 
         backend = get_backend(url, token, alias)
         transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
         if DEBUG_PRINT >= 1:
             print(f"Circuit layout: {transpiled_qc.layout}")
+        if args.shots > 0:
+            counts = backend.run(transpiled_qc, shots=args.shots).result().get_counts()
+            if DEBUG_PRINT >= 1:
+                print(f"Backend counts: {counts}")
+                print(f"Key to cbit mapping: {key_to_cbit}")
         serialized = backend.serialize_circuit(transpiled_qc)
 
         serialized_instructions = [
