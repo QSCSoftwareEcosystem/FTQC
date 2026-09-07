@@ -277,7 +277,11 @@ struct FTQCMagicDistillPassImpl
     SmallVector<PrepareMagicTOp, 8> toDistill;
     func.walk([&](PrepareMagicTOp op) { toDistill.push_back(op); });
 
-    if (toDistill.empty())
+    // Snapshot CCZ states too (Toffoli magic states) — expanded below.
+    SmallVector<PrepareMagicCCZOp, 8> cczToDistill;
+    func.walk([&](PrepareMagicCCZOp op) { cczToDistill.push_back(op); });
+
+    if (toDistill.empty() && cczToDistill.empty())
       return;
 
     IRRewriter rewriter(ctx);
@@ -329,6 +333,21 @@ struct FTQCMagicDistillPassImpl
         continue;
       }
       rewriter.replaceOp(op, distilled);
+    }
+
+    // CCZ distillation: expand each prepare_magic_ccz into a small CCZ factory
+    // (Haah et al. 2018, O(eps^2)): 8 noisy CCZ inputs -> one distill_ccz.  The
+    // freshly created noisy inputs are not in the snapshot, so there is no loop.
+    auto cczType = MagicStateType::get(ctx, MagicKind::CCZ);
+    for (PrepareMagicCCZOp op : cczToDistill) {
+      rewriter.setInsertionPoint(op);
+      Location loc = op.getLoc();
+      SmallVector<Value> noisy;
+      noisy.reserve(8);
+      for (unsigned i = 0; i < 8; ++i)
+        noisy.push_back(rewriter.create<PrepareMagicCCZOp>(loc, cczType));
+      auto d = rewriter.create<DistillCCZOp>(loc, cczType, ValueRange(noisy));
+      rewriter.replaceOp(op, d.getOutput());
     }
 
     if (anyFailed)

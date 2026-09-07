@@ -258,6 +258,18 @@ std::unique_ptr<mlir::Pass> createTransversalGatePass();
 ///        If false, a warning is emitted but the op is left in place.
 std::unique_ptr<mlir::Pass> createTransversalGatePass(bool decomposeNonTransversal);
 
+/// @brief Create the multi-controlled-X decomposition pass
+///        (`--ftqc-decompose-mcx`): rewrites each `ftqc.logical_mcx` into a
+///        clean-ancilla `logical_toffoli` V-chain (X/CNOT/Toffoli for 0/1/2
+///        controls).
+std::unique_ptr<mlir::Pass> createDecomposeMCXPass();
+
+/// @brief Create the Rz-synthesis pass (`--ftqc-synthesize-rz`): approximates
+///        each `ftqc.logical_rz` by a Clifford+T sequence (Solovay-Kitaev) to a
+///        target precision and reports the T-count.
+std::unique_ptr<mlir::Pass> createSynthesizeRzPass();
+std::unique_ptr<mlir::Pass> createSynthesizeRzPass(double epsilon);
+
 //===----------------------------------------------------------------------===//
 // Analysis pass factories
 //===----------------------------------------------------------------------===//

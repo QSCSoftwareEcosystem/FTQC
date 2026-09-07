@@ -31,6 +31,12 @@ Built on LLVM/MLIR 22 · Clifford+T · Steane · Surface · Color Code
 
 ---
 
+## Demo
+
+![ftqc demo](docs/ftqc-demo.gif)
+
+---
+
 ## Motivation
 
 **The fault-tolerance gap**: today's NISQ devices have physical error rates $p \sim 10^{-2}$–$10^{-3}$.
@@ -82,7 +88,7 @@ FTQC is organized as **two dialect layers**, bridged by a single lowering pass. 
 ```
         LEVEL 1 — LOGICAL  (ftqc.*)                 LEVEL 2 — PHYSICAL  (ftqc.qphys.*)
 ┌───────────────────────────────────┐   expand   ┌───────────────────────────────────┐
-│ error-corrected qubits, transversal│ ─physical▶ │ hardware qubits (7 data + 6 anc),  │
+│ error-corrected qubits, transversal│ ─physical▶ │ hardware qubits (7 data + 3 anc),  │
 │ gates, syndromes, magic states     │            │ physical gates + measurement       │
 └───────────────────────────────────┘            └───────────────────────────────────┘
         │ encode · protect · compute · estimate            │ map · route · emit
@@ -114,14 +120,14 @@ Reasons about error-corrected qubits. The ECC code and distance are part of the 
 
 ### Bridge — `--ftqc-expand-physical`
 
-The single L1 → L2 lowering pass. Unfolds each `!ftqc.logical_qubit` into a block of `!ftqc.qphys_qubit` values (Steane `[[7,1,3]]`: **7 data + 3 X-ancilla + 3 Z-ancilla**) and rewrites logical gates and syndrome ops into explicit physical gate + measure circuits.
+The single L1 → L2 lowering pass. Unfolds each `!ftqc.logical_qubit` into a block of `!ftqc.qphys_qubit` values (Steane `[[7,1,3]]`: **7 data + 3 shared ancilla**) and rewrites logical gates and syndrome ops into explicit physical gate + measure circuits. The ancilla are one pool (`role="anc"`) reused round-robin across X- and Z-stabilizer extraction, and data + ancilla are allocated and initialized together at `|0_L⟩` encoding time. The ancilla count per logical qubit is a configurable parameter (e.g. the IQM 20-qubit layouts ship in both 3-ancilla and 6-ancilla variants — see [IQM Hardware Pipeline](#iqm-hardware-pipeline-topology)).
 
 ### Level 2 — Physical dialect (`ftqc.qphys.*`)
 
 Hardware qubits with ordinary quantum value-semantics; the substrate every back end emits.
 
 - **Type** — `!ftqc.qphys_qubit` (one physical qubit)
-- **Ops** — `qphys.alloc {id, role="data"|"x_anc"|"z_anc"}`, `qphys.{reset,h,x,z,s,t,cx,cz,swap}`, `qphys.measure`
+- **Ops** — `qphys.alloc {id, role="data"|"anc"}`, `qphys.{reset,h,x,z,s,t,cx,cz,swap}`, `qphys.measure`
 - **Passes**
 
   | Pass | Role |
@@ -836,6 +842,63 @@ ftqc-opt physical.mlir \
 
 Invoking the pass without `input-file` is a silent no-op. A missing input file,
 invalid mapping file, or missing logical-qubit ID causes the pass to fail.
+
+---
+
+## IQM Hardware Pipeline (`topology/`)
+
+Submitting a physical circuit to a real IQM machine needs a **hardware-aware
+initial layout** (so logical blocks land on good, connected qubits) and a
+**routing** step (a 7-qubit Steane encoder is not a subgraph of the 20-qubit
+device). The `topology/` scripts supply both, feeding the Level-2 `qphys` passes.
+
+```
+topology.py ──▶ topology-*.json  (coupling map + prx_error calibration snapshot)
+     │
+     ▼  gen-best-init-layout-for-iqm.py   (pick best candidate layout)
+init-layout-iqm20q-steane-{3,6}anc.json   ──▶  --ftqc-qphys-init-layout
+     │                                              │
+     │                                              ▼  --ftqc-qphys-to-iqm-json
+     │                                          physical IQM JSON
+     ▼  iqm-circuit-route.py  (transpile_to_IQM → device-valid circuit)
+   routed *-transpiled.json  ──▶  submit (demo.sh / real-iqm.py)
+```
+
+### Layout selection — `gen-best-init-layout-for-iqm.py`
+
+Scores each candidate logical→hardware layout against a calibration snapshot
+(unavailable qubits + per-qubit `prx_error`) and writes the best one as a
+`{"logical_to_hardware_mapping": {...}}` file consumed by `--ftqc-qphys-init-layout`.
+
+```bash
+python topology/gen-best-init-layout-for-iqm.py \
+    --qec-name steane --num-qubits 3 --num-anc-per-logic-qubit 3 \
+    --input-init-layouts topology/init-layouts-iqm20q.json \
+    --hw-topology topology/crystal_topology.json \
+    --output-init-layout best-layout.json
+```
+
+Candidate layouts for the ORNL 20-qubit machine ship in
+`topology/init-layouts-iqm20q.json` (per-code `3ancilla` / `6ancilla` variants);
+pre-selected results are `init-layout-iqm20q-steane-3anc.json` and
+`…-6anc.json`.
+
+### Routing — `iqm-circuit-route.py`
+
+Reads an IQM-JSON circuit, routes/transpiles it for the backend via
+`qiskit-iqm`'s `transpile_to_IQM`, and writes `<name>-transpiled.json`. Run in a
+**dedicated Python ≥ 3.12 venv** (`realqpu`) — `iqm-client ≥ 34` and the router
+imports conflict with the compiler/IRIS environment, so submission shells out to
+this process (`FTQC_ROUTER_PYTHON`).
+
+```bash
+python topology/iqm-circuit-route.py --input-circuit bell.iqm.json \
+    --qc-alias default --base-url "$IQM_BASE_URL" --token "$IQM_TOKEN"
+```
+
+`topology/topology.py` refreshes the coupling-map + calibration snapshot
+(`crystal`/`default` = the live ORNL QPU; fake backends work offline).
+`demo.sh` / `topology/real-iqm.py` submit the benchmark circuits end-to-end.
 
 ---
 

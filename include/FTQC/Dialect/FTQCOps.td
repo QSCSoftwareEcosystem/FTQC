@@ -461,6 +461,41 @@ def FTQC_LogicalToffoliOp : FTQC_Op<"logical_toffoli"> {
   }];
 }
 
+def FTQC_LogicalRzOp : FTQC_Op<"logical_rz", [SameOperandsAndResultType]> {
+  let summary = "Logical Z-rotation Rz(angle), synthesized to Clifford+T";
+  let description = [{
+    A logical Z-axis rotation `Rz(angle) = diag(e^{-i*angle/2}, e^{+i*angle/2})`
+    by `angle` radians.  This is a non-Clifford resource op: the
+    `--ftqc-synthesize-rz` pass approximates it with a Clifford+T sequence
+    (Solovay-Kitaev) to a target precision, reporting the resulting T-count.
+    Dyadic multiples of pi/4 are emitted exactly (T, S, Z, ...).
+  }];
+  let arguments = (ins FTQC_LogicalQubitType:$qubit, F64Attr:$angle);
+  let results  = (outs FTQC_LogicalQubitType:$result);
+  let assemblyFormat = "$qubit `,` $angle attr-dict `:` type($qubit)";
+}
+
+def FTQC_LogicalMCXOp : FTQC_Op<"logical_mcx"> {
+  let summary = "Multi-controlled X (decomposed to a Toffoli network + ancilla)";
+  let description = [{
+    A multi-controlled NOT with a variadic list of control qubits and a single
+    target: the target is flipped iff every control is |1>.  The
+    `--ftqc-decompose-mcx` pass rewrites it into a `logical_toffoli` network
+    using a clean-ancilla V-chain (Barenco et al.); 0/1/2 controls lower to
+    X / CNOT / Toffoli directly.  Value semantics: each control and the target
+    are threaded through and returned.
+  }];
+  let arguments = (ins Variadic<FTQC_LogicalQubitType>:$controls,
+                       FTQC_LogicalQubitType:$target);
+  let results  = (outs Variadic<FTQC_LogicalQubitType>:$controlsOut,
+                       FTQC_LogicalQubitType:$targetOut);
+  let assemblyFormat = [{
+    `[` $controls `]` `,` $target attr-dict `:`
+    `[` type($controls) `]` `,` type($target)
+    `->` `[` type($controlsOut) `]` `,` type($targetOut)
+  }];
+}
+
 def FTQC_LogicalMeasureOp : FTQC_Op<"logical_measure"> {
   let summary = "Fault-tolerant logical measurement";
   let description = [{

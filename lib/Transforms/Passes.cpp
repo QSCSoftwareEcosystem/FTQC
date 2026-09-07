@@ -26,6 +26,8 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createLowerToQIRPass(); });
   ::mlir::registerPass([] { return createLowerToQIRnsPass(); });
   ::mlir::registerPass([] { return createTransversalGatePass(); });
+  ::mlir::registerPass([] { return createDecomposeMCXPass(); });
+  ::mlir::registerPass([] { return createSynthesizeRzPass(); });
   ::mlir::registerPass([] { return createResourceEstimatePass(); });
   ::mlir::registerPass([] { return createFaultPathAnalysisPass(); });
   ::mlir::registerPass([] { return createThresholdAnalysisPass(); });
