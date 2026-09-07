@@ -31,6 +31,12 @@ Built on LLVM/MLIR 22 · Clifford+T · Steane · Surface · Color Code
 
 ---
 
+## Demo
+
+![ftqc demo](docs/ftqc-demo.gif)
+
+---
+
 ## Motivation
 
 **The fault-tolerance gap**: today's NISQ devices have physical error rates $p \sim 10^{-2}$–$10^{-3}$.
