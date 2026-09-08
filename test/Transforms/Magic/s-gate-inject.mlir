@@ -1,15 +1,17 @@
 // RUN: ftqc-opt %s --ftqc-transversal-gates | FileCheck %s
-// Test: S gate via magic state injection (for Steane/surface code). (test 47)
-// After --ftqc-transversal-gates, S on Steane code → T·T.
+// Test: S gate via magic state injection on a code without transversal S. (test 47)
+// S is NOT transversal on the surface code, so --ftqc-transversal-gates
+// decomposes S = T·T via two magic-state injections.  (On the Steane code S is
+// transversal and is preserved; see transversal-s-color.mlir.)
 
-// CHECK-LABEL: func @s_gate_steane
-func.func @s_gate_steane(
-    %lq: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
-  // S = T^2 on Steane code is decomposed into 2 T gate injections.
+// CHECK-LABEL: func @s_gate_surface
+func.func @s_gate_surface(
+    %lq: !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<surface, 3>> {
+  // S = T^2 on the surface code is decomposed into 2 T gate injections.
   // CHECK: ftqc.prepare_magic_t
-  %out = ftqc.logical_s %lq : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %out = ftqc.logical_s %lq : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  func.return %out : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
 }
 
 // CHECK-LABEL: func @s_gate_color_transversal

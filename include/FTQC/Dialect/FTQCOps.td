@@ -771,7 +771,23 @@ def FTQC_QPhysSwapOp : FTQC_QPhys2Q<"qphys.swap"> {
 
 def FTQC_QPhysMeasureOp : FTQC_Op<"qphys.measure"> {
   let summary = "Measure a physical qubit in the Z basis";
-  let arguments = (ins FTQC_QPhysQubitType:$in, OptionalAttr<StrAttr>:$key);
+  let description = [{
+    Measures a physical qubit.  The optional QEC-structure attributes let a
+    physical back end (e.g. `--ftqc-qphys-to-stim`) reconstruct detectors and
+    the logical observable without re-deriving the code structure:
+      * `role`       -- "data", "x_anc", or "z_anc";
+      * `stabilizer` -- a stabilizer id, stable across rounds for the same
+                        stabilizer of the same logical qubit (ancilla measures);
+      * `round`      -- syndrome-extraction round index (ancilla measures);
+      * `logical`    -- the logical-qubit index the measurement belongs to.
+    They are stamped by `--ftqc-expand-physical` and ignored by back ends that
+    do not need them.
+  }];
+  let arguments = (ins FTQC_QPhysQubitType:$in, OptionalAttr<StrAttr>:$key,
+                       OptionalAttr<StrAttr>:$role,
+                       OptionalAttr<I64Attr>:$stabilizer,
+                       OptionalAttr<I64Attr>:$round,
+                       OptionalAttr<I64Attr>:$logical);
   let results   = (outs I1:$bit);
   let assemblyFormat = "$in attr-dict `:` type($in) `->` type($bit)";
 }

@@ -76,9 +76,12 @@ import numpy as np
 # ─── IRIS ─────────────────────────────────────────────────────────────────────
 
 _IRIS_INSTALL = Path(os.environ.get("IRIS",
-    "/Users/nqx/Development/iris.machq/install"))
+    os.path.expanduser("~/Quantum/quantum-resources/IQM/iris/install.milan0")))
 sys.path.insert(0, str(_IRIS_INSTALL))
-import iris
+try:
+    import iris
+except ImportError:
+    iris = None   # IRIS is only needed to compile/submit; --decode-counts works without it
 import sysconfig
 
 def getlibwithext(lib_name):
@@ -98,6 +101,30 @@ def getlibwithext(lib_name):
 # ─── FTQC shared library ──────────────────────────────────────────────────────
 _HERE    = Path(__file__).parent
 _LIBFTQC = os.path.join(_HERE, "install", "lib", "libftqc")
+
+
+def _preload_libftqc():
+    """dlopen libftqc.so with RTLD_GLOBAL *before* iris.init().
+
+    IRIS's OpenMP device dispatches a native `library=` kernel through its
+    libffi host-interface loader, which resolves the kernel symbol
+    (ftqc_iris_qasm_opt / ftqc_iris_mlir_opt) via dlsym against the global
+    namespace.  If libftqc is only pulled in lazily as the task's kernel
+    library, that lookup fails, `launch_init` bails before allocating the
+    KernelFFI arg buffers, and the subsequent setmem writes through an
+    uninitialized pointer → SIGSEGV inside FFIHostInterfaceLoader::setmem.
+    Loading it RTLD_GLOBAL up front makes the symbols resolvable and the
+    dispatch succeeds.  (libftqc pulls in the shared MLIR libs, so the
+    LLVM/MLIR lib dir must be on LD_LIBRARY_PATH.)"""
+    so = _LIBFTQC + (".so" if not _LIBFTQC.endswith(".so") else "")
+    try:
+        ctypes.CDLL(so, mode=ctypes.RTLD_GLOBAL)
+    except OSError as e:
+        raise RuntimeError(
+            f"Could not preload {so} (RTLD_GLOBAL): {e}.\n"
+            "Build the C API first (./build.sh --install) and put the LLVM/MLIR "
+            "lib dir on LD_LIBRARY_PATH (the MLIR .so dependencies of libftqc)."
+        ) from e
 
 class FTQCCfg(Structure):
     """Mirror of the C FTQCCfg struct — all fields are fixed-size (no pointers)
@@ -336,6 +363,57 @@ def steane_correct(databits: list) -> tuple:
     return raw, sum(corr) & 1
 
 
+def decode_steane_counts(counts: dict, key_to_cb: dict) -> tuple:
+    """Decode a physical-measurement histogram into logical outcomes for N
+    logical Steane qubits.  `counts` maps a physical bitstring (qiskit
+    little-endian over clbits) to a shot count; `key_to_cb` maps each measure
+    key to its clbit.  Data measurements are keyed ``mL<logical>_<i>`` (i=0..6);
+    the syndrome is computed from the seven data bits per block (IQM has no
+    real-time feed-forward, so correction is a classical Pauli-frame update).
+    Returns ``(raw_hist, corrected_hist)`` over logical bitstrings, logical
+    qubit 0 first; returns ``(None, None)`` if no Steane data keys are present.
+    """
+    blocks: dict = {}
+    for k, cb in key_to_cb.items():
+        m = re.fullmatch(r"mL(\d+)_(\d+)", k)
+        if m:
+            blocks.setdefault(int(m.group(1)), {})[int(m.group(2))] = cb
+    if not blocks or any(len(v) != 7 for v in blocks.values()):
+        return None, None
+    logicals = sorted(blocks)
+    raw_hist: dict = {}
+    cor_hist: dict = {}
+    for bits, n in counts.items():
+        b = bits[::-1]  # b[cb] = clbit cb
+        raw_w, cor_w = [], []
+        for li in logicals:
+            data = [int(b[blocks[li][i]]) for i in range(7)]
+            r, c = steane_correct(data)
+            raw_w.append(str(r)); cor_w.append(str(c))
+        rw, cw = "".join(raw_w), "".join(cor_w)
+        raw_hist[rw] = raw_hist.get(rw, 0) + n
+        cor_hist[cw] = cor_hist.get(cw, 0) + n
+    return raw_hist, cor_hist
+
+
+def print_decoded(counts: dict, key_to_cb: dict) -> bool:
+    """--decode post-step: print the raw (parity) and syndrome-corrected logical
+    histograms for N logical Steane qubits.  Returns True if decoding ran."""
+    raw, cor = decode_steane_counts(counts, key_to_cb)
+    if raw is None:
+        print("  (--decode: no Steane data keys 'mL<l>_<i>' found; nothing to decode)")
+        return False
+    total = sum(raw.values()) or 1
+    nlog = len(next(iter(raw)))
+    print(f"\nDecoded logical outcome ({nlog} logical Steane qubit(s), "
+          f"raw = transversal parity, corrected = syndrome-decoded):")
+    for lbl, h in (("raw      ", raw), ("corrected", cor)):
+        top = sorted(h.items(), key=lambda kv: -kv[1])
+        s = "  ".join(f"|{k}>={100.0*v/total:.1f}%" for k, v in top[:6])
+        print(f"  {lbl}  {s}")
+    return True
+
+
 def strip_comments(circuit: dict) -> dict:
     """Drop `_comment` pseudo-instructions (emitted with include-comments=true);
     the device rejects unknown instruction names. prx angle units are handled by
@@ -393,9 +471,13 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
         submit_iqm: bool = False, qc_alias: str = "default",
         shots: int = 1024, heralding: str = "none",
         keep_turns: bool = False, pass_fields: list = None,
-        physical: bool = False, route: bool = None,
+        physical: bool = False, route: bool = None, decode: bool = True,
         server_url: str = None, token: str = None) -> None:
 
+    if iris is None:
+        raise RuntimeError("IRIS is not installed; compilation/submission require "
+                           "it.  Only offline decoding (--decode-counts) works "
+                           "without IRIS.")
     qasm_bytes = qasm_file.read_bytes()
 
     # ── Numpy backing arrays ──────────────────────────────────────────────────
@@ -421,6 +503,7 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
     cfg_import_np = cfg_as_np(cfg_import)
     cfg_opt_np    = cfg_as_np(cfg_opt)
 
+    _preload_libftqc()   # RTLD_GLOBAL so IRIS's FFI loader resolves the kernel
     iris.init()
 
     # ── Build kernels (cfg captured by closure) ───────────────────────────────
@@ -536,23 +619,14 @@ def run(qasm_file: Path, ecc_kind: str, ecc_dist: int, func_name: str,
             bits = format(key, "0{}b".format(max(width, 1)))
             print(f"  |{bits}>  {count:>6}  ({100.0 * count / total:5.1f}%)")
 
-        if physical and key_to_cb:
-            # Steane logical readout: locate the 7 data measurements (keys "mL*"),
-            # then report the logical bit RAW (parity) vs CORRECTED (syndrome-decoded
-            # Pauli-frame update). qiskit counts are little-endian over clbits.
-            data_keys = sorted((k for k in key_to_cb if k.startswith("mL")),
-                               key=lambda k: int(k.split("_")[-1]))
-            if len(data_keys) == 7:
-                raw = {0: 0, 1: 0}
-                cor = {0: 0, 1: 0}
-                for bits, n in counts.items():
-                    b = bits[::-1]                       # b[cb] = clbit cb
-                    data = [int(b[key_to_cb[k]]) for k in data_keys]
-                    r, c = steane_correct(data)
-                    raw[r] += n; cor[c] += n
-                print("\nSteane logical bit  (raw = parity, corrected = syndrome-decoded):")
-                for lbl, d in (("raw      ", raw), ("corrected", cor)):
-                    print(f"  {lbl}  |0>={100.0*d[0]/total:5.1f}%  |1>={100.0*d[1]/total:5.1f}%")
+        # --decode post-step: syndrome-decode the physical readout into the
+        # logical outcome, for one *or more* logical Steane qubits.
+        if decode and physical and key_to_cb:
+            # Persist the raw histogram so the same decode can be re-run offline
+            # (ftqc_iris_task.py --decode-counts <file> --iqm-json <file>).
+            counts_file = out_file.with_suffix(".counts.json")
+            counts_file.write_text(json.dumps(counts, indent=0))
+            print_decoded(counts, key_to_cb)
         return
 
     iris.finalize()
@@ -583,7 +657,7 @@ def main():
                     help=f"path to {getlibwithext('libiqm-qdmi-device')}; sets IRIS_LIB_IQM if IRIS "
                          "can't find it on its own")
     ap.add_argument("--ornl_iqm", action="store_true",
-                    help="Enable to use ORNL IQM crystal QPU")
+                    help="Enable to use ORNL IQM Pathfinder QPU")
     ap.add_argument("--cloud_iqm", action="store_true",
                     help="Enable to use IQM Cloud QPUs")
     ap.add_argument("--base-url", default=None,
@@ -599,11 +673,31 @@ def main():
                          "qiskit-iqm before submit (default: on when --physical)")
     ap.add_argument("--no-route", dest="route", action="store_false",
                     help="submit without routing (raw circuit must be device-valid)")
+    ap.add_argument("--decode", action=argparse.BooleanOptionalAction, default=True,
+                    help="syndrome-decode the physical readout into the logical "
+                         "outcome after the run (default: on for --physical)")
+    ap.add_argument("--decode-counts", default=None,
+                    help="offline decode: JSON file of a saved {bitstring: count} "
+                         "histogram (skips the run; needs --iqm-json)")
+    ap.add_argument("--iqm-json", default=None,
+                    help="IQM JSON circuit for --decode-counts (else <input>.iqm.json)")
     # ftqc-opt pass flags: compose a custom Task-2 pipeline (overrides --pipeline).
     g = ap.add_argument_group("ftqc-opt passes (compose Task 2; override --pipeline)")
     for flag in FTQC_PASS_FLAGS:
         g.add_argument(f"--{flag}", action="store_true")
     args = ap.parse_args()
+
+    # Offline decode path: syndrome-decode a previously-saved histogram without
+    # IRIS or a live run (e.g. results obtained from a separate submission).
+    if args.decode_counts:
+        counts = json.loads(Path(args.decode_counts).read_text())
+        ij = args.iqm_json or str(Path(args.qasm_file).with_suffix(".iqm.json"))
+        circuit = json.loads(Path(ij).read_text())
+        strip_comments(circuit)
+        print(f"Offline decode: {args.decode_counts}  (circuit {ij})")
+        if not print_decoded(counts, _key_to_cb(circuit)):
+            sys.exit(1)
+        return
 
     # Collect any --ftqc-* pass flags the user set → FTQCCfg field names.
     pass_fields = [field for flag, field in FTQC_PASS_FLAGS.items()
@@ -656,7 +750,7 @@ def main():
         submit_iqm=args.submit_iqm, qc_alias=args.qc_alias, shots=args.shots,
         heralding=args.heralding, keep_turns=args.keep_turns,
         pass_fields=pass_fields, physical=args.physical, route=args.route,
-        server_url=server_url,
+        decode=args.decode, server_url=server_url,
         token=os.environ.get("RESONANCE_API_KEY") or os.environ.get("IQM_TOKEN"))
 
 if __name__ == "__main__":

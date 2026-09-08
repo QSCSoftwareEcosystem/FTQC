@@ -17,8 +17,9 @@
 //
 // CHECK-LABEL: func @vqe_ansatz_hwe4
 // CHECK: ftqc.resource_annotation
-// 8 explicit logical_t + 8 logical_s each expanded to T*T by --ftqc-transversal-gates.
-// CHECK-SAME: tGateCount = 24
+// 8 native logical_t gates; the 8 logical_s are transversal on the Steane code
+// (self-dual CSS) and are NOT expanded to T*T, so the T-count is 8.
+// CHECK-SAME: tGateCount = 8
 
 func.func @vqe_ansatz_hwe4(
     %q0_0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, %q1_0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, %q2_0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, %q3_0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)

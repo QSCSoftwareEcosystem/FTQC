@@ -29,10 +29,12 @@ using namespace mlir::ftqc;
 static bool isTransversal(StringRef gate, ECCKind kind) {
   switch (kind) {
   case ECCKind::Steane:
-    // Steane [[7,1,3]] transversal gates: X, Z, H, CNOT, S†, CZ
-    // Non-transversal: T, S (need magic state injection)
+    // Steane [[7,1,3]] is a self-dual CSS code: the full Clifford group is
+    // transversal (X, Z, H, S, S†, CNOT, CZ). Transversal S^{⊗7} implements
+    // logical S (up to a Pauli/phase fix-up), so S needs no magic state.
+    // Only the non-Clifford T requires magic-state injection.
     return gate == "X"    || gate == "Z"    || gate == "H"  ||
-           gate == "CNOT" || gate == "CZ"   || gate == "Sdg";
+           gate == "CNOT" || gate == "CZ"   || gate == "S"  || gate == "Sdg";
   case ECCKind::Surface:
     // Surface code transversal: X, Z, CNOT (via lattice surgery)
     // H is possible but requires code deformation
@@ -66,8 +68,11 @@ struct DecomposeNonTransversalS : public OpRewritePattern<LogicalSOp> {
       return failure();
 
     ECCKind kind = lqType.getCode().getKind();
-    if (kind == ECCKind::ColorCode)
-      return failure();  // transversal S is OK for color code
+    // Only decompose S where it is genuinely non-transversal.  On CSS codes
+    // with transversal S (Steane, color code) this rewrite would inject two
+    // distilled T gates for a gate that is free, so skip it there.
+    if (isTransversal("S", kind))
+      return failure();
 
     auto *ctx  = rewriter.getContext();
     Location loc = op.getLoc();

@@ -868,7 +868,7 @@ Scores each candidate logical→hardware layout against a calibration snapshot
 python topology/gen-best-init-layout-for-iqm.py \
     --qec-name steane --num-qubits 3 --num-anc-per-logic-qubit 3 \
     --input-init-layouts topology/init-layouts-iqm20q.json \
-    --hw-topology topology/crystal_topology.json \
+    --hw-topology topology/pathfinder_topology.json \
     --output-init-layout best-layout.json
 ```
 
@@ -891,7 +891,7 @@ python topology/iqm-circuit-route.py --input-circuit bell.iqm.json \
 ```
 
 `topology/topology.py` refreshes the coupling-map + calibration snapshot
-(`crystal`/`default` = the live ORNL QPU; fake backends work offline).
+(`pathfinder`/`default` = the live ORNL QPU; fake backends work offline).
 `demo.sh` / `topology/real-iqm.py` submit the benchmark circuits end-to-end.
 
 ---

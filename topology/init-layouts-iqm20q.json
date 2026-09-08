@@ -1,5 +1,5 @@
 {
-	"backend": "crystal",
+	"backend": "pathfinder",
 	"num_qubits": 20,
 	"steane": {
 		"3ancilla": [

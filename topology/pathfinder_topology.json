@@ -1,5 +1,5 @@
 {
-  "backend": "crystal",
+  "backend": "pathfinder",
   "calibration": "M194_F0W1388_P08_Q12 @ 2026-07-07 07:23 UTC",
   "num_qubits": 20,
   "qubits": [

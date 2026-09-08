@@ -330,6 +330,21 @@ std::unique_ptr<mlir::Pass> createQPhysToQASM3Pass();
 /// LowerToIQMJSON emitter to re-derive the physical (data+ancilla) layout.
 std::unique_ptr<mlir::Pass> createQPhysToIQMJSONPass();
 
+/// @brief Create the qphys → QIR lowering (`--ftqc-qphys-to-qir`).
+///
+/// Retargets the QIR base-profile back end onto the shared physical IR: walks
+/// `ftqc.qphys.*` ops and emits QIR over physical qubits, so the QIR emitter
+/// consumes one shared physical IR instead of re-deriving the physical layout.
+std::unique_ptr<mlir::Pass> createQPhysToQIRPass();
+
+/// @brief Create the qphys -> Stim lowering (`--ftqc-qphys-to-stim`).
+///
+/// Emits a Stim circuit from the shared physical IR, reconstructing DETECTOR
+/// and OBSERVABLE_INCLUDE records from the QEC-structure metadata that
+/// expand-physical stamps on qphys.measure, so it simulates exactly the
+/// physical circuit the other Level-2 emitters submit.
+std::unique_ptr<mlir::Pass> createQPhysToSTIMPass();
+
 /** Create the physical-qubit initial-layout pass. With no input file, it is a no-op. */
 std::unique_ptr<mlir::Pass> createQPhysInitLayoutPass();
 

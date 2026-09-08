@@ -22,4 +22,4 @@ source $FTQC_DIR/realqpu/bin/activate
 # `generated_at`, so each run is a distinct point on the dashboard's time axis.
 # IQM auth comes from the environment (IQM_TOKEN / RESONANCE_API_KEY, IQM_BASE_URL);
 # any extra args ("$@") are forwarded to topology.py.
-python3 ${TOPO_DIR}/topology.py crystal --json /dev/null --snapshot-dir "${TOPO_DIR}" "$@"
+python3 ${TOPO_DIR}/topology.py pathfinder --json /dev/null --snapshot-dir "${TOPO_DIR}" "$@"

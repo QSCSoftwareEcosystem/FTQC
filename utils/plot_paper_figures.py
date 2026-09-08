@@ -50,7 +50,7 @@ def fig_stim_qec():
         "Grover (26P)": ([0.0361, 0.0619, 0.1067, 0.1797, 0.276, 0.4345, 0.4937, 0.502], "^", "tab:green"),
         "QFT (39P)":    ([0.0206, 0.043, 0.0707, 0.1259, 0.216, 0.3937, 0.4848, 0.4896], "D", "tab:red"),
     }
-    fig, ax = plt.subplots(figsize=(COL, 1.7))
+    fig, ax = plt.subplots(figsize=(COL, 2.04))
     xs = [1e-4, 2e-2]
     ax.plot(xs, xs, color="0.6", lw=0.8, label=r"$p_{\rm shot}=p$")
     ax.axvline(0.01, color="k", ls=":", lw=1.0, label=r"$p_{\rm th}$")
@@ -75,7 +75,7 @@ def _parse_scale(macro):
 
 
 def fig_compile_time():
-    fig, ax = plt.subplots(figsize=(COL, 1.7))
+    fig, ax = plt.subplots(figsize=(COL, 2.04))
     for macro, lab, c in [("coordsBellTimeUs", "Bell", "tab:blue"),
                           ("coordsGHZTimeUs", "GHZ", "tab:red"),
                           ("coordsGroverTimeUs", "Grover", "tab:green")]:
@@ -105,7 +105,7 @@ def fig_passtime():
         "Transversal":    ([0.0, 0.0, 0.0, 1.7], "tab:green"),
         "ResourceEst":    ([198.3, 200.0, 200.0, 203.3], "tab:red"),
     }
-    fig, ax = plt.subplots(figsize=(COL, 1.7))
+    fig, ax = plt.subplots(figsize=(COL, 2.04))
     x = list(range(len(ben)))
     bottom = [0.0] * len(ben)
     for lab, (vals, c) in passes.items():
@@ -129,7 +129,7 @@ def fig_mem_decoded():
     raw = [6.34e-2, 9.40e-2, 1.427e-1, 2.033e-1, 2.833e-1, 3.676e-1,
            4.362e-1, 4.795e-1, 4.946e-1, 4.980e-1, 5.040e-1, 4.998e-1]
     p_ana = [1.0e-3, 2.49e-3, 6.18e-3, 1.538e-2, 3.825e-2, 9.51e-2, 2.366e-1, 5.883e-1]
-    fig, ax = plt.subplots(figsize=(COL, 1.7))
+    fig, ax = plt.subplots(figsize=(COL, 2.04))
     xs = [1e-3, 1.5e-1]
     ax.plot(xs, xs, color="0.6", lw=0.8, label=r"$p_L=p$")
     ax.plot(p, decoded, "o-", ms=3, color="tab:blue", label="decoded $p_L$ (MWPM)")

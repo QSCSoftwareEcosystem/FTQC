@@ -36,6 +36,8 @@ void mlir::ftqc::registerFTQCPasses() {
   ::mlir::registerPass([] { return createExpandPhysicalPass(); });
   ::mlir::registerPass([] { return createQPhysToQASM3Pass(); });
   ::mlir::registerPass([] { return createQPhysToIQMJSONPass(); });
+  ::mlir::registerPass([] { return createQPhysToQIRPass(); });
+  ::mlir::registerPass([] { return createQPhysToSTIMPass(); });
   ::mlir::registerPass([] { return createQPhysInitLayoutPass(); });
 }
 

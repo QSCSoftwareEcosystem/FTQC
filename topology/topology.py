@@ -4,14 +4,14 @@ Usage:
     python3 topology.py [backend] [--plot] [--json PATH] [--token KEY]
 
     backend : garnet (default) | apollo | adonis | deneb     -- offline fake mocks
-              crystal | default                              -- the REAL ORNL QPU
+              pathfinder | default                           -- the REAL ORNL QPU
     --plot  : save a PNG drawing of the qubit graph (<backend>_topology.png)
     --json  : write connectivity to a JSON file (default: <backend>_topology.json)
     --token : API token for real backends (overrides the environment)
 
 Real device
 -----------
-`crystal` (a.k.a. `default`) connects to the live ORNL IQM "Crystal" 20-qubit
+`pathfinder` (a.k.a. `default`) connects to the live ORNL IQM "Pathfinder" (Radiance) 20-qubit
 machine and reads its topology + the latest calibration (quality-metric-set).
 This needs a real API token and network access:
 
@@ -40,10 +40,11 @@ FAKE_BACKENDS = {
 }
 
 # Real-device aliases the user can ask for -> the server's quantum-computer alias.
-# "crystal" is IQM's name for this architecture family; on the ORNL server the
-# single device is published under the alias "default".
+# "pathfinder" is the ORNL IQM Radiance 20-qubit device; the server publishes it
+# under the alias "default".  "crystal" is kept as a legacy alias.
 REAL_ALIASES = {
-    "crystal": "default",
+    "pathfinder": "default",
+    "crystal": "default",   # legacy alias
     "default": "default",
 }
 
