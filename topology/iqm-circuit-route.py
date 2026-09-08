@@ -10,7 +10,11 @@ Example:
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON \
         --token $IQM_TOKEN --base-url https://qccsw.ccs.ornl.gov \
-        --qc-alias [my-quantum-computer]
+    --qc-alias [my-quantum-computer] --shots 1024
+
+The optional --shots argument is an integer number of backend shots. A
+positive value submits the transpiled circuit to the backend; the default
+value, 0, skips backend submission.
 
 Output:
     inputCircuit-transpiled.JSON
@@ -47,7 +51,7 @@ from qiskit import QuantumCircuit
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 
-
+DEBUG_PRINT = 1
 _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
 
 
@@ -78,6 +82,12 @@ def parse_args() -> argparse.Namespace:
         "--token",
         default=None,
         help="IQM authentication token (default: $IQM_TOKEN).",
+    )
+    parser.add_argument(
+        "--shots",
+        type=int,
+        default=0,
+        help="Number of shots to submit (default: 0; use 0 to skip submission).",
     )
     return parser.parse_args()
 
@@ -111,7 +121,9 @@ def qubit_index(qubit_name: str) -> int:
     return qnum - 1
 
 
-def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list[int]]:
+def build_quantum_circuit(
+    circuit: dict[str, Any],
+) -> tuple[QuantumCircuit, list[int], dict[str, int]]:
     instructions = circuit.get("instructions", [])
     if not isinstance(instructions, list):
         raise ValueError("'circuit.instructions' must be a JSON array")
@@ -139,6 +151,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
     qc = QuantumCircuit(num_qubits, nmeas, name=circuit.get("name", "circuit"))
 
     classical_bit = 0
+    key_to_cbit = {}
 
     for ins in instructions:
         name = ins.get("name", "").lower()
@@ -175,6 +188,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
             if len(loc) != 1:
                 raise ValueError(f"'measure' requires one qubit: {ins}")
             qc.measure(loc[0], classical_bit)
+            key_to_cbit[args.get("key", "c%d" % classical_bit)] = classical_bit
             classical_bit += 1
 
         elif name == "reset":
@@ -188,7 +202,7 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
                 "This script currently accepts prx, cz, reset, and measure."
             )
 
-    return qc, initial_layout
+    return qc, initial_layout, key_to_cbit
 
 
 def get_backend(url: str, token: str | None, alias: str):
@@ -252,7 +266,31 @@ def count_serialized_operations(serialized_instructions: list[dict[str, Any]]) -
 
 
 def _instruction_qubit_indices(circuit: QuantumCircuit, instruction: Any) -> tuple[int, ...]:
-    return tuple(circuit.find_bit(q).index for q in instruction.qubits)
+    """Return the instruction qubit indices in backend hardware coordinates.
+
+    The transpiled circuit may carry a final layout mapping virtual qubit
+    indices to physical backend qubits.  Use that mapping when present so
+    backend.target lookups use hardware qubit indices instead of the transient
+    virtual indices used within the transpiled circuit.
+    """
+    # circuit.find_bit().index returns the virtual qubit index used in the transpiled QuantumCircuit.
+    # qargs = tuple(circuit.find_bit(q).index for q in instruction.qubits)
+    qargs: tuple[int, ...] = ()
+
+    layout = getattr(circuit, "layout", None)
+    if layout is None:
+        return qargs
+
+    output_qubit_list = getattr(layout, "_output_qubit_list", None)
+    if output_qubit_list is None:
+        return qargs
+
+    qargs = tuple(output_qubit_list.index(q) for q in instruction.qubits)
+
+    if DEBUG_PRINT >= 2:
+        print(f"[physical qargs] {qargs}", file=sys.stderr)
+
+    return qargs
 
 
 def estimate_fidelity_from_target(
@@ -287,6 +325,7 @@ def estimate_fidelity_from_target(
     log_fidelity = 0.0
     with_error = 0
     without_error = 0
+    invalid_error = 0
 
     # Operations that do not correspond to physical device execution should
     # not prevent an otherwise valid estimate.
@@ -297,30 +336,58 @@ def estimate_fidelity_from_target(
         if name in ignored_names:
             continue
 
+        if DEBUG_PRINT >= 2:
+            print(f"[Logical instruction] {inst}", file=sys.stderr)
         qargs = _instruction_qubit_indices(transpiled_qc, inst)
+
+        if qargs is None or qargs == ():
+            return {
+                "estimated_fidelity": None,
+                "estimated_error": None,
+                "fidelity_estimation_method": None,
+                "fidelity_estimation_complete": False,
+                "operations_with_error_data": 0,
+                "operations_without_error_data": len(transpiled_qc.data),
+            }
 
         try:
             properties = target[name][qargs]
         except (KeyError, TypeError, AttributeError):
             properties = None
+            if( name == "cz" and len(qargs) == 2):
+                # Try the reverse qubit order for CZ, which is symmetric.
+                try:
+                    properties = target[name][qargs[::-1]]
+                except (KeyError, TypeError, AttributeError):
+                    properties = None
 
+        if DEBUG_PRINT >= 2:
+            print(f"[Properties] {name}: {properties}", file=sys.stderr)
         error = getattr(properties, "error", None) if properties is not None else None
 
         if error is None:
             without_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Error not provided] {name} {qargs}", file=sys.stderr)
             continue
 
         try:
             error = float(error)
         except (TypeError, ValueError):
-            without_error += 1
+            invalid_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Invalid error] {name} {qargs}", file=sys.stderr)
             continue
 
         if not math.isfinite(error) or error < 0.0 or error > 1.0:
-            without_error += 1
+            invalid_error += 1
+            if DEBUG_PRINT >= 2:
+                print(f"[Out of bounds error] {name} {qargs}", file=sys.stderr)
             continue
 
         with_error += 1
+        if DEBUG_PRINT >= 2:
+            print(f"[With error] {name} {qargs}", file=sys.stderr)
 
         if error == 1.0:
             log_fidelity = -math.inf
@@ -328,9 +395,9 @@ def estimate_fidelity_from_target(
             # Accumulate in log space to avoid unnecessary underflow.
             log_fidelity += math.log1p(-error)
 
-    complete = (without_error == 0 and with_error > 0)
+    complete = (invalid_error == 0 and without_error == 0 and with_error > 0)
 
-    if complete:
+    if (invalid_error == 0 and with_error > 0):
         fidelity = 0.0 if log_fidelity == -math.inf else math.exp(log_fidelity)
         estimated_error = 1.0 - fidelity
     else:
@@ -342,7 +409,7 @@ def estimate_fidelity_from_target(
         "estimated_error": estimated_error,
         "fidelity_estimation_method": (
             "product_of_independent_instruction_fidelities"
-            if complete
+            if (invalid_error == 0 and with_error > 0)
             else None
         ),
         "fidelity_estimation_complete": complete,
@@ -399,12 +466,17 @@ def main() -> int:
         token = args.token
         alias = args.qc_alias or os.environ.get("IQM_QC_ALIAS", "default")
 
-        qc, initial_layout = build_quantum_circuit(input_circuit)
+        qc, initial_layout, key_to_cbit = build_quantum_circuit(input_circuit)
 
         backend = get_backend(url, token, alias)
-        print(f"Initial layout: {qc.layout}")
         transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
-        print(f"Final layout: {transpiled_qc.layout}")
+        if DEBUG_PRINT >= 1:
+            print(f"Circuit layout: {transpiled_qc.layout}")
+        if args.shots > 0:
+            counts = backend.run(transpiled_qc, shots=args.shots).result().get_counts()
+            if DEBUG_PRINT >= 1:
+                print(f"Backend counts: {counts}")
+                print(f"Key to cbit mapping: {key_to_cbit}")
         serialized = backend.serialize_circuit(transpiled_qc)
 
         serialized_instructions = [
