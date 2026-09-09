@@ -25,7 +25,8 @@ if [[ "${TRACE}" == "1" ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-LLVM_INSTALL="${LLVM_INSTALL:-${SCRIPT_DIR}/../llvm-project.c014/install}"
+LLVM="${LLVM:-${SCRIPT_DIR}/../llvm-project/install}"
+LLVM_INSTALL="${LLVM_INSTALL:-${LLVM}}"
 
 # Allow explicit env overrides first; otherwise auto-detect common and generic layouts.
 MLIR_DIR="${MLIR_DIR:-}"
@@ -49,6 +50,7 @@ pick_first_dir_with_cfg() {
 if [[ -z "${MLIR_DIR}" ]]; then
   MLIR_CANDIDATES=(
     "${LLVM_INSTALL}/lib/cmake/mlir"
+    "${SCRIPT_DIR}/../llvm-project/install/lib/cmake/mlir"
     "${SCRIPT_DIR}/../catalyst/mlir/llvm-project/build/lib/cmake/mlir"
     "${SCRIPT_DIR}/../catalyst/mlir/llvm-project/install/lib/cmake/mlir"
     "/usr/lib/cmake/mlir"
@@ -85,6 +87,7 @@ fi
 if [[ -z "${LLVM_DIR}" ]]; then
   LLVM_CANDIDATES=(
     "${LLVM_INSTALL}/lib/cmake/llvm"
+    "${SCRIPT_DIR}/../llvm-project/install/lib/cmake/llvm"
     "${SCRIPT_DIR}/../catalyst/mlir/llvm-project/build/lib/cmake/llvm"
     "${SCRIPT_DIR}/../catalyst/mlir/llvm-project/install/lib/cmake/llvm"
     "/usr/lib/cmake/llvm"

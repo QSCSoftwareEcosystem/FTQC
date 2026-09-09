@@ -12,8 +12,9 @@
 #   bash utils/run_extended_benchmarks.sh
 #
 # Env overrides:
-#   FTQC_OPT        path to ftqc-opt (default: build/src/ftqc-opt, then install/bin)
-#   MLIR_LIB_DIR    LLVM/MLIR lib dir to add to LD_LIBRARY_PATH (auto-detected)
+#   FTQC_OPT   path to ftqc-opt (default: build/src/ftqc-opt, then install/bin)
+#   LLVM       LLVM/MLIR install prefix (default below); $LLVM/lib is added to
+#              LD_LIBRARY_PATH so ftqc-opt can find the shared MLIR libraries
 # =============================================================================
 set -uo pipefail
 
@@ -31,14 +32,9 @@ if [[ -z "$FTQC_OPT" || ! -x "$FTQC_OPT" ]]; then
   exit 1
 fi
 
-# --- shared libraries (libftqc + MLIR) --------------------------------------
-if [[ -z "${MLIR_LIB_DIR:-}" ]]; then
-  for d in /home/nqx/Quantum/quantum-resources/llvm-project/install/lib \
-           "$ROOT/../llvm-project.c014/install/lib" "$ROOT/../llvm-project/install/lib"; do
-    [[ -d "$d" ]] && MLIR_LIB_DIR="$d" && break
-  done
-fi
-export LD_LIBRARY_PATH="$ROOT/install/lib:${MLIR_LIB_DIR:-}:${LD_LIBRARY_PATH:-}"
+# --- shared libraries (libftqc + LLVM/MLIR) ---------------------------------
+LLVM="${LLVM:-${ROOT}/../llvm-project/install}"   # same default as build.sh
+export LD_LIBRARY_PATH="$ROOT/install/lib:$LLVM/lib:${LD_LIBRARY_PATH:-}"
 
 echo "ftqc-opt: $FTQC_OPT"
 echo "=========================================================================="

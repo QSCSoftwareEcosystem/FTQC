@@ -43,7 +43,18 @@ QASM_PY="$QFTC_DIR/qasm.venv/bin/python"
 QSIM_PY="$QFTC_DIR/qsim.venv/bin/python"
 PEN_PY="/home/nqx/Quantum/quantum-resources/qiree/pen.venv/bin/python"
 FTQC_OPT="$QFTC_DIR/build/src/ftqc-opt"
-LIT="/home/nqx/Quantum/quantum-resources/llvm-project.c014/build/bin/llvm-lit"
+# LLVM/MLIR install prefix (same default as build.sh); exported so the build.sh
+# invocation in step 1 inherits the same value.
+export LLVM="${LLVM:-${QFTC_DIR}/../llvm-project/install}"
+# llvm-lit usually lives in the LLVM build tree (sibling of the install prefix).
+LIT="${LIT:-}"
+if [[ -z "$LIT" ]]; then
+  for c in "$LLVM/bin/llvm-lit" "$LLVM/../build/bin/llvm-lit" \
+           "$(command -v llvm-lit lit 2>/dev/null | head -1)"; do
+    [[ -x "$c" ]] && LIT="$c" && break
+  done
+fi
+export LD_LIBRARY_PATH="$QFTC_DIR/install/lib:$LLVM/lib:${LD_LIBRARY_PATH:-}"
 
 # ── Option flags ──────────────────────────────────────────────────────────────
 SKIP_PENNYLANE=0
