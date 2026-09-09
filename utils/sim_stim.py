@@ -344,6 +344,90 @@ def build_qft(n: int, p: float) -> stim.Circuit:
     return sc.build()
 
 
+class _Rec:
+    """Records transversal logical gates on a SteaneCircuit so a round-trip
+    inverse can be replayed automatically (guaranteeing the noiseless outcome
+    is |0...0>).  T is represented by the Clifford stand-in S, matching the
+    --ftqc-lower-to-stim back end; S-dagger is S.Z."""
+    def __init__(self, sc): self.sc = sc; self.ops = []
+    def _syn(self, *bs):
+        for b in bs: self.sc.syndrome(b)
+    # Only graph-decodable Clifford gates (H, X, Z, CNOT, CZ) are used so the
+    # detector error model decomposes for MWPM; transversal S would couple X/Z
+    # errors into non-graphlike faults.  Non-Clifford content is thus abstracted
+    # to a Clifford stand-in, exactly as build_qft does (CZ for controlled-phase).
+    def h(self, b):   self.sc.h(b); self._syn(b); self.ops.append(('h', b))
+    def x(self, b):   self.sc.x(b); self._syn(b); self.ops.append(('x', b))
+    def z(self, b):   self.sc.z(b); self._syn(b); self.ops.append(('z', b))
+    def cnot(self, a, b): self.sc.cnot(a, b); self._syn(a, b); self.ops.append(('cnot', a, b))
+    def cz(self, a, b):   self.sc.cz(a, b); self._syn(a, b); self.ops.append(('cz', a, b))
+    def inverse(self):
+        # every gate used here is its own inverse
+        for op in reversed(self.ops):
+            m, args = op[0], op[1:]
+            if   m == 'h':    self.sc.h(*args); self._syn(*args)
+            elif m == 'x':    self.sc.x(*args); self._syn(*args)
+            elif m == 'z':    self.sc.z(*args); self._syn(*args)
+            elif m == 'cnot': self.sc.cnot(*args); self._syn(*args)
+            elif m == 'cz':   self.sc.cz(*args); self._syn(*args)
+
+
+def build_qaoa(n: int, p: float) -> stim.Circuit:
+    """One ring-QAOA layer as a Clifford stand-in: the cost coupling on each ring
+    edge is a CZ (the Clifford Rzz(pi/2)) and the mixer an H per qubit, followed
+    by the inverse.  As with QFT-3 the non-Clifford angle is abstracted so the
+    circuit is MWPM-decodable; the structure (ring, depth) is preserved."""
+    sc = SteaneCircuit(n, p)
+    for i in range(n): sc.encode_zero(i); sc.syndrome(i)
+    g = _Rec(sc)
+    for i in range(n): g.cz(i, (i + 1) % n)  # cost layer on ring edges
+    for i in range(n): g.h(i)                # mixer
+    g.inverse()
+    for i in range(n): sc.measure_z(i, i)
+    return sc.build()
+
+
+def build_vqe(n: int, p: float) -> stim.Circuit:
+    """Hardware-efficient VQE ansatz layer as a Clifford stand-in: a Z rotation
+    per qubit around a linear CNOT ladder, twice, followed by the inverse."""
+    sc = SteaneCircuit(n, p)
+    for i in range(n): sc.encode_zero(i); sc.syndrome(i)
+    g = _Rec(sc)
+    for i in range(n): g.z(i)                # rotation sublayer 1
+    for i in range(n - 1): g.cnot(i, i + 1)  # CNOT ladder
+    for i in range(n): g.z(i)                # rotation sublayer 2
+    g.inverse()
+    for i in range(n): sc.measure_z(i, i)
+    return sc.build()
+
+
+def build_grover_mcx(n: int, p: float) -> stim.Circuit:
+    """Grover iteration whose oracle and diffusion each apply a multi-controlled
+    Z, here the Clifford stand-in of a CZ chain across all n qubits (denser than
+    Grover-2's single CZ, reflecting the multi-control cost), followed by the
+    inverse.  A nearest-neighbour chain is used rather than a star from qubit 0:
+    the star concentrates every CZ on one qubit, whose high-degree X/Z error
+    correlations make the detector error model non-graphlike, so MWPM cannot
+    decode it (and pymatching stalls on the resulting instances); the chain keeps
+    each qubit's degree at two, matching QAOA's ring, so the DEM stays graphlike
+    and decodable.  As with QFT-3 the non-Clifford content is abstracted."""
+    sc = SteaneCircuit(n, p)
+    for i in range(n): sc.encode_zero(i); sc.syndrome(i)
+    g = _Rec(sc)
+    def mcz():
+        for i in range(n - 1): g.cz(i, i + 1)   # CZ chain = multi-control stand-in
+    for i in range(n): g.h(i)                # superposition
+    mcz()                                    # oracle
+    for i in range(n): g.h(i)                # diffusion
+    for i in range(n): g.x(i)
+    mcz()
+    for i in range(n): g.x(i)
+    for i in range(n): g.h(i)
+    g.inverse()
+    for i in range(n): sc.measure_z(i, i)
+    return sc.build()
+
+
 # ---------------------------------------------------------------------------
 # Simulation + MWPM decoding
 # ---------------------------------------------------------------------------

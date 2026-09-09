@@ -43,22 +43,36 @@ def save(fig, name):
 
 # ---------------------------------------------------------------- stim_qec ----
 def fig_stim_qec():
+    # Four fixed circuits (5,000 shots), plotted on an 8-point subsample of the grid.
     p = [1e-4, 1.80e-4, 3.26e-4, 5.88e-4, 1.061e-3, 2.574e-3, 6.242e-3, 1.514e-2]
-    series = {
+    fixed = {
         "Bell (26P)":   ([0.0088, 0.016, 0.0341, 0.0561, 0.0995, 0.2183, 0.401, 0.4946], "o", "tab:blue"),
         "GHZ (52P)":    ([0.0135, 0.0262, 0.0427, 0.0795, 0.1356, 0.2925, 0.4522, 0.5046], "s", "tab:orange"),
         "Grover (26P)": ([0.0361, 0.0619, 0.1067, 0.1797, 0.276, 0.4345, 0.4937, 0.502], "^", "tab:green"),
         "QFT (39P)":    ([0.0206, 0.043, 0.0707, 0.1259, 0.216, 0.3937, 0.4848, 0.4896], "D", "tab:red"),
     }
-    fig, ax = plt.subplots(figsize=(COL, 2.04))
+    # Two parametrized families at n=8 (104P), 2,500 shots, full 18-point grid.
+    p18 = [1e-4, 1.3435e-4, 1.8050e-4, 2.4250e-4, 3.2579e-4, 4.3770e-4, 5.8805e-4,
+           7.9004e-4, 1.0614e-3, 1.4260e-3, 1.9158e-3, 2.5739e-3, 3.4580e-3,
+           4.6458e-3, 6.2416e-3, 8.3855e-3, 1.12659e-2, 1.51356e-2]
+    fam = {
+        "QAOA-8":  ([0.0096, 0.0172, 0.0292, 0.0392, 0.0548, 0.0656, 0.0836, 0.094, 0.134,
+                     0.164, 0.228, 0.286, 0.3184, 0.3732, 0.4384, 0.4556, 0.48, 0.4976], "v", "tab:purple"),
+        "VQE-8":   ([0.0156, 0.0172, 0.022, 0.0376, 0.0428, 0.0636, 0.0716, 0.1052, 0.126,
+                     0.1772, 0.2016, 0.2672, 0.3216, 0.3692, 0.3988, 0.4584, 0.4872, 0.49], "P", "tab:brown"),
+    }
+    fig, ax = plt.subplots(figsize=(COL, 2.3))
     xs = [1e-4, 2e-2]
     ax.plot(xs, xs, color="0.6", lw=0.8, label=r"$p_{\rm shot}=p$")
     ax.axvline(0.01, color="k", ls=":", lw=1.0, label=r"$p_{\rm th}$")
-    for lab, (y, m, c) in series.items():
+    for lab, (y, m, c) in fixed.items():
         ax.plot(p, y, marker=m, ms=3, color=c, label=lab)
+    for lab, (y, m, c) in fam.items():
+        ax.plot(p18, y, marker=m, ms=2.6, color=c, ls="--", label=lab)
     ax.set(xscale="log", yscale="log", xlim=(8e-5, 2e-2), ylim=(5e-4, 1.2),
            xlabel="Physical error rate $p$", ylabel=r"Per-shot failure $p_{\rm shot}$")
-    ax.legend(loc="upper left", ncol=2, handlelength=1.4, columnspacing=1.0)
+    ax.legend(loc="upper left", ncol=2, fontsize=5.4, handlelength=1.3,
+              columnspacing=0.9, labelspacing=0.28)
     save(fig, "fig_stim_qec.pdf")
 
 
@@ -75,48 +89,57 @@ def _parse_scale(macro):
 
 
 def fig_compile_time():
+    # In-pipeline (parse + passes) time from -mlir-timing, excluding the one-time
+    # ~170 ms process/library startup (which dominates wall-clock on this node).
     fig, ax = plt.subplots(figsize=(COL, 2.04))
     for macro, lab, c in [("coordsBellTimeUs", "Bell", "tab:blue"),
                           ("coordsGHZTimeUs", "GHZ", "tab:red"),
-                          ("coordsGroverTimeUs", "Grover", "tab:green")]:
+                          ("coordsGroverTimeUs", "Grover", "tab:green"),
+                          ("coordsQAOATimeUs", "QAOA", "tab:purple"),
+                          ("coordsVQETimeUs", "VQE", "tab:brown")]:
         xs, ys = _parse_scale(macro)
         if xs:
-            ax.plot(xs, ys, color=c, label=lab)
-    ax.set(xlabel="Logical qubits $n$", ylabel="Bell / GHZ / Grover (ms)",
+            ax.plot(xs, ys, color=c, label=lab, lw=1.1)
+    ax.set(xlabel="Logical qubits $n$",
+           ylabel="In-pipeline compile time (ms)",
            xlim=(0, 102), ylim=(0, None))
     ax2 = ax.twinx()
     xs, ys = _parse_scale("coordsQFTTimeUs")
     if xs:
-        ax2.plot(xs, ys, color="tab:orange", ls="--", label="QFT")
+        ax2.plot(xs, ys, color="tab:orange", ls="--", label="QFT (quadratic)")
     ax2.set_ylabel("QFT (ms)")
     ax2.grid(False)
     l1, la1 = ax.get_legend_handles_labels()
     l2, la2 = ax2.get_legend_handles_labels()
-    ax.legend(l1 + l2, la1 + la2, loc="upper left", handlelength=1.4)
+    ax.legend(l1 + l2, la1 + la2, loc="upper left", handlelength=1.1,
+              fontsize=5.5, ncol=2, columnspacing=0.8, labelspacing=0.3)
     save(fig, "fig_compile_time.pdf")
 
 
 # ---------------------------------------------------------------- passtime ----
 def fig_passtime():
-    ben: list = ["Bell", "GHZ-4", "Grover-2", "QFT-3"]
+    # Per-pass in-pipeline time (min of 7 runs, -mlir-timing, milan0 single core,
+    # --mlir-disable-threading; 0.1 ms measurement quantization).
+    ben: list = ["Bell", "GHZ-4", "Grover-2", "QFT-3", "QAOA-8", "VQE-8"]
     passes = {
-        "Parse":          ([741.7, 815.0, 903.3, 1161.7], "tab:blue"),
-        "InsertSyndrome": ([200.0, 211.7, 235.0, 330.0], "tab:orange"),
-        "Transversal":    ([0.0, 0.0, 0.0, 1.7], "tab:green"),
-        "ResourceEst":    ([198.3, 200.0, 200.0, 203.3], "tab:red"),
+        "Parse":          ([1100, 1100, 1100, 1200, 1300, 1300], "tab:blue"),
+        "InsertSyndrome": ([300, 300, 300, 500, 400, 400], "tab:orange"),
+        "Transversal":    ([0, 0, 0, 0, 100, 100], "tab:green"),
+        "ResourceEst":    ([200, 100, 100, 200, 200, 200], "tab:red"),
     }
     fig, ax = plt.subplots(figsize=(COL, 2.04))
     x = list(range(len(ben)))
     bottom = [0.0] * len(ben)
     for lab, (vals, c) in passes.items():
-        ax.bar(list(x), vals, bottom=bottom, color=c, label=lab, width=0.6,
+        ax.bar(list(x), vals, bottom=bottom, color=c, label=lab, width=0.62,
                edgecolor="white", linewidth=0.4)
         bottom = [b + v for b, v in zip(bottom, vals)]
     ax.set_xticks(list(x))
-    ax.set_xticklabels(ben)
+    ax.set_xticklabels(ben, rotation=30, ha="right", fontsize=6)
     ax.set_ylabel(r"In-pipeline time ($\mu$s)")
     ax.grid(axis="x", visible=False)
-    ax.legend(loc="upper left", ncol=2, handlelength=1.2, columnspacing=1.0)
+    ax.legend(loc="upper left", ncol=2, handlelength=1.1, columnspacing=0.8,
+              fontsize=5.5, labelspacing=0.3)
     save(fig, "fig_passtime.pdf")
 
 
