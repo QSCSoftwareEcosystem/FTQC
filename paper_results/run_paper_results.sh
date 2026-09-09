@@ -117,7 +117,7 @@ if [[ $PLOTS_ONLY -eq 1 ]]; then
     step "Step 3/10 — Qiskit Aer simulation (skipped via --plots-only)"
 else
     step "Step 3/10 — Qiskit Aer simulation (sim_qasm3.py)"
-    "$QASM_PY" sim_qasm3.py \
+    "$QASM_PY" utils/sim_qasm3.py \
         2>&1 | tee "$RESULTS_DIR/03_sim_qasm3.log" || warn "sim_qasm3.py failed — check 03_sim_qasm3.log"
     ok "Aer results → 03_sim_qasm3.log"
 fi
@@ -129,7 +129,7 @@ if [[ $PLOTS_ONLY -eq 1 ]]; then
     step "Step 4/10 — qsim simulation (skipped via --plots-only)"
 else
     step "Step 4/10 — qsim simulation (sim_qsim.py)"
-    "$QSIM_PY" sim_qsim.py \
+    "$QSIM_PY" utils/sim_qsim.py \
         2>&1 | tee "$RESULTS_DIR/04_sim_qsim.log" || warn "sim_qsim.py failed — check 04_sim_qsim.log"
     ok "qsim results → 04_sim_qsim.log"
 fi
@@ -141,7 +141,7 @@ if [[ $PLOTS_ONLY -eq 1 ]]; then
     step "Step 5/10 — Steane simulation (skipped via --plots-only)"
 else
     step "Step 5/10 — Steane physical-circuit simulation (sim_steane_aer.py)"
-    "$QASM_PY" sim_steane_aer.py \
+    "$QASM_PY" utils/sim_steane_aer.py \
         2>&1 | tee "$RESULTS_DIR/05_sim_steane_aer.log" || warn "sim_steane_aer.py failed — check 05_sim_steane_aer.log"
     ok "Steane Aer results → 05_sim_steane_aer.log"
 fi
@@ -159,7 +159,7 @@ if [[ $PLOTS_ONLY -eq 1 ]]; then
     fi
 else
     step "Step 6/10 — STIM QEC simulation sweep (sim_stim.py)"
-    "$QASM_PY" sim_stim.py \
+    "$QASM_PY" utils/sim_stim.py \
         --shots 5000 \
         --output "$RESULTS_DIR/stim_results.csv" \
         2>&1 | tee "$RESULTS_DIR/06_sim_stim.log" || warn "sim_stim.py failed — check 06_sim_stim.log"
@@ -178,7 +178,7 @@ step "Step 7/10 — STIM result plots (plot_stim_results.py)"
 if [[ ! -f "$RESULTS_DIR/stim_results.csv" ]]; then
     warn "stim_results.csv not found — skipping STIM plots (run step 6 first or use --plots-only with existing CSV)"
 else
-    "$QASM_PY" plot_stim_results.py \
+    "$QASM_PY" utils/plot_stim_results.py \
         --input  "$RESULTS_DIR/stim_results.csv" \
         --outdir "$RESULTS_DIR" \
         --figdir "$FIGURES_DIR" \
@@ -197,7 +197,7 @@ fi
 # =============================================================================
 if [[ $SKIP_PENNYLANE -eq 0 ]]; then
     step "Step 8/10 — PennyLane QEC comparison (sim_pennylane_qec.py)"
-    "$PEN_PY" sim_pennylane_qec.py \
+    "$PEN_PY" utils/sim_pennylane_qec.py \
         --outdir "$RESULTS_DIR" \
         --figdir "$FIGURES_DIR" \
         --stim-csv "$RESULTS_DIR/stim_results.csv" \
@@ -217,7 +217,7 @@ fi
 #   latex/scale_plots.tex   — pgfplots coordinates included by the paper
 # =============================================================================
 step "Step 9/10 — Scaling experiment (scale_experiment.py)"
-"$QASM_PY" scale_experiment.py \
+"$QASM_PY" utils/scale_experiment.py \
     2>&1 | tee "$RESULTS_DIR/09_scale_experiment.log"
 # Copy generated files into paper_results/ for archival
 cp latex/scale_data.csv  "$RESULTS_DIR/scale_data.csv"

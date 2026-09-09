@@ -23,7 +23,7 @@ from qiskit.qasm3 import loads
 from qiskit_aer import AerSimulator
 
 # ── Paths ───────────────────────────────────────────────────────────────────
-REPO = Path(__file__).parent
+REPO = Path(__file__).resolve().parent.parent
 FTQC_OPT = REPO / "build" / "src" / "ftqc-opt"
 INTEGRATION = REPO / "test" / "Integration"
 QASM3_TESTS  = REPO / "test" / "Transforms" / "QASM3"

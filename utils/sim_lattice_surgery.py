@@ -28,7 +28,7 @@ import numpy as np
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DEFAULT_FTQC_OPT = os.path.join(_SCRIPT_DIR, "build/src/ftqc-opt")
+DEFAULT_FTQC_OPT = os.path.join(os.path.dirname(_SCRIPT_DIR), "build/src/ftqc-opt")
 
 BENCHMARKS = {
     "Bell":   ("test/Integration/bell-state-ft.mlir",   2),

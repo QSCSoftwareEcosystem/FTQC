@@ -15,7 +15,7 @@ Output: qftc/latex/scale_data.csv  (raw numbers)
 import re, subprocess, time, sys, tempfile, os
 from pathlib import Path
 
-REPO     = Path(__file__).parent
+REPO     = Path(__file__).resolve().parent.parent
 FTQC_OPT = REPO / "build" / "src" / "ftqc-opt"
 OUT_CSV  = REPO / "latex" / "scale_data.csv"
 OUT_TEX  = REPO / "latex" / "scale_plots.tex"

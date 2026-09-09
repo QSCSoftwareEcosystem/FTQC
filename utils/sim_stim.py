@@ -399,7 +399,7 @@ def simulate(circuit: stim.Circuit, num_shots: int) -> float:
 # MLIR pass output validation
 # ---------------------------------------------------------------------------
 
-FTQC_OPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "build/src/ftqc-opt")
+FTQC_OPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build/src/ftqc-opt")
 TEST_MLIR = {
     "Bell":   "test/Integration/bell-state-ft.mlir",
     "GHZ":    "test/Integration/ghz4-steane.mlir",
@@ -563,7 +563,7 @@ def main():
     parser.add_argument("--shots",  type=int, default=10_000)
     parser.add_argument("--output", default="stim_results.csv")
     args = parser.parse_args()
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     run_sweep(args.shots, args.output)
 
 

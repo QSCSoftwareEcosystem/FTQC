@@ -31,7 +31,7 @@ import os
 from pathlib import Path
 
 # ── Paths ───────────────────────────────────────────────────────────────────
-REPO = Path(__file__).parent
+REPO = Path(__file__).resolve().parent.parent
 MLIR_EXAMPLES = REPO / "test" / "Integration"
 
 def resolve_qiree_bin_dir() -> Path:
