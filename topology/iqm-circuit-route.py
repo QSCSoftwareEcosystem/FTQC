@@ -103,6 +103,11 @@ def output_path_for(input_path: Path) -> Path:
     )
 
 
+def results_path_for(input_path: Path) -> Path:
+    """Prefix the input filename with 'results-'."""
+    return input_path.with_name(f"results-{input_path.name}")
+
+
 def qubit_index(qubit_name: str) -> int:
     """
     Convert an IQM qubit name to its Qiskit index.
@@ -501,6 +506,9 @@ def main() -> int:
             counts = backend.run(
                 qc, shots=args.shots, qubit_index_to_name=qubit_index_to_name
             ).result().get_counts()
+            with results_path_for(input_path).open("w", encoding="utf-8") as f:
+                json.dump(counts, f, indent=2)
+                f.write("\n")
             if DEBUG_PRINT >= 0:
                 print(f"Backend counts: {counts}")
                 print(f"Key to cbit mapping: {key_to_cbit}")
@@ -523,6 +531,10 @@ def main() -> int:
             print(f"Circuit layout: {transpiled_qc.layout}")
         if args.shots > 0:
             counts = backend.run(transpiled_qc, shots=args.shots).result().get_counts()
+            with results_path_for(input_path).open("w", encoding="utf-8") as f:
+                json.dump(counts, f, indent=2)
+                f.write("\n")
+
             if DEBUG_PRINT >= 0:
                 print(f"Backend counts: {counts}")
                 print(f"Key to cbit mapping: {key_to_cbit}")
