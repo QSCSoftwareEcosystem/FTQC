@@ -45,7 +45,7 @@ STIM_CSV   = "stim_results.csv"
 P_THRESHOLD = 0.01
 
 # Default figures directory (overridden by --figdir on the command line)
-_DEFAULT_FIGDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
+_DEFAULT_FIGDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "figures")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: save figure as PDF (→ figdir) and PNG (→ outdir)

@@ -15,10 +15,10 @@ Output: qftc/latex/scale_data.csv  (raw numbers)
 import re, subprocess, time, sys, tempfile, os
 from pathlib import Path
 
-REPO     = Path(__file__).parent
+REPO     = Path(__file__).resolve().parent.parent
 FTQC_OPT = REPO / "build" / "src" / "ftqc-opt"
-OUT_CSV  = REPO / "latex" / "scale_data.csv"
-OUT_TEX  = REPO / "latex" / "scale_plots.tex"
+OUT_CSV  = REPO / "paper_results" / "scale_data.csv"
+OUT_TEX  = REPO / "ftqc.paper" / "sections" / "scale_plots.tex"
 
 ST = "!ftqc.logical_qubit<#ftqc.ecc<steane>>"
 SU = "!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>"
@@ -257,6 +257,82 @@ def parse_annotation(ir_text):
     return fields
 
 
+def gen_qaoa(n):
+    """n-qubit ring QAOA, one cost+mixer layer, fixed Clifford+T angle, Steane d=3.
+
+    Cost: Rzz(pi/4) = CNOT . T . CNOT on each ring edge (i,(i+1) mod n).
+    Mixer: Rz(pi/4) ~ T on each qubit.  Scales linearly in n.
+    """
+    body = []
+    cur = [f"q{i}" for i in range(n)]
+    for i in range(n):
+        body.append(f"  %{cur[i]} = ftqc.init_plus : {ST}")
+    c = [0]
+    def nid():
+        c[0] += 1; return c[0]
+    def cnot(a, b):
+        k = nid(); ao, bo = f"qc{k}a", f"qc{k}b"
+        body.append(_cnot(cur[a], cur[b], ao, bo, ST)); cur[a] = ao; cur[b] = bo
+    def tgate(a):
+        k = nid(); m, o = f"qm{k}", f"qt{k}"
+        body.append(f"  %{m} = ftqc.prepare_magic_t : !ftqc.magic_state")
+        body.append(f"  %{o} = ftqc.logical_t %{cur[a]}, %{m}\n"
+                    f"      : ({ST}, !ftqc.magic_state) -> {ST}")
+        cur[a] = o
+    for i in range(n):                 # cost layer on ring edges
+        j = (i + 1) % n
+        cnot(i, j); tgate(j); cnot(i, j)
+    for i in range(n):                 # mixer
+        tgate(i)
+    ret = []
+    for i in range(n):
+        k = nid(); body.append(f"  %qz{k} = ftqc.logical_measure %{cur[i]} : ({ST}) -> i1")
+        ret.append(f"%qz{k}")
+    rt = ", ".join(["i1"] * n)
+    return (f"func.func @qaoa_{n}() -> ({rt}) {{\n" + "\n".join(body)
+            + f"\n  func.return {', '.join(ret)} : {rt}\n}}")
+
+
+def gen_vqe(n):
+    """n-qubit hardware-efficient VQE ansatz layer, fixed Rz(3pi/4)=S.T, Steane d=3.
+
+    Two single-qubit rotation sublayers (S then T on each qubit) around a linear
+    CNOT entangling ladder.  Scales linearly in n.
+    """
+    body = []
+    cur = [f"v{i}" for i in range(n)]
+    for i in range(n):
+        body.append(f"  %{cur[i]} = ftqc.init_zero : {ST}")
+    c = [0]
+    def nid():
+        c[0] += 1; return c[0]
+    def sgate(a):
+        k = nid(); o = f"vs{k}"
+        body.append(f"  %{o} = ftqc.logical_s %{cur[a]} : {ST}"); cur[a] = o
+    def tgate(a):
+        k = nid(); m, o = f"vm{k}", f"vt{k}"
+        body.append(f"  %{m} = ftqc.prepare_magic_t : !ftqc.magic_state")
+        body.append(f"  %{o} = ftqc.logical_t %{cur[a]}, %{m}\n"
+                    f"      : ({ST}, !ftqc.magic_state) -> {ST}")
+        cur[a] = o
+    def cnot(a, b):
+        k = nid(); ao, bo = f"vc{k}a", f"vc{k}b"
+        body.append(_cnot(cur[a], cur[b], ao, bo, ST)); cur[a] = ao; cur[b] = bo
+    for i in range(n):                 # rotation sublayer 1
+        sgate(i); tgate(i)
+    for i in range(n - 1):             # linear CNOT ladder
+        cnot(i, i + 1)
+    for i in range(n):                 # rotation sublayer 2
+        sgate(i); tgate(i)
+    ret = []
+    for i in range(n):
+        k = nid(); body.append(f"  %vz{k} = ftqc.logical_measure %{cur[i]} : ({ST}) -> i1")
+        ret.append(f"%vz{k}")
+    rt = ", ".join(["i1"] * n)
+    return (f"func.func @vqe_{n}() -> ({rt}) {{\n" + "\n".join(body)
+            + f"\n  func.return {', '.join(ret)} : {rt}\n}}")
+
+
 def run_one(mlir_src, passes=PIPELINE, repeat=3):
     """Write mlir_src to a temp file, run ftqc-opt, return (fields, time_us)."""
     with tempfile.NamedTemporaryFile(suffix=".mlir", mode="w",
@@ -267,15 +343,20 @@ def run_one(mlir_src, passes=PIPELINE, repeat=3):
         best = float("inf")
         fields = {}
         for _ in range(repeat):
-            t0 = time.perf_counter()
             res = subprocess.run(
-                [str(FTQC_OPT)] + passes + [fname],
+                ["taskset", "-c", "0", str(FTQC_OPT),
+                 "--mlir-disable-threading", "--mlir-timing"] + passes + [fname],
                 capture_output=True, text=True
             )
-            elapsed = (time.perf_counter() - t0) * 1e6  # µs
             if res.returncode != 0:
                 return None, None, res.stderr
-            best = min(best, elapsed)
+            # In-pipeline time (parse + passes), excluding the ~170 ms one-time
+            # process/library startup which dominates and swamps size scaling.
+            m = re.search(r"Total Execution Time:\s*([\d.]+)\s*seconds", res.stderr)
+            if m:
+                best = min(best, float(m.group(1)) * 1e6)  # µs
+        if best == float("inf"):
+            return None, None, "no -mlir-timing total found"
         fields = parse_annotation(res.stdout)
         return fields, best, None
     finally:
@@ -293,7 +374,7 @@ QFT_SIZES    = list(range(2, 52, 1))
 
 rows = []   # (benchmark, n, logQ, tGates, cnotCount, ecRounds, physTotal, time_us)
 
-def sweep(name, sizes, gen_fn, ecc_label):
+def sweep(name, sizes, gen_fn, ecc_label, passes=PIPELINE):
     print(f"\n── {name} sweep ──", flush=True)
     for n in sizes:
         try:
@@ -302,7 +383,7 @@ def sweep(name, sizes, gen_fn, ecc_label):
             print(f"  n={n:3d}  GEN FAIL: {e}", flush=True)
             continue
         mlir = f"module {{\n{src}\n}}"
-        fields, t_us, err = run_one(mlir)
+        fields, t_us, err = run_one(mlir, passes)
         if fields is None:
             print(f"  n={n:3d}  RUN FAIL: {err[:80]}", flush=True)
             continue
@@ -329,6 +410,11 @@ sweep("GHZ",    GHZ_SIZES,    gen_ghz,    "steane")
 sweep("Grover", GROVER_SIZES, gen_grover, "surface")
 sweep("QFT",    QFT_SIZES,    gen_qft,    "steane")
 
+QAOA_SIZES      = list(range(2, 34, 2))
+VQE_SIZES       = list(range(2, 34, 2))
+sweep("QAOA",      QAOA_SIZES,      gen_qaoa,       "steane")
+sweep("VQE",       VQE_SIZES,       gen_vqe,        "steane")
+
 # ── Write CSV ────────────────────────────────────────────────────────────────
 
 header = ("benchmark,n,logQ,tGates,cnotCount,ecRounds,"
@@ -352,7 +438,7 @@ def coords(name, col_idx):
 with open(OUT_TEX, "w") as f:
     f.write("% Auto-generated by scale_experiment.py — do not edit manually\n")
     f.write("%\n")
-    for bench in ("Bell", "GHZ", "Grover", "QFT"):
+    for bench in ("Bell", "GHZ", "Grover", "QFT", "QAOA", "VQE"):
         tag = bench.lower()
         f.write(f"% ── {bench} ──\n")
         for label, idx in [

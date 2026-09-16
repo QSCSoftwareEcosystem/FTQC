@@ -146,8 +146,13 @@ static void buildPassManager(mlir::PassManager &pm, const FTQCCfg *cfg) {
     }
 
     // Lowering passes
-    if (cfg->transversal_gates)
-        pm.addPass(mlir::ftqc::createTransversalGatePass(cfg->decompose_non_transversal != 0));
+    // TransversalGate is registered for func::FuncOp, so it must be nested —
+    // adding it at module level fails with "trying to schedule a pass on an
+    // unsupported operation" (mirrors buildSteaneEncodePipeline).
+    if (cfg->transversal_gates) {
+        auto &fpm = pm.nest<mlir::func::FuncOp>();
+        fpm.addPass(mlir::ftqc::createTransversalGatePass(cfg->decompose_non_transversal != 0));
+    }
     if (cfg->lower_to_quantum)
         pm.addPass(mlir::ftqc::createLowerToQuantumPass());
     if (cfg->lower_to_stim)

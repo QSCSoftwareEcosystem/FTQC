@@ -664,6 +664,36 @@ def FTQCQPhysToIQMJSONPass : Pass<"ftqc-qphys-to-iqm-json", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::ftqc::FTQCDialect"];
 }
 
+def FTQCQPhysToQIRPass : Pass<"ftqc-qphys-to-qir", "mlir::ModuleOp"> {
+  let summary = "Lower the physical qphys IR to QIR (base profile)";
+  let description = [{
+    Retargets the QIR back end onto the shared `ftqc.qphys.*` physical IR
+    (produced by `--ftqc-expand-physical`): walks the physical ops in program
+    order, assigns each qphys qubit a QIR qubit index, and emits QIR base-profile
+    LLVM IR over physical qubits, rather than re-deriving the physical layout
+    inside the emitter.
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+}
+
+
+def FTQCQPhysToSTIMPass : Pass<"ftqc-qphys-to-stim", "mlir::ModuleOp"> {
+  let summary = "Lower the physical qphys IR to a Stim stabilizer circuit";
+  let description = [{
+    Emits a Stim circuit from the shared `ftqc.qphys.*` physical IR (produced by
+    `--ftqc-expand-physical`), reconstructing DETECTOR and OBSERVABLE_INCLUDE
+    records from the QEC-structure metadata (role/stabilizer/round/logical)
+    stamped on qphys.measure.  Unlike the logical Stim back end it simulates the
+    exact physical circuit the other Level-2 emitters submit.  `physical-error-
+    rate` sets the depolarizing noise (0 = noiseless).
+  }];
+  let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+  let options = [
+    Option<"physErr", "physical-error-rate", "double", "0.0",
+           "Depolarizing error rate per physical op (0 = noiseless)">,
+  ];
+}
+
 
 def FTQCQPhysInitLayoutPass : Pass<"ftqc-qphys-init-layout", "mlir::ModuleOp"> {
   let summary = "Map each physical qphys qubit to a hardware qubit index on the backend";

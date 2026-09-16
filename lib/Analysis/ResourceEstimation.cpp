@@ -110,10 +110,15 @@ std::string ResourceReport::toString() const {
   // ── Logical resources ─────────────────────────────────────────────────────
   ss << "Logical qubits        : " << logicalQubits << "\n";
   ss << "Logical T gates       : " << logicalTGates  << "\n";
+  ss << "Toffoli (CCZ) gates   : " << toffoliGates << "\n";
+  ss << "T-count (incl. Toffoli@7T): " << totalTCount() << "\n";
   ss << "Logical CNOT gates    : " << logicalCnotGates << "\n";
   ss << "Logical Clifford gates: " << logicalCliffordGates << "\n";
   ss << "EC rounds             : " << ecRounds << "\n";
   ss << "Distillation rounds   : " << distillationRounds << "\n";
+  if (cczDistillationRounds > 0 || cczStates > 0)
+    ss << "CCZ states/factories  : " << cczStates << " / "
+       << cczDistillationRounds << "\n";
 
   // ── Physical resources ────────────────────────────────────────────────────
   ss << "---\n";
@@ -158,6 +163,12 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
   if (distillationRounds > 0)
     distillationQubits = 15u * (physPerLogical + ancillaPerLogical);
 
+  // A CCZ factory (Haah et al. 2018, O(eps^2)) services the Toffoli/CCZ states;
+  // model one factory as 8 encoded blocks.  Added when explicit distill_ccz ops
+  // are present, or inferred from the Toffoli/CCZ gate count.
+  if (cczDistillationRounds > 0 || toffoliGates > 0 || cczStates > 0)
+    distillationQubits += 8u * (physPerLogical + ancillaPerLogical);
+
   physicalTotalQubits    = physicalDataQubits + physicalAncillaQubits
                          + distillationQubits;
 
@@ -189,6 +200,9 @@ void ResourceReport::computePhysical(unsigned physPerLogical,
 /// the correct count as 15 × (physPerLogical + ancillaPerLogical) once ECC
 /// parameters are known.
 static void inferDistillationIfAbsent(ResourceReport &r) {
+  // Infer one 15-to-1 round per *direct* T gate when no explicit T-distill op is
+  // present.  Toffoli/CCZ states are serviced by a separate CCZ factory (added
+  // in computePhysical), so they are NOT charged a 15-to-1 T factory here.
   if (r.distillationRounds == 0 && r.logicalTGates > 0) {
     r.distillationRounds = r.logicalTGates;
   }
@@ -251,6 +265,19 @@ void ResourceEstimator::visitOp(Operation *op) {
           LogicalCZOp>([&](auto) {
       ++report_.logicalCliffordGates;
     })
+    .Case<LogicalToffoliOp>([&](auto) {
+      // Each Toffoli costs 7 T (standard Clifford+T decomposition) and consumes
+      // one CCZ magic state; it is charged to the T-equivalent via totalTCount().
+      ++report_.toffoliGates;
+    })
+    .Case<LogicalMCXOp>([&](LogicalMCXOp mcx) {
+      // An un-decomposed multi-controlled X: charge its Toffoli-equivalent
+      // (0/1 ctrls: 0; 2 ctrls: 1; n>=3: 2(n-1)-1 via the clean-ancilla V-chain).
+      unsigned n = mcx.getControls().size();
+      report_.toffoliGates += (n <= 1) ? 0u : (n == 2 ? 1u : 2u * (n - 1u) - 1u);
+    })
+    .Case<PrepareMagicCCZOp>([&](auto) { ++report_.cczStates; })
+    .Case<DistillCCZOp>([&](auto) { ++report_.cczDistillationRounds; })
     .Case<ExtractSyndromeOp, SteaneXSyndromeOp, SteaneZSyndromeOp,
           ShorSyndromeOp, FlagSyndromeOp, SurfaceRoundOp>([&](auto) {
       ++report_.ecRounds;
@@ -310,7 +337,7 @@ struct FTQCResourceEstimatePassImpl
           func.getLoc(),
           builder.getI64IntegerAttr(report.physicalTotalQubits),
           builder.getI64IntegerAttr(report.logicalQubits),
-          builder.getI64IntegerAttr(report.logicalTGates),
+          builder.getI64IntegerAttr(report.totalTCount()),
           builder.getI64IntegerAttr(report.logicalCnotGates),
           builder.getI64IntegerAttr(report.ecRounds),
           builder.getF64FloatAttr(report.estimatedLogicalError));

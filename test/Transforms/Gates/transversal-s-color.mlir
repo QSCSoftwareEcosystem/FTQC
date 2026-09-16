@@ -13,12 +13,14 @@ func.func @transversal_s_color_ok(
   func.return %out : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
 }
 
-// CHECK-LABEL: func @s_steane_decomposed
-func.func @s_steane_decomposed(
+// CHECK-LABEL: func @s_steane_transversal
+func.func @s_steane_transversal(
     %lq: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
     -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
-  // S on Steane → decomposed into two T gates via magic-state injection.
-  // CHECK: ftqc.logical_t
+  // S is transversal on the Steane code (self-dual CSS) → no magic-state
+  // injection, so the logical_s is preserved and no logical_t is introduced.
+  // CHECK: ftqc.logical_s
+  // CHECK-NOT: ftqc.logical_t
   %out = ftqc.logical_s %lq : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   func.return %out : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

@@ -461,6 +461,41 @@ def FTQC_LogicalToffoliOp : FTQC_Op<"logical_toffoli"> {
   }];
 }
 
+def FTQC_LogicalRzOp : FTQC_Op<"logical_rz", [SameOperandsAndResultType]> {
+  let summary = "Logical Z-rotation Rz(angle), synthesized to Clifford+T";
+  let description = [{
+    A logical Z-axis rotation `Rz(angle) = diag(e^{-i*angle/2}, e^{+i*angle/2})`
+    by `angle` radians.  This is a non-Clifford resource op: the
+    `--ftqc-synthesize-rz` pass approximates it with a Clifford+T sequence
+    (Solovay-Kitaev) to a target precision, reporting the resulting T-count.
+    Dyadic multiples of pi/4 are emitted exactly (T, S, Z, ...).
+  }];
+  let arguments = (ins FTQC_LogicalQubitType:$qubit, F64Attr:$angle);
+  let results  = (outs FTQC_LogicalQubitType:$result);
+  let assemblyFormat = "$qubit `,` $angle attr-dict `:` type($qubit)";
+}
+
+def FTQC_LogicalMCXOp : FTQC_Op<"logical_mcx"> {
+  let summary = "Multi-controlled X (decomposed to a Toffoli network + ancilla)";
+  let description = [{
+    A multi-controlled NOT with a variadic list of control qubits and a single
+    target: the target is flipped iff every control is |1>.  The
+    `--ftqc-decompose-mcx` pass rewrites it into a `logical_toffoli` network
+    using a clean-ancilla V-chain (Barenco et al.); 0/1/2 controls lower to
+    X / CNOT / Toffoli directly.  Value semantics: each control and the target
+    are threaded through and returned.
+  }];
+  let arguments = (ins Variadic<FTQC_LogicalQubitType>:$controls,
+                       FTQC_LogicalQubitType:$target);
+  let results  = (outs Variadic<FTQC_LogicalQubitType>:$controlsOut,
+                       FTQC_LogicalQubitType:$targetOut);
+  let assemblyFormat = [{
+    `[` $controls `]` `,` $target attr-dict `:`
+    `[` type($controls) `]` `,` type($target)
+    `->` `[` type($controlsOut) `]` `,` type($targetOut)
+  }];
+}
+
 def FTQC_LogicalMeasureOp : FTQC_Op<"logical_measure"> {
   let summary = "Fault-tolerant logical measurement";
   let description = [{
@@ -736,7 +771,23 @@ def FTQC_QPhysSwapOp : FTQC_QPhys2Q<"qphys.swap"> {
 
 def FTQC_QPhysMeasureOp : FTQC_Op<"qphys.measure"> {
   let summary = "Measure a physical qubit in the Z basis";
-  let arguments = (ins FTQC_QPhysQubitType:$in, OptionalAttr<StrAttr>:$key);
+  let description = [{
+    Measures a physical qubit.  The optional QEC-structure attributes let a
+    physical back end (e.g. `--ftqc-qphys-to-stim`) reconstruct detectors and
+    the logical observable without re-deriving the code structure:
+      * `role`       -- "data", "x_anc", or "z_anc";
+      * `stabilizer` -- a stabilizer id, stable across rounds for the same
+                        stabilizer of the same logical qubit (ancilla measures);
+      * `round`      -- syndrome-extraction round index (ancilla measures);
+      * `logical`    -- the logical-qubit index the measurement belongs to.
+    They are stamped by `--ftqc-expand-physical` and ignored by back ends that
+    do not need them.
+  }];
+  let arguments = (ins FTQC_QPhysQubitType:$in, OptionalAttr<StrAttr>:$key,
+                       OptionalAttr<StrAttr>:$role,
+                       OptionalAttr<I64Attr>:$stabilizer,
+                       OptionalAttr<I64Attr>:$round,
+                       OptionalAttr<I64Attr>:$logical);
   let results   = (outs I1:$bit);
   let assemblyFormat = "$in attr-dict `:` type($in) `->` type($bit)";
 }

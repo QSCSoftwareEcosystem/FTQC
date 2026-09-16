@@ -236,7 +236,9 @@ std::string CliffordTableau::toString() const {
 bool mlir::ftqc::hasTransversalImplementation(llvm::StringRef gate,
                                               llvm::StringRef code) {
   if (code == "steane")
-    return gate == "X" || gate == "Z" || gate == "H" || gate == "CNOT";
+    // Self-dual CSS code: full Clifford group is transversal (S/S† included).
+    return gate == "X" || gate == "Z" || gate == "H" || gate == "CNOT" ||
+           gate == "S" || gate == "Sdg" || gate == "CZ";
   if (code == "surface")
     return gate == "X" || gate == "Z" || gate == "CNOT";
   if (code == "color_code")

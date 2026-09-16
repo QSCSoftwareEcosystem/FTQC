@@ -3,8 +3,9 @@
 // RUN: ftqc-opt --ftqc-expand-physical --ftqc-qphys-to-iqm-json %s | FileCheck %s --check-prefix=IQM
 //
 // --ftqc-expand-physical unfolds each Steane [[7,1,3]] logical qubit into
-// explicit physical qphys data + ancilla qubits (roles "data"/"x_anc"/"z_anc"),
-// and --ftqc-qphys-to-qasm3 lowers that shared physical IR to OpenQASM 3.0.
+// explicit physical qphys data + ancilla qubits (roles "data"/"anc": 7 data +
+// 3 shared ancilla reused across X- and Z-stabilizer extraction), and
+// --ftqc-qphys-to-qasm3 lowers that shared physical IR to OpenQASM 3.0.
 
 module {
   func.func @hm() -> i1 {
@@ -22,11 +23,11 @@ module {
 // CHECK-NOT: ftqc.logical_
 // CHECK-NOT: ftqc.steane_
 
-// Data qubits plus X- and Z-syndrome ancillas are materialized as SSA values,
+// The 7 data qubits and the shared ancilla pool are materialized as SSA values,
 // and physical gates + measurement are emitted (order-independent).
 // CHECK-DAG: ftqc.qphys.alloc {id = 0 : i64, role = "data"}
-// CHECK-DAG: role = "x_anc"
-// CHECK-DAG: role = "z_anc"
+// CHECK-DAG: ftqc.qphys.alloc {id = 6 : i64, role = "data"}
+// CHECK-DAG: role = "anc"
 // CHECK-DAG: ftqc.qphys.h
 // CHECK-DAG: ftqc.qphys.cx
 // CHECK-DAG: ftqc.qphys.measure

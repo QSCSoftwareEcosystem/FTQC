@@ -255,6 +255,18 @@ std::unique_ptr<mlir::Pass> createTransversalGatePass();
 ///        If false, a warning is emitted but the op is left in place.
 std::unique_ptr<mlir::Pass> createTransversalGatePass(bool decomposeNonTransversal);
 
+/// @brief Create the multi-controlled-X decomposition pass
+///        (`--ftqc-decompose-mcx`): rewrites each `ftqc.logical_mcx` into a
+///        clean-ancilla `logical_toffoli` V-chain (X/CNOT/Toffoli for 0/1/2
+///        controls).
+std::unique_ptr<mlir::Pass> createDecomposeMCXPass();
+
+/// @brief Create the Rz-synthesis pass (`--ftqc-synthesize-rz`): approximates
+///        each `ftqc.logical_rz` by a Clifford+T sequence (Solovay-Kitaev) to a
+///        target precision and reports the T-count.
+std::unique_ptr<mlir::Pass> createSynthesizeRzPass();
+std::unique_ptr<mlir::Pass> createSynthesizeRzPass(double epsilon);
+
 //===----------------------------------------------------------------------===//
 // Analysis pass factories
 //===----------------------------------------------------------------------===//
@@ -338,6 +350,21 @@ std::unique_ptr<mlir::Pass> createQPhysToQASM3Pass();
 /// IQM native gates {prx, cz, measure}.  Replaces the need for the logical
 /// LowerToIQMJSON emitter to re-derive the physical (data+ancilla) layout.
 std::unique_ptr<mlir::Pass> createQPhysToIQMJSONPass();
+
+/// @brief Create the qphys → QIR lowering (`--ftqc-qphys-to-qir`).
+///
+/// Retargets the QIR base-profile back end onto the shared physical IR: walks
+/// `ftqc.qphys.*` ops and emits QIR over physical qubits, so the QIR emitter
+/// consumes one shared physical IR instead of re-deriving the physical layout.
+std::unique_ptr<mlir::Pass> createQPhysToQIRPass();
+
+/// @brief Create the qphys -> Stim lowering (`--ftqc-qphys-to-stim`).
+///
+/// Emits a Stim circuit from the shared physical IR, reconstructing DETECTOR
+/// and OBSERVABLE_INCLUDE records from the QEC-structure metadata that
+/// expand-physical stamps on qphys.measure, so it simulates exactly the
+/// physical circuit the other Level-2 emitters submit.
+std::unique_ptr<mlir::Pass> createQPhysToSTIMPass();
 
 /** Create the physical-qubit initial-layout pass. With no input file, it is a no-op. */
 std::unique_ptr<mlir::Pass> createQPhysInitLayoutPass();

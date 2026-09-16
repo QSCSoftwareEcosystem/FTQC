@@ -31,7 +31,7 @@ import csv
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_DIR = os.path.dirname(os.path.abspath(__file__))
+_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PYTHON  = os.path.join(_DIR, "stim_results.csv")         # sim_stim.py output
 CSV_FTQC    = os.path.join(_DIR, "stim_ftqc_results.csv")    # sim_stim_ftqc_loop.py output
 OUTDIR      = os.path.join(_DIR, "figures")

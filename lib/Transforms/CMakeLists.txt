@@ -6,6 +6,8 @@ add_mlir_library(FTQCTransforms
   SyndromeExtraction.cpp
   ErrorCorrection.cpp
   TransversalGates.cpp
+  DecomposeMCX.cpp
+  SynthesizeRz.cpp
   LowerToQuantum.cpp
   LowerToQASM3.cpp
   LowerToIQMJSON.cpp
@@ -19,6 +21,8 @@ add_mlir_library(FTQCTransforms
   QPhysQubitReuse.cpp
   QPhysToQASM3.cpp
   QPhysToIQMJSON.cpp
+  QPhysToQIR.cpp
+  QPhysToSTIM.cpp
   QPhysInitLayout.cpp
   Passes.cpp
 
