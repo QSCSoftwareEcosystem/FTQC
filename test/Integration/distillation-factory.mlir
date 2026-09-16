@@ -22,7 +22,7 @@
 // CHECK-COUNT-15: ftqc.prepare_magic_t
 // CHECK: ftqc.distill_15to1
 func.func @factory_15to1() -> i1 {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %r0 = ftqc.prepare_magic_t : !ftqc.magic_state
   %r1 = ftqc.prepare_magic_t : !ftqc.magic_state
   %r2 = ftqc.prepare_magic_t : !ftqc.magic_state
@@ -39,8 +39,8 @@ func.func @factory_15to1() -> i1 {
   %r13 = ftqc.prepare_magic_t : !ftqc.magic_state
   %r14 = ftqc.prepare_magic_t : !ftqc.magic_state
   %clean = ftqc.distill_15to1(%r0, %r1, %r2, %r3, %r4, %r5, %r6, %r7, %r8, %r9, %r10, %r11, %r12, %r13, %r14 : !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state) -> !ftqc.magic_state
-  %o = ftqc.logical_t %lq, %clean : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state) -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+  %o = ftqc.logical_t %lq, %clean : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state) -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   return %b : i1
 }
 
@@ -48,7 +48,7 @@ func.func @factory_15to1() -> i1 {
 // Two-level factory: 225 raw inputs, 15 level-1 distills + 1 level-2 distill.
 // CHECK-COUNT-16: ftqc.distill_15to1
 func.func @factory_15to1_two_level() -> i1 {
-  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %lq = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %r0 = ftqc.prepare_magic_t : !ftqc.magic_state
   %r1 = ftqc.prepare_magic_t : !ftqc.magic_state
   %r2 = ftqc.prepare_magic_t : !ftqc.magic_state
@@ -290,7 +290,7 @@ func.func @factory_15to1_two_level() -> i1 {
   %r224 = ftqc.prepare_magic_t : !ftqc.magic_state
   %d1_14 = ftqc.distill_15to1(%r210, %r211, %r212, %r213, %r214, %r215, %r216, %r217, %r218, %r219, %r220, %r221, %r222, %r223, %r224 : !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state) -> !ftqc.magic_state
   %top = ftqc.distill_15to1(%d1_0, %d1_1, %d1_2, %d1_3, %d1_4, %d1_5, %d1_6, %d1_7, %d1_8, %d1_9, %d1_10, %d1_11, %d1_12, %d1_13, %d1_14 : !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state, !ftqc.magic_state) -> !ftqc.magic_state
-  %o = ftqc.logical_t %lq, %top : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.magic_state) -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+  %o = ftqc.logical_t %lq, %top : (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.magic_state) -> !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   return %b : i1
 }

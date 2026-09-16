@@ -7,8 +7,8 @@
 
 module {
   func.func @qir_phys() -> i1 {
-    %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-    %m = ftqc.logical_measure %q : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+    %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+    %m = ftqc.logical_measure %q : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
     return %m : i1
   }
 }

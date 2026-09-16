@@ -7,10 +7,10 @@
 // detectors and a logical observable.
 
 func.func @mem() -> i1 {
-  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %o1, %s1 = ftqc.ec_round %q rounds = 1 : <<steane, 3>> -> (<<steane, 3>>, <6>)
-  %o2, %s2 = ftqc.ec_round %o1 rounds = 1 : <<steane, 3>> -> (<<steane, 3>>, <6>)
-  %b = ftqc.logical_measure %o2 : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %o1, %s1 = ftqc.ec_round %q rounds = 1 : <<steane>> -> (<<steane>>, <6>)
+  %o2, %s2 = ftqc.ec_round %o1 rounds = 1 : <<steane>> -> (<<steane>>, <6>)
+  %b = ftqc.logical_measure %o2 : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   return %b : i1
 }
 

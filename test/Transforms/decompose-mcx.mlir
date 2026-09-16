@@ -11,31 +11,31 @@
 // CHECK-COUNT-5: ftqc.logical_toffoli
 // CHECK-COUNT-2: ftqc.dealloc
 func.func @c4x(
-    %c0: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %c1: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %c2: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %c3: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-    %t: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) {
+    %c0: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %c1: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %c2: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %c3: !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+    %t: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>) {
   %o:5 = ftqc.logical_mcx [%c0, %c1, %c2, %c3], %t
-      : [!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>],
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> [!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>],
-         !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : [!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>],
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> [!ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+          !ftqc.logical_qubit<#ftqc.ecc<steane>>],
+         !ftqc.logical_qubit<#ftqc.ecc<steane>>
   return %o#0, %o#1, %o#2, %o#3, %o#4
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>,
-        !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>,
+        !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

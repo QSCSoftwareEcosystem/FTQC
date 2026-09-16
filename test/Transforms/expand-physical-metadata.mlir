@@ -7,12 +7,12 @@
 // Z:3-5/9-11), and data measures are tagged role="data" with their logical id.
 
 func.func @two() -> (i1, i1) {
-  %q0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %q1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  %o0, %s0 = ftqc.ec_round %q0 rounds = 1 : <<steane, 3>> -> (<<steane, 3>>, <6>)
-  %o1, %s1 = ftqc.ec_round %q1 rounds = 1 : <<steane, 3>> -> (<<steane, 3>>, <6>)
-  %b0 = ftqc.logical_measure %o0 : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
-  %b1 = ftqc.logical_measure %o1 : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+  %q0 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %q1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  %o0, %s0 = ftqc.ec_round %q0 rounds = 1 : <<steane>> -> (<<steane>>, <6>)
+  %o1, %s1 = ftqc.ec_round %q1 rounds = 1 : <<steane>> -> (<<steane>>, <6>)
+  %b0 = ftqc.logical_measure %o0 : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
+  %b1 = ftqc.logical_measure %o1 : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   return %b0, %b1 : i1, i1
 }
 

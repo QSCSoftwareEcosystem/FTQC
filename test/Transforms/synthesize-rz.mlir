@@ -8,11 +8,11 @@
 // CHECK-LABEL: func @exact_t
 // CHECK-NOT: ftqc.logical_rz
 // CHECK: ftqc.logical_t
-func.func @exact_t(%q: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
+func.func @exact_t(%q: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
   %o = ftqc.logical_rz %q, 0.7853981633974483
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  return %o : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  return %o : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }
 
 // -----
@@ -21,8 +21,8 @@ func.func @exact_t(%q: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
 // CHECK-LABEL: func @approx
 // CHECK-NOT: ftqc.logical_rz
 // CHECK: ftqc.logical_
-func.func @approx(%q: !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>)
-    -> !ftqc.logical_qubit<#ftqc.ecc<steane, 3>> {
-  %o = ftqc.logical_rz %q, 0.3 : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-  return %o : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+func.func @approx(%q: !ftqc.logical_qubit<#ftqc.ecc<steane>>)
+    -> !ftqc.logical_qubit<#ftqc.ecc<steane>> {
+  %o = ftqc.logical_rz %q, 0.3 : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+  return %o : !ftqc.logical_qubit<#ftqc.ecc<steane>>
 }

@@ -19,11 +19,11 @@
 
 // CHECK: physicalQubits = 13
 func.func @memory_steane_d3() -> i1 {
-  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
+  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<steane>>
   %o, %s = ftqc.extract_syndrome %q
-      : !ftqc.logical_qubit<#ftqc.ecc<steane, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>, !ftqc.syndrome<6>)
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane, 3>>) -> i1
+      : !ftqc.logical_qubit<#ftqc.ecc<steane>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<steane>>, !ftqc.syndrome<6>)
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<steane>>) -> i1
   return %b : i1
 }
 
@@ -31,11 +31,11 @@ func.func @memory_steane_d3() -> i1 {
 
 // CHECK: physicalQubits = 17
 func.func @memory_surface_d3() -> i1 {
-  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
   %o, %s = ftqc.extract_syndrome %q
-      : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>, !ftqc.syndrome<16>)
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>) -> i1
+      : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>, !ftqc.syndrome<16>)
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>) -> i1
   return %b : i1
 }
 
@@ -43,11 +43,11 @@ func.func @memory_surface_d3() -> i1 {
 
 // CHECK: physicalQubits = 49
 func.func @memory_surface_d5() -> i1 {
-  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
   %o, %s = ftqc.extract_syndrome %q
-      : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>, !ftqc.syndrome<48>)
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>) -> i1
+      : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>, !ftqc.syndrome<48>)
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>) -> i1
   return %b : i1
 }
 
@@ -55,10 +55,10 @@ func.func @memory_surface_d5() -> i1 {
 
 // CHECK: physicalQubits = 11
 func.func @memory_color_d3() -> i1 {
-  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
+  %q = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
   %o, %s = ftqc.extract_syndrome %q
-      : !ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>
-      -> (!ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>, !ftqc.syndrome<6>)
-  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<color_code, 3>>) -> i1
+      : !ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>
+      -> (!ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>, !ftqc.syndrome<6>)
+  %b = ftqc.logical_measure %o : (!ftqc.logical_qubit<#ftqc.ecc<color_code, dist = 3>>) -> i1
   return %b : i1
 }

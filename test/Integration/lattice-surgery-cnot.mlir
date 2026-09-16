@@ -15,21 +15,21 @@
 
 // CHECK-LABEL: func @cnot_via_merge_d3
 func.func @cnot_via_merge_d3() {
-  %ctrl = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-  %tgt  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  %ctrl = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+  %tgt  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
 
   // XX merge implements the logical CNOT between two separated patches.
   // CHECK: ftqc.lattice_surgery
   // CHECK-SAME: kind = 0
   %c2, %t2, %msyn = ftqc.lattice_surgery %ctrl, %tgt kind = 0
-      : (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>,
+      : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>,
+         !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>,
+          !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>,
           !ftqc.syndrome<16>)
 
-  ftqc.dealloc %c2 : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-  ftqc.dealloc %t2 : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
+  ftqc.dealloc %c2 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+  ftqc.dealloc %t2 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
   return
 }
 
@@ -37,21 +37,21 @@ func.func @cnot_via_merge_d3() {
 
 // CHECK-LABEL: func @cnot_via_merge_d5
 func.func @cnot_via_merge_d5() {
-  %ctrl = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-  %tgt  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+  %ctrl = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+  %tgt  = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
 
   // CHECK: ftqc.lattice_surgery
   // CHECK-SAME: kind = 0
   // Merge-syndrome width scales as 2(d^2-1) = 48 for d = 5.
   %c2, %t2, %msyn = ftqc.lattice_surgery %ctrl, %tgt kind = 0
-      : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
-         !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
-          !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
+      : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
+         !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
+          !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
           !ftqc.syndrome<48>)
 
-  ftqc.dealloc %c2 : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
-  ftqc.dealloc %t2 : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+  ftqc.dealloc %c2 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
+  ftqc.dealloc %t2 : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
   return
 }
 

@@ -77,8 +77,9 @@ void measureXSyndrome(const StabilizerCode &code, SmallVector<Value> &qubits,
       }
     }
     ancilla = QPhysHOp::create(builder, loc, ancilla);
-    syndrome.push_back(QPhysMeasureOp::create(builder, loc, ancilla,
-                                              builder.getStringAttr("sx")));
+    syndrome.push_back(QPhysMeasureOp::create(
+        builder, loc, ancilla, builder.getStringAttr("sx"), nullptr, nullptr,
+        nullptr, nullptr));
   }
 }
 
@@ -96,8 +97,9 @@ void measureZSyndrome(const StabilizerCode &code, SmallVector<Value> &qubits,
         ancilla = cnotOp.getO1();
       }
     }
-    syndrome.push_back(QPhysMeasureOp::create(builder, loc, ancilla,
-                                              builder.getStringAttr("sz")));
+    syndrome.push_back(QPhysMeasureOp::create(
+        builder, loc, ancilla, builder.getStringAttr("sz"), nullptr, nullptr,
+        nullptr, nullptr));
   }
 }
 
@@ -269,7 +271,8 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
         [[fallthrough]];
       case Pauli::Z:
         Value bit = QPhysMeasureOp::create(rewriter, loc, qubit,
-                                           rewriter.getStringAttr("m"));
+                                           rewriter.getStringAttr("m"), nullptr,
+                                           nullptr, nullptr, nullptr);
         acc = acc ? arith::XOrIOp::create(rewriter, loc, acc, bit) : bit;
         // In principle we should undo the basis change for X and Y measurements
         // here, but that can be omitted since LogicalMeasureOp releases the
