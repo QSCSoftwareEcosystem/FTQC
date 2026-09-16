@@ -19,17 +19,17 @@
 // CHECK: "max_errors": 100
 
 func.func @lightstim_zz() {
-  %p0 = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, 3>>
-  %p1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>
+  %p0 = ftqc.init_plus : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>
+  %p1 = ftqc.init_zero : !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>
   %r0, %r1, %syn = ftqc.lattice_surgery %p0, %p1 kind = 1
-      : (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>,
-         !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>)
-      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>,
-          !ftqc.logical_qubit<#ftqc.ecc<surface, 5>>,
+      : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>,
+         !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>)
+      -> (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>,
+          !ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>,
           !ftqc.syndrome<16>)
   %m0 = ftqc.logical_measure %r0
-      : (!ftqc.logical_qubit<#ftqc.ecc<surface, 3>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 3>>) -> i1
   %m1 = ftqc.logical_measure %r1
-      : (!ftqc.logical_qubit<#ftqc.ecc<surface, 5>>) -> i1
+      : (!ftqc.logical_qubit<#ftqc.ecc<surface, dist = 5>>) -> i1
   func.return
 }
