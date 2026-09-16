@@ -235,6 +235,12 @@ std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass(bool emitRadians);
 /// logical qubit into a 7-physical-qubit block (encoder + transversal gates).
 std::unique_ptr<mlir::Pass> createLowerToIQMJSONPass(bool emitRadians, bool physical);
 
+/// @brief Create the LightStim JSON descriptor lowering pass with default options.
+///
+/// Emits a compact experiment descriptor for the Python LightStim adapter,
+/// currently covering surface-code patches and `ftqc.lattice_surgery`.
+std::unique_ptr<mlir::Pass> createLowerToLightStimJSONPass();
+
 /// Options are set on the command line:
 ///   --ftqc-lower-to-qasm3="output-file=/path/to/out.qasm include-comments=false"
 
