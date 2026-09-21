@@ -20,6 +20,10 @@ the input circuit without transpiling it again or writing another output file.
 
 Output:
     inputCircuit-transpiled.JSON
+    results-inputCircuit.JSON (when shots > 0), containing physical counts,
+    logical_counts_raw, logical_counts_steane_corrected, and measurement order.
+    Logical histogram strings list ascending logical IDs from left to right.
+    Each logical block must have seven data measurements in Steane index order.
 
 Expected input JSON structure:
 {
@@ -57,6 +61,81 @@ from iqm.qiskit_iqm.iqm_provider import IQMProvider
 
 DEBUG_PRINT = 0
 _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
+
+
+_DATA_MEASUREMENT_RE = re.compile(r"^mL(\d+)(?:S\d+)?_QB\d+_\d+$")
+STEANE_STAB = [[0, 2, 4, 6], [1, 2, 5, 6], [3, 4, 5, 6]]
+
+
+def logical_measurement_results(
+    counts: dict[str, int], key_to_cbit: dict[str, int],
+) -> dict[str, Any]:
+    """Decode seven-bit Steane readouts, weighted by shot count.
+
+    Data positions 0..6 follow input measurement (classical-bit) order within
+    each block, not hardware-qubit order, which routing can change. Count
+    strings are Qiskit little endian. Output logical strings are ordered left
+    to right by ascending logical ID; logical measurement is total parity.
+    Correction assumes at most one flipped data bit per block; multiple errors
+    can be miscorrected. Stabilizer measurements are never used or changed.
+    """
+    groups: dict[int, list[tuple[int, str]]] = {}
+    for key, cbit in key_to_cbit.items():
+        match = _DATA_MEASUREMENT_RE.fullmatch(key)
+        if match:
+            groups.setdefault(int(match.group(1)), []).append((cbit, key))
+    logical_ids = sorted(groups)
+    for logical_id in logical_ids:
+        groups[logical_id].sort()
+        if len(groups[logical_id]) != 7:
+            raise ValueError(
+                f"Logical qubit {logical_id} requires exactly 7 data measurements; "
+                f"found {len(groups[logical_id])}. Repeated readout rounds must "
+                "be separated before decoding."
+            )
+
+    raw: Counter[str] = Counter()
+    corrected: Counter[str] = Counter()
+    width = max(key_to_cbit.values(), default=-1) + 1
+    for outcome, frequency in counts.items():
+        bits = outcome.replace(" ", "")
+        if len(bits) != width or any(bit not in "01" for bit in bits):
+            raise ValueError(f"Invalid {width}-bit measurement outcome: {outcome!r}")
+        raw_values = []
+        corrected_values = []
+        for logical_id in logical_ids:
+            data = [int(bits[-1 - cbit]) for cbit, _ in groups[logical_id]]
+            raw_values.append(str(sum(data) % 2))
+            syndrome = [sum(data[i] for i in row) % 2 for row in STEANE_STAB]
+            # The parity-check columns encode positions 1 through 7.
+            error_position = sum(bit << i for i, bit in enumerate(syndrome))
+            if error_position:
+                data[error_position - 1] ^= 1
+            corrected_values.append(str(sum(data) % 2))
+        if logical_ids:
+            raw["".join(raw_values)] += frequency
+            corrected["".join(corrected_values)] += frequency
+
+    return {
+        "counts": counts,
+        "key_to_cbit": key_to_cbit,
+        "logical_qubit_order": logical_ids,
+        "data_measurement_keys": {
+            str(logical_id): [key for _, key in groups[logical_id]]
+            for logical_id in logical_ids
+        },
+        "logical_counts_raw": dict(sorted(raw.items())),
+        "logical_counts_steane_corrected": dict(sorted(corrected.items())),
+    }
+
+
+def write_measurement_results(
+    input_path: Path, counts: dict[str, int], key_to_cbit: dict[str, int],
+) -> None:
+    results = logical_measurement_results(counts, key_to_cbit)
+    with results_path_for(input_path).open("w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+        f.write("\n")
 
 
 def parse_args() -> argparse.Namespace:
@@ -503,12 +582,16 @@ def main() -> int:
                 i: f"QB{hardware_index + 1}"
                 for i, hardware_index in enumerate(initial_layout)
             }
-            counts = backend.run(
+            raw_counts = backend.run(
                 qc, shots=args.shots, qubit_index_to_name=qubit_index_to_name
             ).result().get_counts()
-            with results_path_for(input_path).open("w", encoding="utf-8") as f:
-                json.dump(counts, f, indent=2)
-                f.write("\n")
+            if not isinstance(raw_counts, dict):
+                raise ValueError("Backend returned multiple classical-register counts")
+            counts: dict[str, int] = {
+                str(outcome): int(frequency)
+                for outcome, frequency in raw_counts.items()
+            }
+            write_measurement_results(input_path, counts, key_to_cbit)
             if DEBUG_PRINT >= 0:
                 print(f"Backend counts: {counts}")
                 print(f"Key to cbit mapping: {key_to_cbit}")
@@ -518,22 +601,29 @@ def main() -> int:
                     serialized_instruction_dict(op)
                     for op in serialized.instructions
                 ]
-                print(f"metrics: {make_metrics(
+                metrics = make_metrics(
                     qc,
                     backend,
                     serialized_instructions,
                     initial_layout,
-                )}")
+                )
+                print(f"metrics: {metrics}")
             return 0
 
         transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
         if DEBUG_PRINT >= 1:
             print(f"Circuit layout: {transpiled_qc.layout}")
         if args.shots > 0:
-            counts = backend.run(transpiled_qc, shots=args.shots).result().get_counts()
-            with results_path_for(input_path).open("w", encoding="utf-8") as f:
-                json.dump(counts, f, indent=2)
-                f.write("\n")
+            raw_counts = backend.run(
+                transpiled_qc, shots=args.shots
+            ).result().get_counts()
+            if not isinstance(raw_counts, dict):
+                raise ValueError("Backend returned multiple classical-register counts")
+            counts: dict[str, int] = {
+                str(outcome): int(frequency)
+                for outcome, frequency in raw_counts.items()
+            }
+            write_measurement_results(input_path, counts, key_to_cbit)
 
             if DEBUG_PRINT >= 0:
                 print(f"Backend counts: {counts}")

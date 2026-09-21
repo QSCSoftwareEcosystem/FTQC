@@ -54,19 +54,40 @@ struct FTQCQPhysToIQMJSONPassImpl
     instrs.push_back("{\"name\":\"cz\",\"locus\":[\"" + a + "\",\"" + b +
                      "\"],\"args\":{}}");
   }
-  void meas(const std::string &q, int n) {
+  void meas(const std::string &q, const std::string &key, int n) {
     instrs.push_back("{\"name\":\"measure\",\"locus\":[\"" + q +
-                     "\"],\"args\":{\"key\":\"m_" + q + "_" +
+                     "\"],\"args\":{\"key\":\"" + key + "_" + q + "_" +
                      std::to_string(n) + "\"}}");
+  }
+  void reset(const std::string &q) {
+    instrs.push_back("{\"name\":\"reset\",\"locus\":[\"" + q +
+                     "\"],\"args\":{}}");
   }
   // IQM native decompositions (turns; identical to LowerToIQMJSON).
   void emitX(const std::string &q) { prx(q, 0.5, 0.0); }
-  void emitZ(const std::string &q) { prx(q,0.75,0.0); prx(q,0.5,0.25); prx(q,0.25,0.0); }
-  void emitS(const std::string &q) { prx(q,0.75,0.0); prx(q,0.25,0.25); prx(q,0.25,0.0); }
-  void emitT(const std::string &q) { prx(q,0.75,0.0); prx(q,0.125,0.25); prx(q,0.25,0.0); }
-  void emitH(const std::string &q) { prx(q,0.25,0.25); prx(q,0.5,0.0); }
+  void emitZ(const std::string &q) {
+    prx(q, 0.75, 0.0);
+    prx(q, 0.5, 0.25);
+    prx(q, 0.25, 0.0);
+  }
+  void emitS(const std::string &q) {
+    prx(q, 0.75, 0.0);
+    prx(q, 0.25, 0.25);
+    prx(q, 0.25, 0.0);
+  }
+  void emitT(const std::string &q) {
+    prx(q, 0.75, 0.0);
+    prx(q, 0.125, 0.25);
+    prx(q, 0.25, 0.0);
+  }
+  void emitH(const std::string &q) {
+    prx(q, 0.25, 0.25);
+    prx(q, 0.5, 0.0);
+  }
   void emitCNOT(const std::string &c, const std::string &t) {
-    emitH(t); cz(c, t); emitH(t);
+    emitH(t);
+    cz(c, t);
+    emitH(t);
   }
 
   void runOnOperation() override {
@@ -78,23 +99,32 @@ struct FTQCQPhysToIQMJSONPassImpl
       llvm::DenseMap<Value, std::string> loc; // qphys value -> "QB<n>"
       instrs.clear();
       int measCount = 0;
-      auto L = [&](Value v) { return loc.count(v) ? loc[v] : std::string("QB?"); };
+      auto L = [&](Value v) {
+        return loc.count(v) ? loc[v] : std::string("QB?");
+      };
 
       func.walk([&](Operation *op) {
         if (auto a = dyn_cast<QPhysAllocOp>(op)) {
           loc[a.getQubit()] = "QB" + std::to_string((int64_t)a.getId() + 1);
         } else if (auto g = dyn_cast<QPhysResetOp>(op)) {
-          loc[g.getOut()] = L(g.getIn());               // |0> alloc already reset
+          loc[g.getOut()] = L(g.getIn());
+          //[FIXME] IQM Garnet does not support reset.
+          // reset(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysHOp>(op)) {
-          loc[g.getOut()] = L(g.getIn()); emitH(L(g.getIn()));
+          loc[g.getOut()] = L(g.getIn());
+          emitH(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysXOp>(op)) {
-          loc[g.getOut()] = L(g.getIn()); emitX(L(g.getIn()));
+          loc[g.getOut()] = L(g.getIn());
+          emitX(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysZOp>(op)) {
-          loc[g.getOut()] = L(g.getIn()); emitZ(L(g.getIn()));
+          loc[g.getOut()] = L(g.getIn());
+          emitZ(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysSOp>(op)) {
-          loc[g.getOut()] = L(g.getIn()); emitS(L(g.getIn()));
+          loc[g.getOut()] = L(g.getIn());
+          emitS(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysTOp>(op)) {
-          loc[g.getOut()] = L(g.getIn()); emitT(L(g.getIn()));
+          loc[g.getOut()] = L(g.getIn());
+          emitT(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysCXOp>(op)) {
           loc[g.getResult(0)] = L(g.getQ0());
           loc[g.getResult(1)] = L(g.getQ1());
@@ -110,11 +140,35 @@ struct FTQCQPhysToIQMJSONPassImpl
           emitCNOT(L(g.getQ1()), L(g.getQ0()));
           emitCNOT(L(g.getQ0()), L(g.getQ1()));
         } else if (auto m = dyn_cast<QPhysMeasureOp>(op)) {
-          meas(L(m.getIn()), measCount++);
+          std::string key = "m";
+          auto keyAttr = m.getKey();
+          if (keyAttr) {
+            key = keyAttr.value().str();
+          }
+          auto stabAttr = m.getStabilizer();
+          auto logAttr = m.getLogical();
+          auto roleAttr = m.getRole();
+          if (roleAttr && logAttr) {
+            auto role = roleAttr.value().str();
+            auto log = logAttr.value();
+            if (role == "data") {
+              key += "L" + std::to_string(log);
+            } else {
+              if (stabAttr) {
+                auto stab = stabAttr.value();
+                key +=
+                    "L" + std::to_string(log) + "S" + std::to_string(stab % 6);
+              } else {
+                key += "L" + std::to_string(log);
+              }
+            }
+          }
+          meas(L(m.getIn()), key, measCount++);
         }
       });
 
-      os << "{\n  \"name\":\"" << func.getName() << "\",\n  \"instructions\":[\n";
+      os << "{\n  \"name\":\"" << func.getName()
+         << "\",\n  \"instructions\":[\n";
       for (size_t i = 0; i < instrs.size(); ++i)
         os << "    " << instrs[i] << (i + 1 < instrs.size() ? ",\n" : "\n");
       os << "  ]\n}\n";
