@@ -63,7 +63,7 @@ DEBUG_PRINT = 0
 _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
 
 
-_DATA_MEASUREMENT_RE = re.compile(r"^mL(\d+)(?:S\d+)?_QB\d+_\d+$")
+_DATA_MEASUREMENT_RE = re.compile(r"^mL(\d+)_QB\d+_\d+$")
 STEANE_STAB = [[0, 2, 4, 6], [1, 2, 5, 6], [3, 4, 5, 6]]
 
 
@@ -78,6 +78,8 @@ def logical_measurement_results(
     to right by ascending logical ID; logical measurement is total parity.
     Correction assumes at most one flipped data bit per block; multiple errors
     can be miscorrected. Stabilizer measurements are never used or changed.
+    Example bitstrings for a single logical qubit: 0000000, 0000001, 0000010,
+    where the rightmost bit is the first data measurement in the input circuit.
     """
     groups: dict[int, list[tuple[int, str]]] = {}
     for key, cbit in key_to_cbit.items():
@@ -94,6 +96,8 @@ def logical_measurement_results(
                 "be separated before decoding."
             )
 
+
+    counts = dict(sorted(counts.items(), key=lambda item: item[1], reverse=True))
     raw: Counter[str] = Counter()
     corrected: Counter[str] = Counter()
     width = max(key_to_cbit.values(), default=-1) + 1
@@ -105,6 +109,8 @@ def logical_measurement_results(
         corrected_values = []
         for logical_id in logical_ids:
             data = [int(bits[-1 - cbit]) for cbit, _ in groups[logical_id]]
+            if DEBUG_PRINT >= 1:
+                print(f"Logical qubit {logical_id} data: {data}")
             raw_values.append(str(sum(data) % 2))
             syndrome = [sum(data[i] for i in row) % 2 for row in STEANE_STAB]
             # The parity-check columns encode positions 1 through 7.
