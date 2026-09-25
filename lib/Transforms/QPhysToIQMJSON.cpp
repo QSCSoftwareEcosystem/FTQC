@@ -108,8 +108,7 @@ struct FTQCQPhysToIQMJSONPassImpl
           loc[a.getQubit()] = "QB" + std::to_string((int64_t)a.getId() + 1);
         } else if (auto g = dyn_cast<QPhysResetOp>(op)) {
           loc[g.getOut()] = L(g.getIn());
-          //[FIXME] IQM Garnet does not support reset.
-          // reset(L(g.getIn()));
+          reset(L(g.getIn()));
         } else if (auto g = dyn_cast<QPhysHOp>(op)) {
           loc[g.getOut()] = L(g.getIn());
           emitH(L(g.getIn()));
