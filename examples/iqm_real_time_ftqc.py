@@ -317,11 +317,13 @@ def syndrome_round(qc, q, c, blk, bit_base: int) -> None:
     """
     for i, support in enumerate(STEANE_STAB):
         anc = q[blk.anc_z[i]]
+        qc.reset(anc)
         for d in support:
             qc.cx(q[blk.data[d]], anc)
         qc.measure(anc, c[bit_base + i])
     for i, support in enumerate(STEANE_STAB):
         anc = q[blk.anc_x[i]]
+        qc.reset(anc)
         qc.h(anc)
         for d in support:
             qc.cx(anc, q[blk.data[d]])
@@ -823,11 +825,13 @@ def build_dynamic_circuit(
             cx_reg = syn_regs[r][2 * b + 1]
             for i, support in enumerate(STEANE_STAB):
                 anc = q[blk.anc_z[i]]
+                qc.reset(anc)
                 for d in support:
                     qc.cx(q[blk.data[d]], anc)
                 qc.measure(anc, cz_reg[i])
             for i, support in enumerate(STEANE_STAB):
                 anc = q[blk.anc_x[i]]
+                qc.reset(anc)
                 qc.h(anc)
                 for d in support:
                     qc.cx(anc, q[blk.data[d]])
