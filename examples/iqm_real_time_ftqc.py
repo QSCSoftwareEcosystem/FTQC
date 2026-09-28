@@ -823,6 +823,11 @@ def build_dynamic_circuit(
         for b, blk in enumerate(blocks):
             cz_reg = syn_regs[r][2 * b]
             cx_reg = syn_regs[r][2 * b + 1]
+            # Measurement leaves an ancilla in the measured |0> or |1> state.
+            # Dynamic mode reuses the same ancillas in later rounds, so restore
+            # the |0> state required by both syndrome-extraction circuits.
+            for anc in blk.anc_z + blk.anc_x:
+                qc.reset(q[anc])
             for i, support in enumerate(STEANE_STAB):
                 anc = q[blk.anc_z[i]]
                 qc.reset(anc)
