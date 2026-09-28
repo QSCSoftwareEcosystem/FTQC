@@ -830,13 +830,11 @@ def build_dynamic_circuit(
                 qc.reset(q[anc])
             for i, support in enumerate(STEANE_STAB):
                 anc = q[blk.anc_z[i]]
-                qc.reset(anc)
                 for d in support:
                     qc.cx(q[blk.data[d]], anc)
                 qc.measure(anc, cz_reg[i])
             for i, support in enumerate(STEANE_STAB):
                 anc = q[blk.anc_x[i]]
-                qc.reset(anc)
                 qc.h(anc)
                 for d in support:
                     qc.cx(anc, q[blk.data[d]])
