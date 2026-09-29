@@ -38,7 +38,8 @@ struct FTQCQPhysToIQMJSONPassImpl
   }
 
   // Instruction accumulator for the current function.
-  std::vector<std::string> instrs;
+  std::vector<std::string> instrs, detectors, observables;
+  DenseMap<Value, std::string> measureKeys;
 
   static std::string fmtF(double v) {
     char b[32];
@@ -54,10 +55,11 @@ struct FTQCQPhysToIQMJSONPassImpl
     instrs.push_back("{\"name\":\"cz\",\"locus\":[\"" + a + "\",\"" + b +
                      "\"],\"args\":{}}");
   }
-  void meas(const std::string &q, int n) {
+  void meas(const std::string &q, int n, Value value) {
+    std::string key = "m_" + q + "_" + std::to_string(n);
+    measureKeys[value] = key;
     instrs.push_back("{\"name\":\"measure\",\"locus\":[\"" + q +
-                     "\"],\"args\":{\"key\":\"m_" + q + "_" +
-                     std::to_string(n) + "\"}}");
+                     "\"],\"args\":{\"key\":\"" + key + "\"}}");
   }
   // IQM native decompositions (turns; identical to LowerToIQMJSON).
   void emitX(const std::string &q) { prx(q, 0.5, 0.0); }
@@ -110,18 +112,42 @@ struct FTQCQPhysToIQMJSONPassImpl
           emitCNOT(L(g.getQ1()), L(g.getQ0()));
           emitCNOT(L(g.getQ0()), L(g.getQ1()));
         } else if (auto m = dyn_cast<QPhysMeasureOp>(op)) {
-          meas(L(m.getIn()), measCount++);
+          meas(L(m.getIn()), measCount++, m);
+        } else if (auto d = dyn_cast<QPhysDetectorOp>(op)) {
+          std::string s = "[";
+          std::string sep = "";
+          for (Value v : d.getMeasurements()) {
+            s += sep + "\"" + measureKeys[v] + "\"";
+            sep = ",";
+          }
+          s += "]";
+          detectors.push_back(s);
+        } else if (auto o = dyn_cast<QPhysObservableOp>(op)) {
+          std::string s = "[";
+          std::string sep = "";
+          for (Value v : o.getMeasurements()) {
+            s += sep + "\"" + measureKeys[v] + "\"";
+            sep = ",";
+          }
+          s += "]";
+          observables.push_back(s);
         }
       });
 
       os << "{\n  \"name\":\"" << func.getName() << "\",\n  \"instructions\":[\n";
       for (size_t i = 0; i < instrs.size(); ++i)
         os << "    " << instrs[i] << (i + 1 < instrs.size() ? ",\n" : "\n");
+      os << "  ],\n  \"detectors\":[\n";
+      for (size_t i = 0; i < detectors.size(); ++i)
+        os << "    " << detectors[i] << (i + 1 < detectors.size() ? ",\n" : "\n");
+      os << "  ],\n  \"observables\":[\n";
+      for (size_t i = 0; i < observables.size(); ++i)
+        os << "    " << observables[i] << (i + 1 < observables.size() ? ",\n" : "\n");
       os << "  ]\n}\n";
     });
 
     os.flush();
-    llvm::outs() << buf;
+    llvm::errs() << buf;
     module->setAttr("ftqc.iqm_json", StringAttr::get(&getContext(), buf));
   }
 };
