@@ -792,4 +792,16 @@ def FTQC_QPhysMeasureOp : FTQC_Op<"qphys.measure"> {
   let assemblyFormat = "$in attr-dict `:` type($in) `->` type($bit)";
 }
 
+def FTQC_QPhysDetectorOp : FTQC_Op<"qphys.detector"> {
+  let summary = "Detector annotation as in Stim";
+  let arguments = (ins Variadic<I1>:$measurements);
+  let assemblyFormat = "$measurements attr-dict";
+}
+
+def FTQC_QPhysObservableOp : FTQC_Op<"qphys.observable"> {
+  let summary = "Observable annotation as in Stim";
+  let arguments = (ins Variadic<I1>:$measurements);
+  let assemblyFormat = "$measurements attr-dict";
+}
+
 #endif // FTQC_OPS_TD

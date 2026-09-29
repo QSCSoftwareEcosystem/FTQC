@@ -64,6 +64,9 @@ struct FTQCQPhysToSTIMPassImpl
     long nMeas = 0;                       // measurement records emitted so far
     llvm::DenseMap<int64_t, long> lastForStab;  // stabilizer id -> last meas index
     llvm::MapVector<int64_t, std::vector<long>> dataMeas; // logical -> data meas indices
+    llvm::DenseMap<Value, long> measIdx;
+    long obs = 0;
+    bool error = false;
 
     auto idOf = [&](Value v) -> unsigned {
       auto it = q.find(v);
@@ -133,17 +136,48 @@ struct FTQCQPhysToSTIMPassImpl
             int64_t lg = m.getLogical() ? *m.getLogical() : 0;
             dataMeas[lg].push_back(cur);
           }
+          measIdx[m] = cur;
+        } else if (auto d = dyn_cast<QPhysDetectorOp>(op)) {
+          os << "DETECTOR";
+          for (Value v : d.getMeasurements()) {
+            if (auto it = measIdx.find(v); it != measIdx.end()) {
+              os << " " << rec(it->second);
+            } else {
+              d.emitError("ftqc-qphys-to-stim: could not determine "
+                          "corresponding measurement for detector operand");
+              error = true;
+              return;
+            }
+          }
+          os << "\n";
+        } else if (auto o = dyn_cast<QPhysObservableOp>(op)) {
+          os << "OBSERVABLE_INCLUDE(" << obs++ << ")";
+          for (Value v : o.getMeasurements()) {
+            if (auto it = measIdx.find(v); it != measIdx.end()) {
+              os << " " << rec(it->second);
+            } else {
+              o.emitError("ftqc-qphys-to-stim: could not determine "
+                          "corresponding measurement for observable operand");
+              error = true;
+              return;
+            }
+          }
+          os << "\n";
         }
       });
     });
 
     // Logical observable per logical qubit = parity of its data measurements.
-    long obs = 0;
     for (auto &kv : dataMeas) {
       os << "OBSERVABLE_INCLUDE(" << obs++ << ")";
       for (long a : kv.second)
         os << " " << rec(a);
       os << "\n";
+    }
+
+    if (error) {
+      signalPassFailure();
+      return;
     }
 
     os.flush();

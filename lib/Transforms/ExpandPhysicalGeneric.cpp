@@ -10,6 +10,14 @@
 // initialization and measurement are supported.  Other logical ops cause the
 // pass to error out rather than emit physically wrong or dangling IR.
 //
+// Implementation note: Every `!ftqc.logical_qubit`, using an [[n,k,d]] code
+// with r_x X-stabilizers and r_z Z-stabilizers, is converted to n
+// `!ftqc.qphys_qubit`s, r_x `!i1`s keeping track of the latest X-syndrome
+// measurements, and r_z `!i1`s keeping track of the latest Z-syndrome
+// measurements.  In this file, any variable named `values` is a sequence of
+// these n + r_x + r_z values, in that order.  If a syndrome bit has not yet
+// been measured, the corresponding value is set to `arith.constant 0`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "FTQC/Dialect/FTQCAttrs.h"
@@ -41,65 +49,85 @@ using namespace mlir::ftqc;
 
 namespace {
 
-void applyPauliString(const PauliString &paulis, SmallVector<Value> &qubits,
+void applyPauliString(const PauliString &paulis, SmallVector<Value> &values,
                       OpBuilder &builder, Location loc) {
-  for (size_t i = 0; i < qubits.size(); ++i) {
+  for (size_t i = 0; i < paulis.size(); ++i) {
     switch (paulis[i]) {
     case Pauli::I:
       break;
     case Pauli::X:
-      qubits[i] = QPhysXOp::create(builder, loc, qubits[i]);
+      values[i] = QPhysXOp::create(builder, loc, values[i]);
       break;
     case Pauli::Z:
-      qubits[i] = QPhysZOp::create(builder, loc, qubits[i]);
+      values[i] = QPhysZOp::create(builder, loc, values[i]);
       break;
     case Pauli::Y:
-      qubits[i] = QPhysXOp::create(builder, loc, qubits[i]);
-      qubits[i] = QPhysZOp::create(builder, loc, qubits[i]);
+      values[i] = QPhysXOp::create(builder, loc, values[i]);
+      values[i] = QPhysZOp::create(builder, loc, values[i]);
       break;
     }
   }
 }
 
-void measureXSyndrome(const StabilizerCode &code, SmallVector<Value> &qubits,
-                      SmallVector<Value> &syndrome, uint64_t &nextId,
-                      OpBuilder &builder, Location loc) {
-  for (auto &row : code.getHx()) {
+void measureXSyndrome(const StabilizerCode &code, SmallVector<Value> &values,
+                      bool addDetectors, SmallVector<Value> &syndrome,
+                      uint64_t &nextId, OpBuilder &builder, Location loc) {
+  for (size_t i = 0; i < code.getHx().size(); ++i) {
+    auto &row = code.getHx()[i];
     Value ancilla =
         QPhysAllocOp::create(builder, loc, builder.getType<QPhysQubitType>(),
                              nextId++, builder.getStringAttr("x_anc"));
     ancilla = QPhysHOp::create(builder, loc, ancilla);
-    for (size_t i = 0; i < qubits.size(); ++i) {
-      if (row[i]) {
-        auto cnotOp = QPhysCXOp::create(builder, loc, ancilla, qubits[i]);
+    for (size_t j = 0; j < code.getN(); ++j) {
+      if (row[j]) {
+        auto cnotOp = QPhysCXOp::create(builder, loc, ancilla, values[j]);
         ancilla = cnotOp.getO0();
-        qubits[i] = cnotOp.getO1();
+        values[j] = cnotOp.getO1();
       }
     }
     ancilla = QPhysHOp::create(builder, loc, ancilla);
-    syndrome.push_back(QPhysMeasureOp::create(
-        builder, loc, ancilla, builder.getStringAttr("sx"), nullptr, nullptr,
-        nullptr, nullptr));
+    Value measure = QPhysMeasureOp::create(builder, loc, ancilla,
+                                           builder.getStringAttr("sx"), nullptr,
+                                           nullptr, nullptr, nullptr);
+    syndrome.push_back(measure);
+    size_t index = code.getN() + i;
+    if (addDetectors) {
+      if (values[index].getDefiningOp<arith::ConstantIntOp>())
+        QPhysDetectorOp::create(builder, loc, {measure});
+      else
+        QPhysDetectorOp::create(builder, loc, {values[index], measure});
+    }
+    values[index] = measure;
   }
 }
 
-void measureZSyndrome(const StabilizerCode &code, SmallVector<Value> &qubits,
-                      SmallVector<Value> &syndrome, uint64_t &nextId,
-                      OpBuilder &builder, Location loc) {
-  for (auto &row : code.getHz()) {
+void measureZSyndrome(const StabilizerCode &code, SmallVector<Value> &values,
+                      bool addDetectors, SmallVector<Value> &syndrome,
+                      uint64_t &nextId, OpBuilder &builder, Location loc) {
+  for (size_t i = 0; i < code.getHz().size(); ++i) {
+    auto &row = code.getHz()[i];
     Value ancilla =
         QPhysAllocOp::create(builder, loc, builder.getType<QPhysQubitType>(),
                              nextId++, builder.getStringAttr("z_anc"));
-    for (size_t i = 0; i < qubits.size(); ++i) {
-      if (row[i]) {
-        auto cnotOp = QPhysCXOp::create(builder, loc, qubits[i], ancilla);
-        qubits[i] = cnotOp.getO0();
+    for (size_t j = 0; j < code.getN(); ++j) {
+      if (row[j]) {
+        auto cnotOp = QPhysCXOp::create(builder, loc, values[j], ancilla);
+        values[j] = cnotOp.getO0();
         ancilla = cnotOp.getO1();
       }
     }
-    syndrome.push_back(QPhysMeasureOp::create(
-        builder, loc, ancilla, builder.getStringAttr("sz"), nullptr, nullptr,
-        nullptr, nullptr));
+    Value measure = QPhysMeasureOp::create(builder, loc, ancilla,
+                                           builder.getStringAttr("sz"), nullptr,
+                                           nullptr, nullptr, nullptr);
+    syndrome.push_back(measure);
+    size_t index = code.getN() + code.getHx().size() + i;
+    if (addDetectors) {
+      if (values[index].getDefiningOp<arith::ConstantIntOp>())
+        QPhysDetectorOp::create(builder, loc, {measure});
+      else
+        QPhysDetectorOp::create(builder, loc, {values[index], measure});
+    }
+    values[index] = measure;
   }
 }
 
@@ -119,18 +147,20 @@ struct InitZeroPattern : public OpConversionPattern<InitZeroOp> {
                   ConversionPatternRewriter &rewriter) const override {
     unsigned n = op.getType().getPhysicalQubits();
     Location loc = op.getLoc();
-    SmallVector<Value> qubits, syndrome;
-    qubits.reserve(n);
+    SmallVector<Value> values, syndrome;
+    values.reserve(n + op.getType().getCode().getAncillaQubits());
     for (unsigned i = 0; i < n; ++i) {
       Value qubit = QPhysAllocOp::create(
           rewriter, loc, rewriter.getType<QPhysQubitType>(), nextId++,
           rewriter.getStringAttr("data"));
-      qubits.push_back(qubit);
+      values.push_back(qubit);
     }
+    Value const0 = arith::ConstantIntOp::create(rewriter, loc, 0, 1);
+    values.append(op.getType().getCode().getAncillaQubits(), const0);
     // TODO: Use a fault-tolerant encoding scheme.
-    measureXSyndrome(op.getType().getCode().getStabilizerCode(), qubits,
-                     syndrome, nextId, rewriter, loc);
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
+    measureXSyndrome(op.getType().getCode().getStabilizerCode(), values,
+                     false, syndrome, nextId, rewriter, loc);
+    rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
 };
@@ -147,19 +177,21 @@ struct InitPlusPattern : public OpConversionPattern<InitPlusOp> {
                   ConversionPatternRewriter &rewriter) const override {
     unsigned n = op.getType().getPhysicalQubits();
     Location loc = op.getLoc();
-    SmallVector<Value> qubits, syndrome;
-    qubits.reserve(n);
+    SmallVector<Value> values, syndrome;
+    values.reserve(n + op.getType().getCode().getAncillaQubits());
     for (unsigned i = 0; i < n; ++i) {
       Value qubit = QPhysAllocOp::create(
           rewriter, loc, rewriter.getType<QPhysQubitType>(), nextId++,
           rewriter.getStringAttr("data"));
       qubit = QPhysHOp::create(rewriter, loc, qubit);
-      qubits.push_back(qubit);
+      values.push_back(qubit);
     }
+    Value const0 = arith::ConstantIntOp::create(rewriter, loc, 0, 1);
+    values.append(op.getType().getCode().getAncillaQubits(), const0);
     // TODO: Use a fault-tolerant encoding scheme.
-    measureZSyndrome(op.getType().getCode().getStabilizerCode(), qubits,
-                     syndrome, nextId, rewriter, loc);
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
+    measureZSyndrome(op.getType().getCode().getStabilizerCode(), values,
+                     false, syndrome, nextId, rewriter, loc);
+    rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
 };
@@ -175,10 +207,10 @@ struct ExtractSyndromePattern : public OpConversionPattern<ExtractSyndromeOp> {
   matchAndRewrite(ExtractSyndromeOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
-    SmallVector<Value> qubits = adaptor.getLogicalQubit(), syndrome;
-    measureXSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
-    measureZSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits), std::move(syndrome)});
+    SmallVector<Value> values = adaptor.getLogicalQubit(), syndrome;
+    measureXSyndrome(code, values, true, syndrome, nextId, rewriter, op.getLoc());
+    measureZSyndrome(code, values, true, syndrome, nextId, rewriter, op.getLoc());
+    rewriter.replaceOpWithMultiple(op, {std::move(values), std::move(syndrome)});
     return success();
   }
 };
@@ -194,10 +226,10 @@ struct ECRoundPattern : public OpConversionPattern<ECRoundOp> {
   matchAndRewrite(ECRoundOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
-    SmallVector<Value> qubits = adaptor.getLogicalQubit(), syndrome;
-    measureXSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
-    measureZSyndrome(code, qubits, syndrome, nextId, rewriter, op.getLoc());
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits), std::move(syndrome)});
+    SmallVector<Value> values = adaptor.getLogicalQubit(), syndrome;
+    measureXSyndrome(code, values, true, syndrome, nextId, rewriter, op.getLoc());
+    measureZSyndrome(code, values, true, syndrome, nextId, rewriter, op.getLoc());
+    rewriter.replaceOpWithMultiple(op, {std::move(values), std::move(syndrome)});
     return success();
   }
 };
@@ -209,9 +241,9 @@ struct LogicalXPattern : public OpConversionPattern<LogicalXOp> {
   matchAndRewrite(LogicalXOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
-    SmallVector<Value> qubits = adaptor.getQubit();
-    applyPauliString(code.getLogicalX(), qubits, rewriter, op.getLoc());
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
+    SmallVector<Value> values = adaptor.getQubit();
+    applyPauliString(code.getLogicalX(), values, rewriter, op.getLoc());
+    rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
 };
@@ -223,9 +255,9 @@ struct LogicalZPattern : public OpConversionPattern<LogicalZOp> {
   matchAndRewrite(LogicalZOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
-    SmallVector<Value> qubits = adaptor.getQubit();
-    applyPauliString(code.getLogicalZ(), qubits, rewriter, op.getLoc());
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
+    SmallVector<Value> values = adaptor.getQubit();
+    applyPauliString(code.getLogicalZ(), values, rewriter, op.getLoc());
+    rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
 };
@@ -237,10 +269,10 @@ struct LogicalYPattern : public OpConversionPattern<LogicalYOp> {
   matchAndRewrite(LogicalYOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
-    SmallVector<Value> qubits = adaptor.getQubit();
-    applyPauliString(code.getLogicalX(), qubits, rewriter, op.getLoc());
-    applyPauliString(code.getLogicalZ(), qubits, rewriter, op.getLoc());
-    rewriter.replaceOpWithMultiple(op, {std::move(qubits)});
+    SmallVector<Value> values = adaptor.getQubit();
+    applyPauliString(code.getLogicalX(), values, rewriter, op.getLoc());
+    applyPauliString(code.getLogicalZ(), values, rewriter, op.getLoc());
+    rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
 };
@@ -252,34 +284,46 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
   matchAndRewrite(LogicalMeasureOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
-    auto &paulis = op.getBasis() == 1 ? code.getLogicalX() : code.getLogicalZ();
+    auto isXBasis = op.getBasis() == 1;
+    auto &paulis = isXBasis ? code.getLogicalX() : code.getLogicalZ();
+    auto H = isXBasis ? code.getHx() : code.getHz();
+    size_t baseIndex = code.getN() + (isXBasis ? 0 : code.getHx().size());
     Location loc = op.getLoc();
-    ValueRange qubits = adaptor.getLogicalQubit();
+    ValueRange values = adaptor.getLogicalQubit();
+    SmallVector<Value> bits, observable;
     Value acc;
-    for (size_t i = 0; i < qubits.size(); ++i) {
-      Value qubit = qubits[i];
-      switch (paulis[i]) {
-      case Pauli::I:
-        break;
-      case Pauli::Y:
-        qubit = QPhysSOp::create(rewriter, loc, qubit);
-        qubit = QPhysSOp::create(rewriter, loc, qubit);
-        qubit = QPhysSOp::create(rewriter, loc, qubit);
-        [[fallthrough]];
-      case Pauli::X:
+    for (size_t i = 0; i < code.getN(); ++i) {
+      Value qubit = values[i];
+      if (isXBasis)
+        // In principle we should undo this basis change after measurement, but
+        // it can be omitted since LogicalMeasureOp releases the logical qubit.
         qubit = QPhysHOp::create(rewriter, loc, qubit);
-        [[fallthrough]];
-      case Pauli::Z:
-        Value bit = QPhysMeasureOp::create(rewriter, loc, qubit,
-                                           rewriter.getStringAttr("m"), nullptr,
-                                           nullptr, nullptr, nullptr);
+      Value bit = QPhysMeasureOp::create(rewriter, loc, qubit,
+                                         rewriter.getStringAttr("m"), nullptr,
+                                         nullptr, nullptr, nullptr);
+      bits.push_back(bit);
+      if (paulis[i] == (isXBasis ? Pauli::X : Pauli::Z)) {
+        observable.push_back(bit);
         acc = acc ? arith::XOrIOp::create(rewriter, loc, acc, bit) : bit;
-        // In principle we should undo the basis change for X and Y measurements
-        // here, but that can be omitted since LogicalMeasureOp releases the
-        // logical qubit.
-        break;
+      } else if (paulis[i] != Pauli::I) {
+        op.emitError()
+            << "ftqc-expand-physical-generic: only CSS codes where logical "
+            << "ZX"[isXBasis] << " operators are products of " << "ZX"[isXBasis]
+            << " and I are supported";
+        return failure();
       }
     }
+    for (size_t i = 0; i < H.size(); ++i) {
+      auto &row = H[i];
+      SmallVector<Value> detector;
+      if (!values[baseIndex + i].getDefiningOp<arith::ConstantIntOp>())
+        detector.push_back(values[baseIndex + i]);
+      for (size_t j = 0; j < code.getN(); ++j)
+        if (row[j])
+          detector.push_back(bits[j]);
+      QPhysDetectorOp::create(rewriter, loc, detector);
+    }
+    QPhysObservableOp::create(rewriter, loc, observable);
     rewriter.replaceOp(op, acc);
     return success();
   }
@@ -302,12 +346,13 @@ struct FTQCExpandPhysicalGenericPassImpl
     typeConverter.addConversion([](Type type) { return type; });
     typeConverter.addConversion(
         [ctx](LogicalQubitType lqt, SmallVectorImpl<Type> &types) {
-          types.resize(lqt.getPhysicalQubits(), QPhysQubitType::get(ctx));
+          types.append(lqt.getPhysicalQubits(), QPhysQubitType::get(ctx));
+          types.append(lqt.getCode().getAncillaQubits(), IntegerType::get(ctx, 1));
           return success();
         });
     typeConverter.addConversion(
         [ctx](SyndromeType st, SmallVectorImpl<Type> &types) {
-          types.resize(st.getWidth(), IntegerType::get(ctx, 1));
+          types.append(st.getWidth(), IntegerType::get(ctx, 1));
           return success();
         });
 
@@ -315,7 +360,7 @@ struct FTQCExpandPhysicalGenericPassImpl
     target.addDynamicallyLegalDialect<FTQCDialect>([](Operation *op) {
       return op->getName().getStringRef().starts_with("ftqc.qphys.");
     });
-    target.addLegalOp<arith::XOrIOp>();
+    target.addLegalOp<arith::ConstantIntOp, arith::XOrIOp>();
     target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
       return typeConverter.isSignatureLegal(op.getFunctionType());
     });
