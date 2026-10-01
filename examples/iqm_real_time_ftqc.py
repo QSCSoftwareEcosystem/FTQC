@@ -782,30 +782,67 @@ def run_realtime_loop(
 # --------------------------------------------------------------------------
 
 
+SYNDROME_EXTRACTIONS = {"none": 0, "immediate": 1}
+
+
+def dynamic_syndrome_extraction(
+    qc: QuantumCircuit,
+    q: QuantumRegister,
+    blk: BlockLayout,
+    z_reg: ClassicalRegister,
+    x_reg: ClassicalRegister,
+    bit_base: int = 0,
+) -> None:
+    """Extract one full syndrome into registers, resetting reused ancillas."""
+    # Measurement leaves an ancilla in the measured |0> or |1> state. Restore
+    # the |0> state required by both syndrome-extraction circuits before reuse.
+    for anc in blk.anc_z + blk.anc_x:
+        qc.reset(q[anc])
+    for i, support in enumerate(STEANE_STAB):
+        anc = q[blk.anc_z[i]]
+        for d in support:
+            qc.cx(q[blk.data[d]], anc)
+        qc.measure(anc, z_reg[bit_base + i])
+    for i, support in enumerate(STEANE_STAB):
+        anc = q[blk.anc_x[i]]
+        qc.h(anc)
+        for d in support:
+            qc.cx(anc, q[blk.data[d]])
+        qc.h(anc)
+        qc.measure(anc, x_reg[bit_base + i])
+
+
 def build_dynamic_circuit(
     segments: Sequence[Sequence[LogicalGate]],
     blocks: Sequence[BlockLayout],
     decoder: SteaneRestrictionDecoder,
     n_physical: int,
     injections: Sequence[tuple[int, int, str]] = (),
+    syndrome_policy: str = "immediate",
 ) -> QuantumCircuit:
-    """One circuit with real conditional feedback after every syndrome round.
+    """One circuit with optional conditional feedback after each program segment.
 
     The decoder is compiled to a lookup table and emitted as ``if_test`` blocks,
     which is how a real-time control stack handles a distance-3 code: PyMatching
     runs offline to build the table, the hardware applies it within the shot.
+    Policy ``none`` skips syndrome extraction and feedback entirely.
     """
+    if syndrome_policy not in SYNDROME_EXTRACTIONS:
+        raise ValueError(f"unknown syndrome policy {syndrome_policy!r}")
     n_logical = len(blocks)
+    n_extractions = SYNDROME_EXTRACTIONS[syndrome_policy]
+    syndrome_width = n_extractions * N_STAB
     q = QuantumRegister(n_physical, "q")
-    table = decoder.lookup_table()
+    table = decoder.lookup_table() if n_extractions else {}
 
     syn_regs: list[list[ClassicalRegister]] = []
-    for r in range(len(segments)):
-        per_round = []
-        for b in range(n_logical):
-            per_round.append(ClassicalRegister(N_STAB, f"sz{r}_{b}"))
-            per_round.append(ClassicalRegister(N_STAB, f"sx{r}_{b}"))
-        syn_regs.append(per_round)
+    if n_extractions:
+        for r in range(len(segments)):
+            per_round = []
+            for b in range(n_logical):
+                per_round.append(ClassicalRegister(syndrome_width, f"sz{r}_{b}"))
+                per_round.append(ClassicalRegister(syndrome_width, f"sx{r}_{b}"))
+            syn_regs.append(per_round)
     data_regs = [ClassicalRegister(N_DATA, f"d{b}") for b in range(n_logical)]
 
     qc = QuantumCircuit(q, *[reg for rnd in syn_regs for reg in rnd], *data_regs)
@@ -820,26 +857,12 @@ def build_dynamic_circuit(
         for gate in segment:
             apply_gate(qc, q, blocks, gate)
         qc.barrier()
+        if not n_extractions:
+            continue
         for b, blk in enumerate(blocks):
             cz_reg = syn_regs[r][2 * b]
             cx_reg = syn_regs[r][2 * b + 1]
-            # Measurement leaves an ancilla in the measured |0> or |1> state.
-            # Dynamic mode reuses the same ancillas in later rounds, so restore
-            # the |0> state required by both syndrome-extraction circuits.
-            for anc in blk.anc_z + blk.anc_x:
-                qc.reset(q[anc])
-            for i, support in enumerate(STEANE_STAB):
-                anc = q[blk.anc_z[i]]
-                for d in support:
-                    qc.cx(q[blk.data[d]], anc)
-                qc.measure(anc, cz_reg[i])
-            for i, support in enumerate(STEANE_STAB):
-                anc = q[blk.anc_x[i]]
-                qc.h(anc)
-                for d in support:
-                    qc.cx(anc, q[blk.data[d]])
-                qc.h(anc)
-                qc.measure(anc, cx_reg[i])
+            dynamic_syndrome_extraction(qc, q, blk, cz_reg, cx_reg)
             # Real-time feed-forward from the compiled decoder table.
             for value, correction in table.items():
                 if not correction.any():
@@ -863,23 +886,30 @@ def build_dynamic_circuit(
 def run_dynamic(
     segments, bk: Backend, blocks, decoder, shots: int, verbose: bool = True,
     injections: Sequence[tuple[int, int, str]] = (),
+    syndrome_policy: str = "immediate",
 ) -> dict[str, Any]:
     n_logical = len(blocks)
     n_rounds = len(segments)
+    n_extractions = SYNDROME_EXTRACTIONS.get(syndrome_policy, 0)
     physical = [qi for blk in blocks for qi in blk.all_qubits]
     qc = build_dynamic_circuit(
-        segments, blocks, decoder, max(physical) + 1, injections
+        segments, blocks, decoder, max(physical) + 1, injections, syndrome_policy
     )
     n_cond = sum(1 for inst in qc.data if inst.operation.name == "if_else")
     if verbose:
+        details = (
+            "no mid-circuit syndrome extraction or correction"
+            if not n_extractions else
+            f"{n_rounds} rounds x {n_logical} blocks x {n_extractions} "
+            "extraction(s); corrections applied from the compiled decoder table"
+        )
         print(f"dynamic circuit: depth {qc.depth()}, {n_cond} conditional blocks "
-              f"({n_rounds} syndrome rounds x {n_logical} blocks, corrections applied "
-              f"in-circuit from the compiled decoder table)")
+              f"(policy={syndrome_policy}; {details})")
     memory = run_circuit(bk, qc, shots, physical)
 
     # Clbit layout: all syndrome registers in creation order, then the data
     # registers. bits_of() indexes clbits directly, so offsets are explicit.
-    syn_total = n_rounds * n_logical * 2 * N_STAB
+    syn_total = n_rounds * n_logical * 2 * N_STAB * n_extractions
     n_clbits = syn_total + n_logical * N_DATA
 
     logical_counts: Counter = Counter()
@@ -893,8 +923,8 @@ def run_dynamic(
                 [bits[syn_total + b * N_DATA + i] for i in range(N_DATA)],
                 dtype=np.uint8,
             )
-            # Corrections already happened in hardware; only the readout-time
-            # residual is left to decode.
+            # Decode any readout-time residual. With policy=none, this is the
+            # only error correction performed after encoding.
             if syndrome_of(raw).any():
                 residual_fixups += 1
             val, _ = logical_value(raw, np.zeros(N_DATA, dtype=np.uint8), decoder)
@@ -911,6 +941,8 @@ def run_dynamic(
 
     return {
         "mode": "dynamic",
+        "syndrome_policy": syndrome_policy,
+        "syndrome_extractions_per_round": n_extractions,
         "backend": bk.name,
         "shots": shots,
         "program": [[str(g) for g in seg] for seg in segments],
@@ -950,6 +982,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                    help="IQM token (default: $IQM_TOKEN or $RESONANCE_API_KEY)")
     p.add_argument("--mode", choices=("loop", "dynamic"), default="loop",
                    help="host-in-the-loop feedback, or in-circuit if_test feedback")
+    p.add_argument("--syndrome-policy", choices=("none", "immediate"),
+                   default="immediate",
+                   help="dynamic mode: skip mid-circuit QEC (none), or correct "
+                        "after one syndrome (immediate, default)")
     p.add_argument("--program", default="h0;cx01;cz12;x2",
                    help="logical circuit, segments separated by ';' "
                         "(default: h0;cx01;cz12;x2)")
@@ -1014,6 +1050,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.exit(msg + "\nRe-run with --mode loop, or --allow-fallback.")
         print(msg + " Falling back to --mode loop.")
         mode = "loop"
+    if mode != "dynamic" and args.syndrome_policy != "immediate":
+        sys.exit(f"--syndrome-policy {args.syndrome_policy} requires --mode dynamic")
 
     if args.backend in ("aphrodite", "fake", "emerald-fake") and needed > 24:
         sys.exit(
@@ -1033,7 +1071,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if mode == "dynamic":
         report = run_dynamic(
-            segments, bk, blocks, decoder, args.shots, verbose, injections
+            segments, bk, blocks, decoder, args.shots, verbose, injections,
+            args.syndrome_policy,
         )
     else:
         report = run_realtime_loop(
