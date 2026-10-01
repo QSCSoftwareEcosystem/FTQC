@@ -64,7 +64,52 @@ _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
 
 
 _DATA_MEASUREMENT_RE = re.compile(r"^mL(\d+)_QB\d+_\d+$")
+_SYNDROME_MEASUREMENT_RE = re.compile(r"^s([xz])L(\d+)S(\d+)_QB\d+_\d+$")
 STEANE_STAB = [[0, 2, 4, 6], [1, 2, 5, 6], [3, 4, 5, 6]]
+
+
+def steane_error_index(syndrome: list[int]) -> int | None:
+    """Decode a syndrome in STEANE_STAB row order into a data-qubit index."""
+    if not any(syndrome):
+        return None
+    return next(i for i in range(7)
+                if [int(i in row) for row in STEANE_STAB] == syndrome)
+
+
+def syndrome_rounds(
+    key_to_cbit: dict[str, int], groups: dict[int, list[tuple[int, str]]],
+) -> dict[tuple[int, str], list[list[int]]]:
+    """Group successive triples per block/family in classical-bit order.
+
+    X IDs 0,1,2 and Z IDs 3,4,5 correspond to STEANE_STAB rows.
+    Hardware names do not determine the data-qubit ordering.
+    """
+    streams: dict[tuple[int, str], list[tuple[int, int]]] = {}
+    for key, cbit in key_to_cbit.items():
+        match = _SYNDROME_MEASUREMENT_RE.fullmatch(key)
+        if not match:
+            continue
+        family, logical_id, syndrome_id = match.groups()
+        logical_id, syndrome_id = int(logical_id), int(syndrome_id)
+        if logical_id not in groups:
+            raise ValueError(f"Syndrome {key!r} has no final data readout")
+        row = syndrome_id - (3 if family == "z" else 0)
+        if row not in range(3):
+            raise ValueError(f"Invalid stabilizer ID in {key!r}")
+        if cbit >= groups[logical_id][0][0]:
+            raise ValueError(f"Syndrome {key!r} must precede final data readout")
+        streams.setdefault((logical_id, family), []).append((cbit, row))
+    rounds = {}
+    for block, stream in streams.items():
+        stream.sort()
+        rounds[block] = []
+        for start in range(0, len(stream), 3):
+            triple = stream[start:start + 3]
+            if sorted(row for _, row in triple) != [0, 1, 2]:
+                raise ValueError(f"Incomplete or duplicate syndrome round for {block}")
+            rounds[block].append(
+                [cbit for cbit, _ in sorted(triple, key=lambda item: item[1])])
+    return rounds
 
 
 def logical_measurement_results(
@@ -77,7 +122,12 @@ def logical_measurement_results(
     strings are Qiskit little endian. Output logical strings are ordered left
     to right by ascending logical ID; logical measurement is total parity.
     Correction assumes at most one flipped data bit per block; multiple errors
-    can be miscorrected. Stabilizer measurements are never used or changed.
+    can be miscorrected. Successive syndromes are XORed, starting from zero,
+    and Steane-decoded into X/Z frames. XOR plus hard-decision decoding alone
+    cannot reliably distinguish measurement errors from data errors.
+    Final readouts are Z-basis, so only the X frame flips classical bits.
+    Syndrome histories must use a fixed Steane basis; intervening logical
+    gates require frame propagation that measurement keys do not describe.
     Example bitstrings for a single logical qubit: 0000000, 0000001, 0000010,
     where the rightmost bit is the first data measurement in the input circuit.
     """
@@ -97,6 +147,8 @@ def logical_measurement_results(
             )
 
 
+    rounds = syndrome_rounds(key_to_cbit, groups)
+    frame_history = {}
     counts = dict(sorted(counts.items(), key=lambda item: item[1], reverse=True))
     raw: Counter[str] = Counter()
     corrected: Counter[str] = Counter()
@@ -107,16 +159,38 @@ def logical_measurement_results(
             raise ValueError(f"Invalid {width}-bit measurement outcome: {outcome!r}")
         raw_values = []
         corrected_values = []
-        for logical_id in logical_ids:
+        pauli_frame_x = [[0] * 7 for _ in logical_ids]
+        pauli_frame_z = [[0] * 7 for _ in logical_ids]
+        history = {"pauli_frame_x": [], "pauli_frame_z": []}
+        for family, frame in (("z", pauli_frame_x), ("x", pauli_frame_z)):
+            previous = [[0] * 3 for _ in logical_ids]
+            round_count = max((len(rounds.get((lid, family), []))
+                               for lid in logical_ids), default=0)
+            for round_index in range(round_count):
+                for row, logical_id in enumerate(logical_ids):
+                    block_rounds = rounds.get((logical_id, family), [])
+                    if round_index >= len(block_rounds):
+                        continue
+                    current = [int(bits[-1 - cbit])
+                               for cbit in block_rounds[round_index]]
+                    detection = [a ^ b for a, b in zip(current, previous[row])]
+                    error_index = steane_error_index(detection)
+                    if error_index is not None:
+                        frame[row][error_index] ^= 1
+                    previous[row] = current
+                frame_name = "pauli_frame_x" if family == "z" else "pauli_frame_z"
+                history[frame_name].append([row.copy() for row in frame])
+        frame_history[outcome] = history
+        for row, logical_id in enumerate(logical_ids):
             data = [int(bits[-1 - cbit]) for cbit, _ in groups[logical_id]]
             if DEBUG_PRINT >= 1:
                 print(f"Logical qubit {logical_id} data: {data}")
             raw_values.append(str(sum(data) % 2))
+            data = [bit ^ flip for bit, flip in zip(data, pauli_frame_x[row])]
             syndrome = [sum(data[i] for i in row) % 2 for row in STEANE_STAB]
-            # The parity-check columns encode positions 1 through 7.
-            error_position = sum(bit << i for i, bit in enumerate(syndrome))
-            if error_position:
-                data[error_position - 1] ^= 1
+            error_index = steane_error_index(syndrome)
+            if error_index is not None:
+                data[error_index] ^= 1
             corrected_values.append(str(sum(data) % 2))
         if logical_ids:
             raw["".join(raw_values)] += frequency
@@ -130,6 +204,8 @@ def logical_measurement_results(
             str(logical_id): [key for _, key in groups[logical_id]]
             for logical_id in logical_ids
         },
+        # outcome -> frame name -> round -> logical_qubit_order row -> data bit
+        "pauli_frame_history": frame_history,
         "logical_counts_raw": dict(sorted(raw.items())),
         "logical_counts_steane_corrected": dict(sorted(corrected.items())),
     }
