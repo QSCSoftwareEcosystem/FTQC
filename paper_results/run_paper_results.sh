@@ -32,6 +32,7 @@
 # =============================================================================
 
 set -uo pipefail
+set -x
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,8 +40,15 @@ QFTC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESULTS_DIR="$SCRIPT_DIR"
 FIGURES_DIR="$QFTC_DIR/figures"
 
-QASM_PY="$QFTC_DIR/qasm.venv/bin/python"
-QSIM_PY="$QFTC_DIR/qsim.venv/bin/python"
+[ -n "$VIRTUAL_ENV" ] && IS_VENV=true || IS_VENV=false
+VENV="${VIRTUAL_ENV:-none}"
+if [ "$IS_VENV" = true ]; then
+QASM_PY="$VENV/bin/python"
+QSIM_PY="$VENV/bin/python"
+else
+QASM_PY="python"
+QSIM_PY="python"
+fi
 PEN_PY="/home/nqx/Quantum/quantum-resources/qiree/pen.venv/bin/python"
 FTQC_OPT="$QFTC_DIR/build/src/ftqc-opt"
 # LLVM/MLIR install prefix (same default as build.sh); exported so the build.sh
@@ -58,10 +66,12 @@ export LD_LIBRARY_PATH="$QFTC_DIR/install/lib:$LLVM/lib:${LD_LIBRARY_PATH:-}"
 
 # ── Option flags ──────────────────────────────────────────────────────────────
 SKIP_PENNYLANE=0
+SKIP_SCALABILITY=0
 SKIP_BUILD=0
 PLOTS_ONLY=0
 for arg in "$@"; do
     case "$arg" in
+        --skip-scalability) SKIP_SCALABILITY=1 ;;
         --skip-pennylane) SKIP_PENNYLANE=1 ;;
         --skip-build)     SKIP_BUILD=1     ;;
         --plots-only)     PLOTS_ONLY=1; SKIP_BUILD=1 ;;
@@ -75,8 +85,8 @@ warn() { echo "  [WARN] $*"; }
 
 # ── Validate environment ───────────────────────────────────────────────────────
 step "Checking environment"
-[[ -x "$QASM_PY"  ]] || { echo "ERROR: qasm.venv not found at $QASM_PY"; exit 1; }
-[[ -x "$QSIM_PY"  ]] || { echo "ERROR: qsim.venv not found at $QSIM_PY"; exit 1; }
+[[ -x "$QASM_PY"  ]] || { echo "ERROR: $VENV not found at $QASM_PY"; exit 1; }
+[[ -x "$QSIM_PY"  ]] || { echo "ERROR: $VENV not found at $QSIM_PY"; exit 1; }
 [[ -f "$LIT"      ]] || { echo "ERROR: llvm-lit not found at $LIT"; exit 1; }
 if [[ $SKIP_PENNYLANE -eq 0 ]]; then
     [[ -x "$PEN_PY" ]] || { warn "pen.venv not found — skipping PennyLane step (use --skip-pennylane to suppress)"; SKIP_PENNYLANE=1; }
@@ -227,12 +237,14 @@ fi
 #   latex/scale_data.csv    — raw scaling numbers
 #   latex/scale_plots.tex   — pgfplots coordinates included by the paper
 # =============================================================================
+if [[ $SKIP_SCALABILITY -eq 0 ]]; then
 step "Step 9/10 — Scaling experiment (scale_experiment.py)"
 "$QASM_PY" utils/scale_experiment.py \
     2>&1 | tee "$RESULTS_DIR/09_scale_experiment.log"
 # Copy generated files into paper_results/ for archival
 cp latex/scale_data.csv  "$RESULTS_DIR/scale_data.csv"
 cp latex/scale_plots.tex "$RESULTS_DIR/scale_plots.tex"
+fi
 ok "Scaling data → scale_data.csv, scale_plots.tex"
 
 # =============================================================================
