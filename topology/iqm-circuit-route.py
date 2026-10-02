@@ -181,6 +181,7 @@ def logical_measurement_results(
                 frame_name = "pauli_frame_x" if family == "z" else "pauli_frame_z"
                 history[frame_name].append([row.copy() for row in frame])
         frame_history[outcome] = history
+        hasInvalidCodeword = False
         for row, logical_id in enumerate(logical_ids):
             data = [int(bits[-1 - cbit]) for cbit, _ in groups[logical_id]]
             if DEBUG_PRINT >= 1:
@@ -191,10 +192,18 @@ def logical_measurement_results(
             error_index = steane_error_index(syndrome)
             if error_index is not None:
                 data[error_index] ^= 1
-            corrected_values.append(str(sum(data) % 2))
+            # Check whether the corrected data are valid Steane codewords.
+            syndrome = [sum(data[i] for i in row) % 2 for row in STEANE_STAB]
+            if any(syndrome):
+                hasInvalidCodeword = True
+                if DEBUG_PRINT >= 1:
+                    print(f"Logical qubit {logical_id} has uncorrectable data: {data}")
+            else:
+                corrected_values.append(str(sum(data) % 2))
         if logical_ids:
             raw["".join(raw_values)] += frequency
-            corrected["".join(corrected_values)] += frequency
+            if not hasInvalidCodeword:
+                corrected["".join(corrected_values)] += frequency
 
     return {
         "counts": counts,
@@ -674,7 +683,7 @@ def main() -> int:
                 for outcome, frequency in raw_counts.items()
             }
             write_measurement_results(input_path, counts, key_to_cbit)
-            if DEBUG_PRINT >= 0:
+            if DEBUG_PRINT >= 1:
                 print(f"Backend counts: {counts}")
                 print(f"Key to cbit mapping: {key_to_cbit}")
             if DEBUG_PRINT >= 0:
