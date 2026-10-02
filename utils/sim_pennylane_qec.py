@@ -348,12 +348,129 @@ STIM_BELL  = "#1f77b4"
 STIM_GHZ   = "#ff7f0e"
 STIM_GROVER= "#2ca02c"
 STIM_QFT   = "#d62728"
+import pdb
 
+def fig_comparison_loglog(pl_results: dict, stim_data: dict,
+                          outdir: str, figdir: str, fontsize: int = 15):
+    """Fig A: p_L vs p log-log — PennyLane vs STIM for Bell."""
 
-def fig_comparison_loglog(pl_results: dict, stim_data: dict, outdir: str, figdir: str):
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+
+    bm = "Bell"
+    pl_key = "Bell"
+    stim_color = STIM_BELL
+
+    # Physical error-rate range
+    p_range = np.logspace(-4, -1.8, 200)
+
+    # Break-even line
+    ax.plot(
+        p_range, p_range,
+        "k-", lw=0.8, alpha=0.3,
+        label=r"$p_L = p$ (break-even)"
+    )
+
+    # Approximate threshold
+    ax.axvline(
+        P_THRESHOLD,
+        color="gray",
+        lw=0.8,
+        ls=":",
+        alpha=0.6,
+        label=r"$p_{th} \approx 1\%$"
+    )
+
+    # STIM decoded results
+    if bm in stim_data:
+        sd = stim_data[bm]
+        ax.plot(
+            sd["p"], sd["p_L"],
+            color=stim_color,
+            marker="o",
+            lw=2.0,
+            label=f"FTQC + STIM + MWPM decoder\n"
+                  f"(active QEC, {sd['n_phys']} phys.)"
+        )
+
+    # PennyLane no-decoder results
+    if pl_key in pl_results:
+        pr = pl_results[pl_key]
+        ax.plot(
+            pr["p"], pr["p_L"],
+            color=PL_COLOR,
+            marker="s",
+            lw=2.0,
+            ls="--",
+            label="PennyLane density-matrix\n"
+                  "(no QEC decoder, 14 phys.)"
+        )
+
+    # Linear guide: p_L ≈ N_gates * p
+    if False:
+        ax.plot(
+            p_range,
+            60 * p_range,
+            color="gray",
+            lw=1.0,
+            ls="-.",
+            alpha=0.5,
+            label=r"$p_L \approx N_{gates} \cdot p$ (uncorrected)"
+        )
+
+    # Log scales
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    # Labels
+    ax.set_xlabel(
+        r"Physical error rate $p$",
+        fontsize=fontsize
+    )
+
+    ax.set_ylabel(
+        r"Logical error rate $p_L$",
+        fontsize=fontsize
+    )
+
+    # Tick labels
+    ax.tick_params(
+        axis="both",
+        which="both",
+        labelsize=fontsize
+    )
+
+    # Axis limits
+    ax.set_xlim(8e-5, 2e-2)
+    ax.set_ylim(3e-3, 1.1)
+
+    # Legend
+    ax.legend(
+        loc="upper left",
+        fontsize=fontsize,
+        framealpha=0.88
+    )
+
+    # Title
+    ax.set_title(
+        "PennyLane (no QEC) vs "
+        "FTQC + STIM (stabilizer + MWPM)\n"
+        "Bell Circuit Steane [[7,1,3]], depolarizing noise, ",
+        fontsize=fontsize,
+        #fontweight="bold"
+    )
+
+    fig.tight_layout()
+
+    save_fig(
+        fig,
+        outdir,
+        figdir,
+        "figA_pl_vs_stim_loglog"
+    )
+
+def fig_comparison_loglog_bell_grover(pl_results: dict, stim_data: dict, outdir: str, figdir: str):
     """Fig A: p_L vs p log-log — PennyLane vs STIM for Bell and GHZ."""
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharex=True, sharey=True)
-
     for ax, (bm, pl_key, stim_color, title) in zip(axes, [
         ("Bell",  "Bell",  STIM_BELL,  "Bell (2 logical qubits, 14 physical)"),
         ("Grover","Grover",STIM_GROVER,"Grover (2 logical qubits, 14 physical)"),
@@ -610,6 +727,7 @@ def main():
     ap.add_argument("--figdir", default=_DEFAULT_FIGDIR,
                     help="Directory for PDF vector outputs (default: qftc/figures/)")
     ap.add_argument("--stim-csv", default=STIM_CSV)
+    ap.add_argument("--only-bell", action="store_true")
     ap.add_argument("--skip-pl", action="store_true",
                     help="Skip PennyLane simulation (use cached results only)")
     args = ap.parse_args()
@@ -644,14 +762,16 @@ def main():
         # GHZ (same circuit structure as Bell for 2L)
         print(f"\n  GHZ (2L, 14 phys):")
         try:
-            pl_results["GHZ"] = simulate_pl(build_ghz_pl, p_values, "GHZ")
+            if not args.only_bell:
+                pl_results["GHZ"] = simulate_pl(build_ghz_pl, p_values, "GHZ")
         except MemoryError:
             print("  OOM — skipping GHZ")
 
         # Grover
         print(f"\n  Grover (2L, 14 phys):")
         try:
-            pl_results["Grover"] = simulate_pl(build_grover_pl, p_values, "Grover")
+            if not args.only_bell:
+                pl_results["Grover"] = simulate_pl(build_grover_pl, p_values, "Grover")
         except MemoryError:
             print("  OOM — skipping Grover")
 

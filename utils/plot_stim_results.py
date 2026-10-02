@@ -93,28 +93,51 @@ def load(path):
 # ---------------------------------------------------------------------------
 def fig_loglog(data, outdir, figdir):
     fig, ax = plt.subplots(figsize=(7, 5.5))
-
+    fontsize=15
     p_range = np.logspace(-4, -1.8, 200)
-    # p^2 / p_th guide line (d=3 code-distance scaling)
+
     guide = 0.14 * (p_range / P_THRESHOLD) ** 2
-    ax.plot(p_range, guide, "k--", lw=1.2, alpha=0.5, label=r"$\propto (p/p_{th})^2$ guide")
-    ax.axvline(P_THRESHOLD, color="gray", lw=1.0, ls=":", alpha=0.7, label=r"$p_{th} \approx 1\%$")
-    ax.plot([1e-4, 0.015], [1e-4, 0.015], "k-", lw=1.0, alpha=0.35, label=r"$p_L = p$ (break-even)")
+    ax.plot(p_range, guide, "k--", lw=1.2, alpha=0.5,
+            label=r"$\propto (p/p_{th})^2$ guide")
+
+    ax.axvline(P_THRESHOLD, color="gray", lw=1.0, ls=":", alpha=0.7,
+               label=r"$p_{th} \approx 1\%$")
+
+    ax.plot([1e-4, 0.015], [1e-4, 0.015], "k-", lw=1.0, alpha=0.35,
+            label=r"$p_L = p$ (break-even)")
 
     for bm, d in data.items():
         ax.plot(d["p"], d["p_L"],
                 color=COLORS[bm], marker=MARKERS[bm],
                 label=LABEL[bm], zorder=3)
 
-    ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xlabel(r"Physical error rate $p$")
-    ax.set_ylabel(r"Logical error rate $p_L$ (per shot)")
-    ax.set_title("QEC Simulation: Steane [[7,1,3]] — FTQC MLIR-generated STIM circuits\n"
-                 "Benchmarks encoded as round-trip circuits, MWPM decoder (PyMatching)")
-    ax.legend(loc="upper left", framealpha=0.85)
-    ax.set_xlim(8e-5, 2e-2); ax.set_ylim(3e-3, 1.1)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    # Explicit font sizes
+    ax.set_xlabel(r"Physical error rate $p$", fontsize=fontsize)
+    ax.set_ylabel(r"Logical error rate $p_L$ (per shot)", fontsize=fontsize)
+
+    ax.set_title(
+        "QEC Simulation: Steane [[7,1,3]] — FTQC MLIR-generated STIM circuits\n"
+        "Benchmarks encoded as round-trip circuits, MWPM decoder (PyMatching)",
+        fontsize=fontsize
+    )
+
+    # Tick-label font size
+    ax.tick_params(axis="both", which="major", labelsize=fontsize)
+    ax.tick_params(axis="both", which="minor", labelsize=fontsize)
+
+    # Legend font size
+    #ax.legend(loc="upper left", framealpha=0.85, fontsize=13)
+    ax.legend(loc="lower right", framealpha=0.85, fontsize=fontsize)
+
+    ax.set_xlim(8e-5, 2e-2)
+    ax.set_ylim(3e-3, 1.1)
+
     ax.xaxis.set_major_formatter(mticker.LogFormatterSciNotation())
     ax.yaxis.set_major_formatter(mticker.LogFormatterSciNotation())
+
     fig.tight_layout()
     save_fig(fig, outdir, figdir, "fig1_pL_vs_p_loglog")
 
