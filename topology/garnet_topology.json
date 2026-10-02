@@ -1,6 +1,7 @@
 {
   "backend": "garnet",
   "calibration": "Garnet",
+  "calibration_timestamp": null,
   "num_qubits": 20,
   "qubits": [
     "QB1",
@@ -24,6 +25,30 @@
     "QB19",
     "QB20"
   ],
+  "available_qubits": [
+    "QB1",
+    "QB2",
+    "QB3",
+    "QB4",
+    "QB5",
+    "QB6",
+    "QB7",
+    "QB8",
+    "QB9",
+    "QB10",
+    "QB11",
+    "QB12",
+    "QB13",
+    "QB14",
+    "QB15",
+    "QB16",
+    "QB17",
+    "QB18",
+    "QB19",
+    "QB20"
+  ],
+  "unavailable_qubits": [],
+  "feedback_groups": [],
   "native_gates": [
     "id",
     "delay",
@@ -46,7 +71,10 @@
         "QB1",
         "QB2"
       ],
-      "cz_error": 0.00578
+      "cz_error": 0.00578,
+      "cz_fidelity": 0.99422,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -57,7 +85,10 @@
         "QB1",
         "QB4"
       ],
-      "cz_error": 0.00804
+      "cz_error": 0.00804,
+      "cz_fidelity": 0.99196,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -68,7 +99,10 @@
         "QB2",
         "QB5"
       ],
-      "cz_error": 0.00749
+      "cz_error": 0.00749,
+      "cz_fidelity": 0.99251,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -79,7 +113,10 @@
         "QB3",
         "QB4"
       ],
-      "cz_error": 0.00809
+      "cz_error": 0.00809,
+      "cz_fidelity": 0.99191,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -90,7 +127,10 @@
         "QB3",
         "QB8"
       ],
-      "cz_error": 0.00599
+      "cz_error": 0.00599,
+      "cz_fidelity": 0.99401,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -101,7 +141,10 @@
         "QB4",
         "QB5"
       ],
-      "cz_error": 0.00431
+      "cz_error": 0.00431,
+      "cz_fidelity": 0.99569,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -112,7 +155,10 @@
         "QB4",
         "QB9"
       ],
-      "cz_error": 0.0065
+      "cz_error": 0.0065,
+      "cz_fidelity": 0.9935,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -123,7 +169,10 @@
         "QB5",
         "QB6"
       ],
-      "cz_error": 0.00474
+      "cz_error": 0.00474,
+      "cz_fidelity": 0.99526,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -134,7 +183,10 @@
         "QB5",
         "QB10"
       ],
-      "cz_error": 0.00339
+      "cz_error": 0.00339,
+      "cz_fidelity": 0.99661,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -145,7 +197,10 @@
         "QB6",
         "QB7"
       ],
-      "cz_error": 0.00527
+      "cz_error": 0.00527,
+      "cz_fidelity": 0.99473,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -156,7 +211,10 @@
         "QB6",
         "QB11"
       ],
-      "cz_error": 0.01401
+      "cz_error": 0.01401,
+      "cz_fidelity": 0.98599,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -167,7 +225,10 @@
         "QB7",
         "QB12"
       ],
-      "cz_error": 0.00294
+      "cz_error": 0.00294,
+      "cz_fidelity": 0.99706,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -178,7 +239,10 @@
         "QB8",
         "QB9"
       ],
-      "cz_error": 0.00399
+      "cz_error": 0.00399,
+      "cz_fidelity": 0.99601,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -189,7 +253,10 @@
         "QB8",
         "QB13"
       ],
-      "cz_error": 0.00485
+      "cz_error": 0.00485,
+      "cz_fidelity": 0.99515,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -200,7 +267,10 @@
         "QB9",
         "QB10"
       ],
-      "cz_error": 0.00638
+      "cz_error": 0.00638,
+      "cz_fidelity": 0.99362,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -211,7 +281,10 @@
         "QB9",
         "QB14"
       ],
-      "cz_error": 0.00548
+      "cz_error": 0.00548,
+      "cz_fidelity": 0.99452,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -222,7 +295,10 @@
         "QB10",
         "QB11"
       ],
-      "cz_error": 0.00682
+      "cz_error": 0.00682,
+      "cz_fidelity": 0.99318,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -233,7 +309,10 @@
         "QB10",
         "QB15"
       ],
-      "cz_error": 0.00961
+      "cz_error": 0.00961,
+      "cz_fidelity": 0.99039,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -244,7 +323,10 @@
         "QB11",
         "QB12"
       ],
-      "cz_error": 0.00899
+      "cz_error": 0.00899,
+      "cz_fidelity": 0.99101,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -255,7 +337,10 @@
         "QB11",
         "QB16"
       ],
-      "cz_error": 0.00712
+      "cz_error": 0.00712,
+      "cz_fidelity": 0.99288,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -266,7 +351,10 @@
         "QB12",
         "QB17"
       ],
-      "cz_error": 0.00407
+      "cz_error": 0.00407,
+      "cz_fidelity": 0.99593,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -277,7 +365,10 @@
         "QB13",
         "QB14"
       ],
-      "cz_error": 0.00251
+      "cz_error": 0.00251,
+      "cz_fidelity": 0.99749,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -288,7 +379,10 @@
         "QB14",
         "QB15"
       ],
-      "cz_error": 0.00506
+      "cz_error": 0.00506,
+      "cz_fidelity": 0.99494,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -299,7 +393,10 @@
         "QB14",
         "QB18"
       ],
-      "cz_error": 0.0042
+      "cz_error": 0.0042,
+      "cz_fidelity": 0.9958,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -310,7 +407,10 @@
         "QB15",
         "QB16"
       ],
-      "cz_error": 0.00771
+      "cz_error": 0.00771,
+      "cz_fidelity": 0.99229,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -321,7 +421,10 @@
         "QB15",
         "QB19"
       ],
-      "cz_error": 0.00711
+      "cz_error": 0.00711,
+      "cz_fidelity": 0.99289,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -332,7 +435,10 @@
         "QB16",
         "QB17"
       ],
-      "cz_error": 0.00643
+      "cz_error": 0.00643,
+      "cz_fidelity": 0.99357,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -343,7 +449,10 @@
         "QB16",
         "QB20"
       ],
-      "cz_error": 0.00562
+      "cz_error": 0.00562,
+      "cz_fidelity": 0.99438,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -354,7 +463,10 @@
         "QB18",
         "QB19"
       ],
-      "cz_error": 0.00507
+      "cz_error": 0.00507,
+      "cz_fidelity": 0.99493,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     },
     {
       "indices": [
@@ -365,57 +477,80 @@
         "QB19",
         "QB20"
       ],
-      "cz_error": 0.00578
+      "cz_error": 0.00578,
+      "cz_fidelity": 0.99422,
+      "clifford_cz_error": null,
+      "clifford_cz_fidelity": null
     }
   ],
   "neighbours": {
     "QB1": {
       "index": 0,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB2",
         "QB4"
       ],
       "t1_ns": 37741.0,
-      "t2_ns": 9180.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9180.0,
       "prx_error": 0.00085,
+      "prx_fidelity": 0.99915,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0255,
         "1": 0.026
-      }
+      },
+      "readout_fidelity": null
     },
     "QB2": {
       "index": 1,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB1",
         "QB5"
       ],
       "t1_ns": 32584.0,
-      "t2_ns": 10040.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 10040.0,
       "prx_error": 0.00183,
+      "prx_fidelity": 0.99817,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0245,
         "1": 0.024
-      }
+      },
+      "readout_fidelity": null
     },
     "QB3": {
       "index": 2,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB4",
         "QB8"
       ],
       "t1_ns": 24468.0,
-      "t2_ns": 10950.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 10950.0,
       "prx_error": 0.00165,
+      "prx_fidelity": 0.99835,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0285,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB4": {
       "index": 3,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB1",
@@ -424,15 +559,21 @@
         "QB9"
       ],
       "t1_ns": 11555.0,
-      "t2_ns": 9670.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9670.0,
       "prx_error": 0.00111,
+      "prx_fidelity": 0.99889,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0245,
         "1": 0.024
-      }
+      },
+      "readout_fidelity": null
     },
     "QB5": {
       "index": 4,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB2",
@@ -441,15 +582,21 @@
         "QB10"
       ],
       "t1_ns": 34257.0,
-      "t2_ns": 8960.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 8960.0,
       "prx_error": 0.00114,
+      "prx_fidelity": 0.99886,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.025,
         "1": 0.0255
-      }
+      },
+      "readout_fidelity": null
     },
     "QB6": {
       "index": 5,
+      "available": true,
+      "feedback_group": null,
       "degree": 3,
       "neighbours": [
         "QB5",
@@ -457,30 +604,42 @@
         "QB11"
       ],
       "t1_ns": 40051.0,
-      "t2_ns": 10130.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 10130.0,
       "prx_error": 0.00384,
+      "prx_fidelity": 0.99616,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0265,
         "1": 0.0275
-      }
+      },
+      "readout_fidelity": null
     },
     "QB7": {
       "index": 6,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB6",
         "QB12"
       ],
       "t1_ns": 35708.0,
-      "t2_ns": 8590.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 8590.0,
       "prx_error": 0.00265,
+      "prx_fidelity": 0.99735,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0255,
         "1": 0.026
-      }
+      },
+      "readout_fidelity": null
     },
     "QB8": {
       "index": 7,
+      "available": true,
+      "feedback_group": null,
       "degree": 3,
       "neighbours": [
         "QB3",
@@ -488,15 +647,21 @@
         "QB13"
       ],
       "t1_ns": 25686.0,
-      "t2_ns": 9050.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9050.0,
       "prx_error": 0.00084,
+      "prx_fidelity": 0.99916,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.029,
         "1": 0.025
-      }
+      },
+      "readout_fidelity": null
     },
     "QB9": {
       "index": 8,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB4",
@@ -505,15 +670,21 @@
         "QB14"
       ],
       "t1_ns": 34113.0,
-      "t2_ns": 9380.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9380.0,
       "prx_error": 0.00122,
+      "prx_fidelity": 0.99878,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.026,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB10": {
       "index": 9,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB5",
@@ -522,15 +693,21 @@
         "QB15"
       ],
       "t1_ns": 37391.0,
-      "t2_ns": 9820.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9820.0,
       "prx_error": 0.00113,
+      "prx_fidelity": 0.99887,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.022,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB11": {
       "index": 10,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB6",
@@ -539,15 +716,21 @@
         "QB16"
       ],
       "t1_ns": 25809.0,
-      "t2_ns": 9460.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9460.0,
       "prx_error": 0.00274,
+      "prx_fidelity": 0.99726,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.028,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB12": {
       "index": 11,
+      "available": true,
+      "feedback_group": null,
       "degree": 3,
       "neighbours": [
         "QB7",
@@ -555,30 +738,42 @@
         "QB17"
       ],
       "t1_ns": 60725.0,
-      "t2_ns": 9940.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9940.0,
       "prx_error": 0.00076,
+      "prx_fidelity": 0.99924,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0255,
         "1": 0.025
-      }
+      },
+      "readout_fidelity": null
     },
     "QB13": {
       "index": 12,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB8",
         "QB14"
       ],
       "t1_ns": 44802.0,
-      "t2_ns": 10070.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 10070.0,
       "prx_error": 0.00089,
+      "prx_fidelity": 0.99911,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0265,
         "1": 0.0255
-      }
+      },
+      "readout_fidelity": null
     },
     "QB14": {
       "index": 13,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB9",
@@ -587,15 +782,21 @@
         "QB18"
       ],
       "t1_ns": 48137.0,
-      "t2_ns": 9030.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9030.0,
       "prx_error": 0.00074,
+      "prx_fidelity": 0.99926,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.024,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB15": {
       "index": 14,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB10",
@@ -604,15 +805,21 @@
         "QB19"
       ],
       "t1_ns": 39052.0,
-      "t2_ns": 9590.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9590.0,
       "prx_error": 0.00278,
+      "prx_fidelity": 0.99722,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.023,
         "1": 0.0245
-      }
+      },
+      "readout_fidelity": null
     },
     "QB16": {
       "index": 15,
+      "available": true,
+      "feedback_group": null,
       "degree": 4,
       "neighbours": [
         "QB11",
@@ -621,45 +828,63 @@
         "QB20"
       ],
       "t1_ns": 43968.0,
-      "t2_ns": 9710.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9710.0,
       "prx_error": 0.00067,
+      "prx_fidelity": 0.99933,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.022,
         "1": 0.0255
-      }
+      },
+      "readout_fidelity": null
     },
     "QB17": {
       "index": 16,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB12",
         "QB16"
       ],
       "t1_ns": 36670.0,
-      "t2_ns": 10180.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 10180.0,
       "prx_error": 0.00085,
+      "prx_fidelity": 0.99915,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.024,
         "1": 0.024
-      }
+      },
+      "readout_fidelity": null
     },
     "QB18": {
       "index": 17,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB14",
         "QB19"
       ],
       "t1_ns": 38151.0,
-      "t2_ns": 9250.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 9250.0,
       "prx_error": 0.00061,
+      "prx_fidelity": 0.99939,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.0245,
         "1": 0.026
-      }
+      },
+      "readout_fidelity": null
     },
     "QB19": {
       "index": 18,
+      "available": true,
+      "feedback_group": null,
       "degree": 3,
       "neighbours": [
         "QB15",
@@ -667,27 +892,72 @@
         "QB20"
       ],
       "t1_ns": 50012.0,
-      "t2_ns": 8270.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 8270.0,
       "prx_error": 0.00069,
+      "prx_fidelity": 0.99931,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.025,
         "1": 0.0255
-      }
+      },
+      "readout_fidelity": null
     },
     "QB20": {
       "index": 19,
+      "available": true,
+      "feedback_group": null,
       "degree": 2,
       "neighbours": [
         "QB16",
         "QB19"
       ],
       "t1_ns": 54911.0,
-      "t2_ns": 11930.0,
+      "t2_ramsey_ns": null,
+      "t2_echo_ns": 11930.0,
       "prx_error": 0.00088,
+      "prx_fidelity": 0.99912,
+      "clifford_1q_fidelity": null,
       "readout_error": {
         "0": 0.028,
         "1": 0.0285
-      }
+      },
+      "readout_fidelity": null
     }
-  }
+  },
+  "summary": {
+    "cz_gate_fidelity": {
+      "mean": 0.9938883333333333,
+      "median": 0.99422,
+      "min": 0.98599,
+      "max": 0.99749,
+      "count": 30
+    },
+    "clifford_averaged_gate_fidelity": null,
+    "clifford_1q_gate_fidelity": null,
+    "prx_gate_fidelity": {
+      "mean": 0.9986065,
+      "median": 0.999,
+      "min": 0.99616,
+      "max": 0.99939,
+      "count": 20
+    },
+    "single_qubit_readout_fidelity": null,
+    "t1_ns": {
+      "mean": 37789.55,
+      "median": 37566.0,
+      "min": 11555.0,
+      "max": 60725.0,
+      "count": 20
+    },
+    "t2_ramsey_ns": null,
+    "t2_echo_ns": {
+      "mean": 9660.0,
+      "median": 9630.0,
+      "min": 8270.0,
+      "max": 11930.0,
+      "count": 20
+    }
+  },
+  "generated_at": "2026-10-02T02:01:44.442793+00:00"
 }

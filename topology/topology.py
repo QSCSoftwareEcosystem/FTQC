@@ -46,6 +46,7 @@ REAL_ALIASES = {
     "pathfinder": "default",
     "crystal": "default",   # legacy alias
     "default": "default",
+    "emerald": "emerald",
 }
 
 SERVER_URL = os.environ.get("IQM_BASE_URL", "https://qccsw.ccs.ornl.gov")
