@@ -9,7 +9,7 @@
 #   --plots-only     Skip build/tests/sims (steps 1-6,9-10); regenerate PDFs/PNGs only.
 #                    Uses existing stim_results.csv from paper_results/ or repo root.
 #   --skip-build     Skip cmake rebuild (use existing ftqc-opt binary)
-#   --skip-pennylane Skip PennyLane step (requires pen.venv, ~10 min)
+#   --skip-pennylane Skip PennyLane step (requires $VENV, ~10 min)
 #
 # Output files written to paper_results/:
 #   Logs      : 01_build.log, 02_lit_tests.log, 03_sim_qasm3.log,
@@ -45,11 +45,12 @@ VENV="${VIRTUAL_ENV:-none}"
 if [ "$IS_VENV" = true ]; then
 QASM_PY="$VENV/bin/python"
 QSIM_PY="$VENV/bin/python"
+PEN_PY="$VENV/bin/python"
 else
 QASM_PY="python"
 QSIM_PY="python"
+PEN_PY="python"
 fi
-PEN_PY="/home/nqx/Quantum/quantum-resources/qiree/pen.venv/bin/python"
 FTQC_OPT="$QFTC_DIR/build/src/ftqc-opt"
 # LLVM/MLIR install prefix (same default as build.sh); exported so the build.sh
 # invocation in step 1 inherits the same value.
@@ -89,7 +90,7 @@ step "Checking environment"
 [[ -x "$QSIM_PY"  ]] || { echo "ERROR: $VENV not found at $QSIM_PY"; exit 1; }
 [[ -f "$LIT"      ]] || { echo "ERROR: llvm-lit not found at $LIT"; exit 1; }
 if [[ $SKIP_PENNYLANE -eq 0 ]]; then
-    [[ -x "$PEN_PY" ]] || { warn "pen.venv not found — skipping PennyLane step (use --skip-pennylane to suppress)"; SKIP_PENNYLANE=1; }
+    [[ -x "$PEN_PY" ]] || { warn "$VENV not found — skipping PennyLane step (use --skip-pennylane to suppress)"; SKIP_PENNYLANE=1; }
 fi
 ok "Environment OK"
 
@@ -228,7 +229,7 @@ if [[ $SKIP_PENNYLANE -eq 0 ]]; then
     ok "PennyLane data → pennylane_results.csv"
 else
     step "Step 8/10 — PennyLane QEC comparison (skipped)"
-    warn "Add pen.venv and remove --skip-pennylane to run this step."
+    warn "Add $VENV and remove --skip-pennylane to run this step."
     warn "Expected outputs: figA–figD .pdf/.png, pennylane_results.csv"
 fi
 
