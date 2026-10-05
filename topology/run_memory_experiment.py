@@ -15,6 +15,9 @@ from iqm.qiskit_iqm.fake_backends.fake_garnet import IQMFakeGarnet
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 from iqm.qiskit_iqm.qiskit_to_iqm import serialize_instructions
+from pymatching import Matching
+import numpy as np
+import stim
 
 
 _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
@@ -355,6 +358,112 @@ def make_metrics(
     return metrics
 
 
+cliffords = {
+    "I":          np.array([[+1   ,  0   ], [ 0   , +1   ]], dtype=complex),
+    "X":          np.array([[ 0   , +1   ], [+1   ,  0   ]], dtype=complex),
+    "Y":          np.array([[ 0   ,   -1j], [  +1j,  0   ]], dtype=complex),
+    "Z":          np.array([[+1   ,  0   ], [ 0   , -1   ]], dtype=complex),
+    "C_NXYZ":     np.array([[+1+1j, +1-1j], [-1-1j, +1-1j]], dtype=complex) / 2,
+    "C_NZYX":     np.array([[+1+1j, -1-1j], [+1-1j, +1-1j]], dtype=complex) / 2,
+    "C_XNYZ":     np.array([[+1+1j, -1+1j], [+1+1j, +1-1j]], dtype=complex) / 2,
+    "C_XYNZ":     np.array([[+1-1j, +1+1j], [-1+1j, +1+1j]], dtype=complex) / 2,
+    "C_XYZ":      np.array([[+1-1j, -1-1j], [+1-1j, +1+1j]], dtype=complex) / 2,
+    "C_ZNYX":     np.array([[+1-1j, +1-1j], [-1-1j, +1+1j]], dtype=complex) / 2,
+    "C_ZYNX":     np.array([[+1-1j, -1+1j], [+1+1j, +1+1j]], dtype=complex) / 2,
+    "C_ZYX":      np.array([[+1+1j, +1+1j], [-1+1j, +1-1j]], dtype=complex) / 2,
+    "H":          np.array([[+1   , +1   ], [+1   , -1   ]], dtype=complex) / np.sqrt(2),
+    "H_NXY":      np.array([[ 0   , +1+1j], [+1-1j,  0   ]], dtype=complex) / np.sqrt(2),
+    "H_NXZ":      np.array([[-1   , +1   ], [+1   , +1   ]], dtype=complex) / np.sqrt(2),
+    "H_NYZ":      np.array([[-1   ,   -1j], [  +1j, +1   ]], dtype=complex) / np.sqrt(2),
+    "H_XY":       np.array([[ 0   , +1-1j], [+1+1j,  0   ]], dtype=complex) / np.sqrt(2),
+    "H_YZ":       np.array([[+1   ,   -1j], [  +1j, -1   ]], dtype=complex) / np.sqrt(2),
+    "S":          np.array([[+1   ,  0   ], [ 0   ,   +1j]], dtype=complex),
+    "SQRT_X":     np.array([[+1+1j, +1-1j], [+1-1j, +1+1j]], dtype=complex) / 2,
+    "SQRT_X_DAG": np.array([[+1-1j, +1+1j], [+1+1j, +1-1j]], dtype=complex) / 2,
+    "SQRT_Y":     np.array([[+1+1j, -1-1j], [+1+1j, +1+1j]], dtype=complex) / 2,
+    "SQRT_Y_DAG": np.array([[+1-1j, +1-1j], [-1+1j, +1-1j]], dtype=complex) / 2,
+    "S_DAG":      np.array([[+1   ,  0   ], [ 0   ,   -1j]], dtype=complex),
+}
+
+
+def rx(angle):
+    sin, cos = np.sin(angle / 2), np.cos(angle / 2)
+    return np.array([
+        [      cos, -1j * sin],
+        [-1j * sin,       cos],
+    ])
+
+
+def rz(phase):
+    exp = np.exp(-1j * phase / 2)
+    return np.array([
+        [exp,            0],
+        [  0, np.conj(exp)],
+    ])
+
+
+def build_stim_circuit(
+    instructions: list[dict[str, Any]],
+    detectors: list[list[str]],
+    observables: list[list[str]],
+    measure_map: dict[str, int],
+) -> stim.Circuit:
+    circuit = stim.Circuit()
+    num_measure = 0
+
+    for ins in instructions:
+        locus = [qubit_index(q) for q in ins["locus"]]
+        match ins["name"]:
+            case "prx":
+                angle, phase = ins["args"]["angle"], ins["args"]["phase"]
+                unitary = rz(phase) @ rx(angle) @ rz(-phase)
+                for k, v in cliffords.items():
+                    phase_diff = np.angle((unitary * np.conj(v))[v.nonzero()][0])
+                    if np.max(abs(unitary - v * np.exp(1j * phase_diff))) < 1e-6:
+                        circuit.append(k, locus)
+                        circuit.append("DEPOLARIZE1", locus, 1e-3)
+                        break
+                else:
+                    raise ValueError(f"Non-Clifford PRX gate with angle {angle} and phase {phase}.")
+            case "cz":
+                circuit.append("CZ", locus)
+                circuit.append("DEPOLARIZE2", locus, 1e-2)
+            case "measure":
+                circuit.append("M", locus)
+                num_measure += 1
+            case "reset":
+                circuit.append("R", locus)
+            case _:
+                raise ValueError(f"Unexpected IQM instruction {ins['name']!r}.")
+
+    for det in detectors:
+        circuit.append("DETECTOR", [stim.target_rec(measure_map[key] - num_measure) for key in det])
+
+    for i, obs in enumerate(observables):
+        circuit.append("OBSERVABLE_INCLUDE", [stim.target_rec(measure_map[key] - num_measure) for key in obs], i)
+
+    return circuit
+
+
+def check_stim_circuit(stim_circuit: stim.Circuit, qiskit_circuit: QuantumCircuit):
+    from qiskit_aer import AerSimulator
+    sim = AerSimulator(method="statevector")
+
+    qiskit_circuit = qiskit_circuit.copy()
+    qiskit_circuit.remove_final_measurements()
+    qiskit_circuit.save_statevector_dict()
+    statevector1 = sim.run(qiskit_circuit).result().data()["statevector"]
+
+    qiskit_circuit = QuantumCircuit.from_qasm_str(stim_circuit.without_noise().decomposed().to_qasm(open_qasm_version=2, skip_dets_and_obs=True))
+    qiskit_circuit.remove_final_measurements()
+    qiskit_circuit.save_statevector_dict()
+    statevector2 = sim.run(qiskit_circuit).result().data()["statevector"]
+
+    assert set(statevector1.keys()) == set(statevector2.keys())
+    phase_diff = np.angle(statevector1["0x0"] * np.conj(statevector2["0x0"]))
+    assert max(abs(statevector1[k] - statevector2[k] * np.exp(1j * phase_diff)) for k in statevector1.keys()) < 1e-6
+
+
 def main() -> int:
     args = parse_args()
     input_path = args.input_circuit
@@ -418,11 +527,20 @@ def main() -> int:
         #     qiskit.qasm3.dump(transpiled_qc, f)
         # print(f"Wrote transpiled circuit to: {qasm_path}")
 
+        stim_circuit = build_stim_circuit(
+            serialized_instructions,
+            input_circuit["detectors"],
+            input_circuit["observables"],
+            measure_map,
+        )
+        # check_stim_circuit(stim_circuit, transpiled_qc)
+
         job = backend.run(transpiled_qc)
         print(f"Job ID: {job.job_id()}")
         job.wait_for_final_state()
         print(f"Job status: {job.status()}")
         counts = job.result().get_counts()
+        shots = sum(counts.values())
 
         counts_path = output_path_for(input_path, "counts")
         with counts_path.open("w", encoding="utf-8") as f:
@@ -442,11 +560,31 @@ def main() -> int:
 
         filtered = {k: v for k, v in counts.items() if check_parity(k, "detectors")}
         successful = {k: v for k, v in filtered.items() if check_parity(k, "observables")}
-        print(f"Post-selection rate: {sum(filtered.values()) / sum(counts.values())}")
-        print(f"Overall success rate: {sum(successful.values()) / sum(counts.values())}")
+        print(f"Post-selection rate: {sum(filtered.values()) / shots}")
+        print(f"Overall success rate with post-selection: {sum(successful.values()) / shots}")
         print(f"Success rate among post-selected shots: {sum(successful.values()) / sum(filtered.values())}")
 
+        def extract_parities(results, check_name):
+            checks = input_circuit[check_name]
+            for check in checks:
+                parity = 0
+                for key in check:
+                    parity ^= results[-measure_map[key] - 1] == "1"
+                yield parity
+
+        dem = stim_circuit.detector_error_model(decompose_errors=True)
+        matching = Matching.from_detector_error_model(dem)
+
+        syndromes = np.array([list(extract_parities(k, "detectors")) for k in counts])
+        observables = np.array([list(extract_parities(k, "observables")) for k in counts])
+        predictions = matching.decode_batch(syndromes)
+        num_errors = np.sum(np.any(predictions != observables, axis=1) * list(counts.values()))
+        print(f"Logical error rate with correction: {num_errors / shots}")
+
         return 0
+
+    except AssertionError:
+        raise
 
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
