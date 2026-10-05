@@ -528,12 +528,15 @@ def main() -> int:
         # print(f"Wrote transpiled circuit to: {qasm_path}")
 
         stim_circuit = build_stim_circuit(
-            serialized_instructions,
+            [
+                serialized_instruction_dict(op)
+                for op in serialize_instructions(qc, {i: s for i, s in enumerate(backend.architecture.qubits)})
+            ],
             input_circuit["detectors"],
             input_circuit["observables"],
             measure_map,
         )
-        # check_stim_circuit(stim_circuit, transpiled_qc)
+        # check_stim_circuit(stim_circuit, qc)
 
         job = backend.run(transpiled_qc)
         print(f"Job ID: {job.job_id()}")
@@ -562,7 +565,8 @@ def main() -> int:
         successful = {k: v for k, v in filtered.items() if check_parity(k, "observables")}
         print(f"Post-selection rate: {sum(filtered.values()) / shots}")
         print(f"Overall success rate with post-selection: {sum(successful.values()) / shots}")
-        print(f"Success rate among post-selected shots: {sum(successful.values()) / sum(filtered.values())}")
+        if filtered:
+            print(f"Success rate among post-selected shots: {sum(successful.values()) / sum(filtered.values())}")
 
         def extract_parities(results, check_name):
             checks = input_circuit[check_name]
