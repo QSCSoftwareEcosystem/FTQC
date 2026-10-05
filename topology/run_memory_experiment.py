@@ -492,7 +492,7 @@ def main() -> int:
         backend = get_backend(url, token, alias, args.simulator)
         # print(f"Initial layout: {qc.layout}")
         print(f"Initial depth: {qc.depth()}, ops: {qc.count_ops()}")
-        transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
+        transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout, optimization_level=1)
         # print(f"Final layout: {transpiled_qc.layout}")
         print(f"Final depth: {transpiled_qc.depth()}, ops: {transpiled_qc.count_ops()}")
         serialized_instructions = [
@@ -522,21 +522,18 @@ def main() -> int:
         print(f"Wrote transpiled IQM circuit to: {output_path}")
 
         # qasm_path = input_path.with_name(f"{input_path.stem}.qasm")
-        # import qiskit.qasm3
+        # from qiskit import qasm3
         # with qasm_path.open("w", encoding="utf-8") as f:
-        #     qiskit.qasm3.dump(transpiled_qc, f)
+        #     qasm3.dump(transpiled_qc, f)
         # print(f"Wrote transpiled circuit to: {qasm_path}")
 
         stim_circuit = build_stim_circuit(
-            [
-                serialized_instruction_dict(op)
-                for op in serialize_instructions(qc, {i: s for i, s in enumerate(backend.architecture.qubits)})
-            ],
+            serialized_instructions,
             input_circuit["detectors"],
             input_circuit["observables"],
             measure_map,
         )
-        # check_stim_circuit(stim_circuit, qc)
+        # check_stim_circuit(stim_circuit, transpiled_qc)
 
         job = backend.run(transpiled_qc)
         print(f"Job ID: {job.job_id()}")
