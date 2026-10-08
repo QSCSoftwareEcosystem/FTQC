@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from qiskit import QuantumCircuit
-from iqm.qiskit_iqm.fake_backends.fake_garnet import IQMFakeGarnet
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 from iqm.qiskit_iqm.qiskit_to_iqm import serialize_instructions
@@ -172,7 +171,15 @@ def build_quantum_circuit(circuit: dict[str, Any]) -> tuple[QuantumCircuit, list
 
 def get_backend(url: str, token: str | None, alias: str, simulator: bool):
     if simulator:
-        return IQMFakeGarnet()
+        match alias:
+            case "garnet" | "default":
+                from iqm.qiskit_iqm.fake_backends.fake_garnet import IQMFakeGarnet
+                return IQMFakeGarnet()
+            case "aphrodite":
+                from iqm.qiskit_iqm.fake_backends.fake_aphrodite import IQMFakeAphrodite
+                return IQMFakeAphrodite()
+            case _:
+                raise ValueError(f"Unsupported simulator alias {alias!r}.")
 
     provider_kwargs = {"url": url, "quantum_computer": alias}
     if token is not None:
