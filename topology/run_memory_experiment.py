@@ -14,6 +14,8 @@ from qiskit import QuantumCircuit
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 from iqm.qiskit_iqm.qiskit_to_iqm import serialize_instructions
+from iqm.qubit_selector.qiskit_utils import perform_backend_transpilation
+from iqm.qubit_selector.qubit_selector import CostEvaluator, LayoutGenerator
 from pymatching import Matching
 import numpy as np
 import stim
@@ -497,9 +499,11 @@ def main() -> int:
         qc, initial_layout, measure_map = build_quantum_circuit(input_circuit)
 
         backend = get_backend(url, token, alias, args.simulator)
+        if not args.simulator:
+            initial_layout = CostEvaluator(backend, qc).get_top_layouts()[0][0]
         # print(f"Initial layout: {qc.layout}")
         print(f"Initial depth: {qc.depth()}, ops: {qc.count_ops()}")
-        transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout, optimization_level=1)
+        transpiled_qc = perform_backend_transpilation([qc], backend, initial_layout, backend.coupling_map, qiskit_optim_level=1)[0]
         # print(f"Final layout: {transpiled_qc.layout}")
         print(f"Final depth: {transpiled_qc.depth()}, ops: {transpiled_qc.count_ops()}")
         serialized_instructions = [
