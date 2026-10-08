@@ -25,6 +25,7 @@
 func.func @memory() -> () {
   %l0 = ftqc.init_zero : <#code>
   %l1, %syn = ftqc.extract_syndrome %l0 : <#code> -> (<#code>, <1>)
-  %b0 = ftqc.logical_measure %l1 : (<#code>) -> i1
+  // %b0 = ftqc.logical_measure %l1 : (<#code>) -> i1 // 1 logical qubit
+  %b0, %b1 = ftqc.logical_measure %l1 : (<#code>) -> i1, i1 // 2 logical qubits
   return
 }

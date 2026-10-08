@@ -509,11 +509,12 @@ def FTQC_LogicalMeasureOp : FTQC_Op<"logical_measure"> {
     OptionalAttr<I32Attr>        : $basis,     // 0=Z, 1=X
     Optional<FTQC_PauliFrameType>: $frame
   );
-  let results = (outs I1:$result);
+  let results = (outs Variadic<I1>:$result);
   let assemblyFormat = [{
     $logicalQubit (`,` $frame^)? attr-dict `:`
-    `(` type($logicalQubit) (`,` type($frame)^)? `)` `->` `i1`
+    `(` type($logicalQubit) (`,` type($frame)^)? `)` `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

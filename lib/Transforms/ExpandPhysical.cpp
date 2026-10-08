@@ -308,7 +308,7 @@ struct FTQCExpandPhysicalPassImpl
           acc = acc ? b.create<arith::XOrIOp>(loc, acc, bit).getResult()
                     : bit;
         }
-        meas.getResult().replaceAllUsesWith(acc);
+        meas.getResult().replaceAllUsesWith(SmallVector<Value>{acc});
         toErase.push_back(op);
       } else {
         // Leave non-quantum ops (func.return, arith, resource_annotation) alone.

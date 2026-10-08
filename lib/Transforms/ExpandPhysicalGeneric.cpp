@@ -242,7 +242,8 @@ struct LogicalXPattern : public OpConversionPattern<LogicalXOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> values = adaptor.getQubit();
-    applyPauliString(code.getLogicalX(), values, rewriter, op.getLoc());
+    for (unsigned i = 0; i < code.getK(); ++i)
+      applyPauliString(code.getLogicalX(i), values, rewriter, op.getLoc());
     rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
@@ -256,7 +257,8 @@ struct LogicalZPattern : public OpConversionPattern<LogicalZOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> values = adaptor.getQubit();
-    applyPauliString(code.getLogicalZ(), values, rewriter, op.getLoc());
+    for (unsigned i = 0; i < code.getK(); ++i)
+      applyPauliString(code.getLogicalZ(i), values, rewriter, op.getLoc());
     rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
@@ -270,8 +272,10 @@ struct LogicalYPattern : public OpConversionPattern<LogicalYOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getQubit().getType().getCode().getStabilizerCode();
     SmallVector<Value> values = adaptor.getQubit();
-    applyPauliString(code.getLogicalX(), values, rewriter, op.getLoc());
-    applyPauliString(code.getLogicalZ(), values, rewriter, op.getLoc());
+    for (unsigned i = 0; i < code.getK(); ++i) {
+      applyPauliString(code.getLogicalX(i), values, rewriter, op.getLoc());
+      applyPauliString(code.getLogicalZ(i), values, rewriter, op.getLoc());
+    }
     rewriter.replaceOpWithMultiple(op, {std::move(values)});
     return success();
   }
@@ -285,13 +289,12 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto code = op.getLogicalQubit().getType().getCode().getStabilizerCode();
     auto isXBasis = op.getBasis() == 1;
-    auto &paulis = isXBasis ? code.getLogicalX() : code.getLogicalZ();
     auto H = isXBasis ? code.getHx() : code.getHz();
     size_t baseIndex = code.getN() + (isXBasis ? 0 : code.getHx().size());
     Location loc = op.getLoc();
     ValueRange values = adaptor.getLogicalQubit();
-    SmallVector<Value> bits, observable;
-    Value acc;
+    SmallVector<Value> bits, results;
+
     for (size_t i = 0; i < code.getN(); ++i) {
       Value qubit = values[i];
       if (isXBasis)
@@ -302,17 +305,8 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
                                          rewriter.getStringAttr("m"), nullptr,
                                          nullptr, nullptr, nullptr);
       bits.push_back(bit);
-      if (paulis[i] == (isXBasis ? Pauli::X : Pauli::Z)) {
-        observable.push_back(bit);
-        acc = acc ? arith::XOrIOp::create(rewriter, loc, acc, bit) : bit;
-      } else if (paulis[i] != Pauli::I) {
-        op.emitError()
-            << "ftqc-expand-physical-generic: only CSS codes where logical "
-            << "ZX"[isXBasis] << " operators are products of " << "ZX"[isXBasis]
-            << " and I are supported";
-        return failure();
-      }
     }
+
     for (size_t i = 0; i < H.size(); ++i) {
       auto &row = H[i];
       SmallVector<Value> detector;
@@ -323,8 +317,28 @@ struct LogicalMeasurePattern : public OpConversionPattern<LogicalMeasureOp> {
           detector.push_back(bits[j]);
       QPhysDetectorOp::create(rewriter, loc, detector);
     }
-    QPhysObservableOp::create(rewriter, loc, observable);
-    rewriter.replaceOp(op, acc);
+
+    for (size_t i = 0; i < code.getK(); ++i) {
+      auto &paulis = isXBasis ? code.getLogicalX(i) : code.getLogicalZ(i);
+      SmallVector<Value> observable;
+      Value acc;
+      for (size_t j = 0; j < code.getN(); ++j) {
+        if (paulis[j] == (isXBasis ? Pauli::X : Pauli::Z)) {
+          observable.push_back(bits[j]);
+          acc = acc ? arith::XOrIOp::create(rewriter, loc, acc, bits[j]) : bits[j];
+        } else if (paulis[j] != Pauli::I) {
+          op.emitError()
+              << "ftqc-expand-physical-generic: only CSS codes where logical "
+              << "ZX"[isXBasis] << " operators are products of " << "ZX"[isXBasis]
+              << " and I are supported";
+          return failure();
+        }
+      }
+      QPhysObservableOp::create(rewriter, loc, observable);
+      results.push_back(acc);
+    }
+
+    rewriter.replaceOp(op, results);
     return success();
   }
 };

@@ -42,11 +42,10 @@ mlir::LogicalResult ExtractSyndromeOp::verify() {
     return emitOpError("second result must be !ftqc.syndrome<n>");
 
   // Check syndrome width matches code stabilizer count.
-  unsigned expected = lqIn.getCode().getPhysicalQubits() - 1;
-  // For CSS codes: 2*(n-k) stabilizers = 2*(n-1) for [[n,1,d]] codes.
-  // Steane: 2*(7-1)/2 = 6 (3X + 3Z). Surface d: 2*(d^2-1).
+  unsigned expected = lqIn.getCode().getAncillaQubits();
   // We allow any syndrome width; just warn if it looks wrong.
-  (void)expected;
+  // if (synType.getWidth() != expected)
+  //   emitOpError("syndrome must have width ") << expected;
   return mlir::success();
 }
 
@@ -80,6 +79,20 @@ mlir::LogicalResult LogicalCNOTOp::verify() {
   if (ctrlIn.getCode() != tgtIn.getCode())
     return emitOpError("control and target must use the same code "
                        "(transversal CNOT requires same block structure)");
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// LogicalMeasureOp
+//===----------------------------------------------------------------------===//
+
+mlir::LogicalResult LogicalMeasureOp::verify() {
+  auto lqIn = dyn_cast<LogicalQubitType>(getLogicalQubit().getType());
+  unsigned logicalQubits = lqIn.getCode().getStabilizerCode().getK();
+  if (getResult().size() != logicalQubits)
+    return emitOpError("must have ")
+           << logicalQubits
+           << " i1 outputs, to match logical qubit count for code";
   return mlir::success();
 }
 
