@@ -17,10 +17,14 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
+#define GEN_PASS_DEF_FTQCQPHYSTOIQMJSONPASS
+#include "FTQC/Transforms/Passes.h.inc"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace mlir;
@@ -29,13 +33,8 @@ using namespace mlir::ftqc;
 namespace {
 
 struct FTQCQPhysToIQMJSONPassImpl
-    : public PassWrapper<FTQCQPhysToIQMJSONPassImpl, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FTQCQPhysToIQMJSONPassImpl)
-
-  StringRef getArgument() const override { return "ftqc-qphys-to-iqm-json"; }
-  StringRef getDescription() const override {
-    return "Lower the physical qphys IR to IQM JSON";
-  }
+    : public ::impl::FTQCQPhysToIQMJSONPassBase<FTQCQPhysToIQMJSONPassImpl> {
+  using FTQCQPhysToIQMJSONPassBase::FTQCQPhysToIQMJSONPassBase;
 
   // Instruction accumulator for the current function.
   std::vector<std::string> instrs, detectors, observables;
@@ -147,8 +146,21 @@ struct FTQCQPhysToIQMJSONPassImpl
     });
 
     os.flush();
-    llvm::errs() << buf;
     module->setAttr("ftqc.iqm_json", StringAttr::get(&getContext(), buf));
+
+    if (!outputFile.empty()) {
+      std::error_code ec;
+      llvm::raw_fd_ostream file(outputFile, ec);
+      if (ec) {
+        module.emitError("ftqc-qphys-to-iqm-json: cannot open output file '")
+            << outputFile << "': " << ec.message();
+        signalPassFailure();
+        return;
+      }
+      file << buf;
+    } else {
+      llvm::errs() << buf;
+    }
   }
 };
 

@@ -662,6 +662,10 @@ def FTQCQPhysToIQMJSONPass : Pass<"ftqc-qphys-to-iqm-json", "mlir::ModuleOp"> {
     not from layout logic duplicated inside the emitter.
   }];
   let dependentDialects = ["mlir::ftqc::FTQCDialect"];
+  let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write IQM JSON output to this path (empty = write to stderr)">,
+  ];
 }
 
 def FTQCQPhysToQIRPass : Pass<"ftqc-qphys-to-qir", "mlir::ModuleOp"> {
@@ -689,6 +693,8 @@ def FTQCQPhysToSTIMPass : Pass<"ftqc-qphys-to-stim", "mlir::ModuleOp"> {
   }];
   let dependentDialects = ["mlir::ftqc::FTQCDialect"];
   let options = [
+    Option<"outputFile", "output-file", "std::string", "\"\"",
+           "Write STIM output to this path (empty = write to stderr)">,
     Option<"physErr", "physical-error-rate", "double", "0.0",
            "Depolarizing error rate per physical op (0 = noiseless)">,
   ];

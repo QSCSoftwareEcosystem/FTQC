@@ -23,11 +23,15 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
+#define GEN_PASS_DEF_FTQCQPHYSTOSTIMPASS
+#include "FTQC/Transforms/Passes.h.inc"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace mlir;
@@ -36,21 +40,8 @@ using namespace mlir::ftqc;
 namespace {
 
 struct FTQCQPhysToSTIMPassImpl
-    : public PassWrapper<FTQCQPhysToSTIMPassImpl, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FTQCQPhysToSTIMPassImpl)
-
-  FTQCQPhysToSTIMPassImpl() = default;
-  FTQCQPhysToSTIMPassImpl(const FTQCQPhysToSTIMPassImpl &o) : PassWrapper(o) {}
-
-  Option<double> physErr{
-      *this, "physical-error-rate",
-      llvm::cl::desc("Depolarizing error rate per physical op (0 = noiseless)"),
-      llvm::cl::init(0.0)};
-
-  StringRef getArgument() const override { return "ftqc-qphys-to-stim"; }
-  StringRef getDescription() const override {
-    return "Lower the physical qphys IR to a Stim circuit (with detectors)";
-  }
+    : public ::impl::FTQCQPhysToSTIMPassBase<FTQCQPhysToSTIMPassImpl> {
+  using FTQCQPhysToSTIMPassBase::FTQCQPhysToSTIMPassBase;
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
@@ -181,8 +172,21 @@ struct FTQCQPhysToSTIMPassImpl
     }
 
     os.flush();
-    llvm::outs() << buf << "\n";
     module->setAttr("ftqc.stim_phys", StringAttr::get(&getContext(), buf));
+
+    if (!outputFile.empty()) {
+      std::error_code ec;
+      llvm::raw_fd_ostream file(outputFile, ec);
+      if (ec) {
+        module.emitError("ftqc-qphys-to-stim: cannot open output file '")
+            << outputFile << "': " << ec.message();
+        signalPassFailure();
+        return;
+      }
+      file << buf;
+    } else {
+      llvm::errs() << buf;
+    }
   }
 };
 
