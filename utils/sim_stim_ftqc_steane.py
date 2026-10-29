@@ -2,6 +2,7 @@
 """Monte Carlo MWPM simulation of compiler-generated Steane [[7,1,3]] STIM.
 
 Usage: realqpu/bin/python utils/sim_stim_ftqc_steane.py --input circuit.stim
+       [--error-rate P]
 
 Sweep the same 18 physical error rates (1e-4 to about 1.5e-2) as
 sim_stim_ftqc_loop.py. Existing DEPOLARIZE1/2 and X/Y/Z_ERROR probabilities
@@ -12,6 +13,9 @@ Other stochastic channels and noisy measurement arguments are rejected to
 avoid mixing fixed noise with swept noise. The input must already contain
 Steane encoding, syndrome extraction, DETECTORs and OBSERVABLE_INCLUDEs;
 this script does not encode a bare circuit or invoke ftqc-opt.
+
+With --error-rate, only the specified physical error rate is simulated. A
+value of 0 preserves the input circuit's error probabilities unchanged.
 
 p_shot is the fraction of shots with ANY incorrectly decoded observable.
 Without observables it is unavailable (an empty CSV field). Non-deterministic
@@ -120,7 +124,12 @@ def simulate(circuit: stim.Circuit, num_shots: int) -> float | None:
     return failures / num_shots
 
 
-def run_sweep(input_file: Path, num_shots: int, output_csv: Path) -> None:
+def run_sweep(
+    input_file: Path,
+    num_shots: int,
+    output_csv: Path,
+    error_rate: float | None = None,
+) -> None:
     source = stim.Circuit.from_file(input_file)
     if not len(source):
         raise ValueError("Input STIM circuit is empty")
@@ -128,13 +137,20 @@ def run_sweep(input_file: Path, num_shots: int, output_csv: Path) -> None:
     print(f"Input: {input_file} | shots per point: {num_shots:,}")
     print(f"Circuit: {source.num_qubits} qubits, {source.num_detectors} detectors, "
           f"{source.num_observables} observables")
-    print("Noise: " + ("replace existing probabilities" if explicit_noise
-                       else "insert compiler-style gate/reset/measurement noise"))
+    if error_rate == 0:
+        print("Noise: preserve input circuit probabilities")
+    else:
+        print("Noise: " + ("replace existing probabilities" if explicit_noise
+                           else "insert compiler-style gate/reset/measurement noise"))
     if not source.num_observables:
         print("WARNING: no logical observables; p_shot will be unavailable.")
     results = []
-    for p in ERROR_RATES:
-        circuit = compile_stim_circuit(source, float(p), explicit_noise=explicit_noise)
+    error_rates = ERROR_RATES if error_rate is None else [error_rate]
+    for p in error_rates:
+        p = float(p)
+        circuit = source.copy() if p == 0 else compile_stim_circuit(
+            source, p, explicit_noise=explicit_noise
+        )
         try:
             p_shot = simulate(circuit, num_shots)
         except (ValueError, RuntimeError) as exc:
@@ -145,7 +161,7 @@ def run_sweep(input_file: Path, num_shots: int, output_csv: Path) -> None:
             benchmark=input_file.stem,
             # STIM does not encode the number of Steane logical blocks.
             n_logical=None,
-            n_phys=circuit.num_qubits, p=float(p), p_shot=p_shot,
+            n_phys=circuit.num_qubits, p=p, p_shot=p_shot,
             detectors=circuit.num_detectors, observables=circuit.num_observables,
         ))
     with output_csv.open("w", newline="") as stream:
@@ -163,13 +179,21 @@ def main() -> int:
     parser.add_argument("--input", type=Path, required=True, help="Input STIM file path")
     parser.add_argument("--output", type=Path, default=Path("stim_ftqc_steane_results.csv"),
                         help="CSV output path (default: stim_ftqc_steane_results.csv)")
+    parser.add_argument(
+        "--error-rate", type=float,
+        help=("Simulate only this physical error rate instead of the 18-rate "
+              "sweep; 0 preserves input circuit error probabilities"),
+    )
     args = parser.parse_args()
     if args.shots <= 0:
         parser.error("--shots must be positive")
+    if (args.error_rate is not None
+            and not 0 <= args.error_rate <= 1):
+        parser.error("--error-rate must be between 0 and 1")
     if args.input.resolve() == args.output.resolve():
         parser.error("--output must differ from --input")
     try:
-        run_sweep(args.input, args.shots, args.output)
+        run_sweep(args.input, args.shots, args.output, args.error_rate)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
