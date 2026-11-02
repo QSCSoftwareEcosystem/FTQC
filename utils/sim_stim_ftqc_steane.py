@@ -110,7 +110,8 @@ def simulate(circuit: stim.Circuit, num_shots: int) -> float | None:
     if circuit.num_observables == 0:
         return None
     dem = circuit.detector_error_model(
-        decompose_errors=True, approximate_disjoint_errors=True
+        decompose_errors=True, approximate_disjoint_errors=True,
+		ignore_decomposition_failures=True
     )
     matcher = pymatching.Matching.from_detector_error_model(dem)
     sampler = circuit.compile_detector_sampler()

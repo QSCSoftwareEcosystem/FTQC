@@ -9,3 +9,9 @@ install/
 out/
 .clangd
 realqpu/
+AGENTS.md
+iqm_json_out/
+test/Transforms/ExpandPhysical/
+topology/EncodeTwoQubits/
+topology/__pycache__/
+gitignore_local
