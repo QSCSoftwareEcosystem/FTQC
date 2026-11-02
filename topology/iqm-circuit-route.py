@@ -10,16 +10,21 @@ Example:
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON
     python iqm-circuit-route.py --input-circuit inputCircuit.JSON \
         --token $IQM_TOKEN --base-url https://qccsw.ccs.ornl.gov \
-    --qc-alias [my-quantum-computer] --shots 1024
+    --qc-alias [my-quantum-computer] --shots 1024 --opt-level 2
 
 The optional --shots argument is an integer number of backend shots. A
 positive value submits the transpiled circuit to the backend; the default
 value, 0, skips backend submission.
+The optional --opt-level argument sets the transpiler optimization level; its
+default value is 2, or 1 when --gen-stim is specified.
+The optional --gen-stim argument is a physical error rate. When present, a
+semantically equivalent noisy STIM circuit is written alongside the IQM JSON.
 If the input filename contains "-transpiled" and shots is positive, submit
 the input circuit without transpiling it again or writing another output file.
 
 Output:
     inputCircuit-transpiled.JSON
+    inputCircuit-transpiled.stim (when --gen-stim is specified)
     results-inputCircuit.JSON (when shots > 0), containing physical counts,
     logical_counts_raw, logical_counts_steane_corrected, and measurement order.
     Logical histogram strings list ascending logical IDs from left to right.
@@ -56,6 +61,9 @@ from pathlib import Path
 from typing import Any
 
 from qiskit import QuantumCircuit
+from qiskit.circuit.library import RGate
+from qiskit.quantum_info import Clifford
+import stim
 from iqm.qiskit_iqm.iqm_naive_move_pass import transpile_to_IQM
 from iqm.qiskit_iqm.iqm_provider import IQMProvider
 
@@ -65,6 +73,7 @@ _QUBIT_RE = re.compile(r"^QB(\d+)$", re.IGNORECASE)
 
 _DATA_MEASUREMENT_RE = re.compile(r"^mL(\d+)_QB\d+_\d+$")
 _SYNDROME_MEASUREMENT_RE = re.compile(r"^s([xz])L(\d+)S(\d+)_QB\d+_\d+$")
+_QISKIT_MEASUREMENT_KEY_RE = re.compile(r"^.*_(\d+)_(\d+)_(\d+)$")
 STEANE_STAB = [[0, 2, 4, 6], [1, 2, 5, 6], [3, 4, 5, 6]]
 
 
@@ -263,6 +272,21 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Number of shots to submit (default: 0; use 0 to skip submission).",
     )
+    parser.add_argument(
+        "--opt-level",
+        type=int,
+        default=None,
+        help="Transpiler optimization level (default: 2, or 1 with --gen-stim).",
+    )
+    parser.add_argument(
+        "--gen-stim",
+        type=float,
+        metavar="PHYSICAL_ERROR_RATE",
+        help=(
+            "Also generate a noisy STIM circuit using this physical error rate "
+            "(must be between 0 and 1)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -276,6 +300,285 @@ def output_path_for(input_path: Path) -> Path:
 def results_path_for(input_path: Path) -> Path:
     """Prefix the input filename with 'results-'."""
     return input_path.with_name(f"results-{input_path.name}")
+
+
+def stim_path_for(iqm_output_path: Path) -> Path:
+    """Change the transpiled IQM output filename extension to '.stim'."""
+    return iqm_output_path.with_suffix(".stim")
+
+
+def _stim_component_indices(
+    serialized_instructions: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Assign STIM indices while preserving the conventional QBn -> n-1 map."""
+    components = {
+        str(component)
+        for instruction in serialized_instructions
+        for component in instruction.get("locus", [])
+    }
+    mapping = {
+        component: qubit_index(component)
+        for component in components
+        if _QUBIT_RE.fullmatch(component)
+    }
+    next_index = max(mapping.values(), default=-1) + 1
+    for component in sorted(components - mapping.keys()):
+        mapping[component] = next_index
+        next_index += 1
+    return mapping
+
+
+def _append_stim_prx(
+    circuit: stim.Circuit, target: int, args: dict[str, Any], instruction: dict[str, Any]
+) -> None:
+    """Append an exact Clifford decomposition of an IQM PRX instruction."""
+    try:
+        if {"angle_t", "phase_t"}.issubset(args):
+            angle = float(args["angle_t"]) * math.tau
+            phase = float(args["phase_t"]) * math.tau
+        elif {"angle", "phase"}.issubset(args):
+            angle = float(args["angle"])
+            phase = float(args["phase"])
+        else:
+            raise KeyError("missing PRX angle and phase arguments")
+        decomposition = Clifford(RGate(angle, phase)).to_circuit()
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise ValueError(
+            "Cannot convert PRX to STIM: expected numeric angle_t/phase_t in "
+            f"turns or angle/phase in radians in {instruction!r}"
+        ) from exc
+    except Exception as exc:
+        raise ValueError(
+            "Cannot convert non-Clifford PRX instruction to STIM exactly: "
+            f"{instruction!r}"
+        ) from exc
+
+    stim_names = {
+        "id": "I",
+        "x": "X",
+        "y": "Y",
+        "z": "Z",
+        "h": "H",
+        "s": "S",
+        "sdg": "S_DAG",
+        "sx": "SQRT_X",
+        "sxdg": "SQRT_X_DAG",
+    }
+    for operation in decomposition.data:
+        name = operation.operation.name.lower()
+        if name not in stim_names:
+            raise ValueError(
+                "Cannot express the Clifford decomposition of PRX in STIM; "
+                f"unsupported gate {name!r} in {instruction!r}"
+            )
+        circuit.append(stim_names[name], [target])
+
+
+def make_stim_circuit(
+    serialized_instructions: list[dict[str, Any]],
+    physical_error_rate: float,
+    measurement_keys: list[str] | None = None,
+) -> tuple[stim.Circuit, dict[str, int]]:
+    """Convert serialized IQM operations to an equivalent noisy STIM circuit.
+
+    ``measurement_keys`` is in classical-bit order.  Qiskit does not retain
+    the original IQM measurement keys while routing, so the caller supplies
+    them separately when Steane detector annotations are required.
+    """
+    if not math.isfinite(physical_error_rate) or not 0 <= physical_error_rate <= 1:
+        raise ValueError("--gen-stim physical error rate must be between 0 and 1")
+
+    component_indices = _stim_component_indices(serialized_instructions)
+    circuit = stim.Circuit()
+    measurement_count = 0
+    measurement_key_index = 0
+    used_measurement_key_indices: set[int] = set()
+    previous_syndromes: dict[tuple[int, str, int], int] = {}
+    pending_syndromes: dict[tuple[int, str], dict[int, int]] = {}
+    data_measurements: dict[int, list[int]] = {}
+
+    steane_logical_ids: set[int] = set()
+    keys_to_scan = measurement_keys
+    if keys_to_scan is None:
+        keys_to_scan = [
+            str(instruction.get("args", {}).get("key", ""))
+            for instruction in serialized_instructions
+            if str(instruction.get("name", "")).lower() == "measure"
+        ]
+    for key in keys_to_scan:
+        match = _DATA_MEASUREMENT_RE.fullmatch(key)
+        if match:
+            steane_logical_ids.add(int(match.group(1)))
+    observable_ids = {
+        logical_id: observable_id
+        for observable_id, logical_id in enumerate(sorted(steane_logical_ids))
+    }
+
+    def append_steane_annotations(key: str, record_index: int) -> None:
+        """Append annotations completed by one named measurement record."""
+        syndrome_match = _SYNDROME_MEASUREMENT_RE.fullmatch(key)
+        if syndrome_match:
+            family, logical_id_text, syndrome_id_text = syndrome_match.groups()
+            logical_id, syndrome_id = int(logical_id_text), int(syndrome_id_text)
+            row = syndrome_id - (3 if family == "z" else 0)
+            if row not in range(3):
+                raise ValueError(f"Invalid Steane stabilizer ID in {key!r}")
+            block = (logical_id, family)
+            pending = pending_syndromes.setdefault(block, {})
+            if row in pending:
+                raise ValueError(f"Duplicate Steane syndrome row in round: {key!r}")
+            pending[row] = record_index
+            if len(pending) == 3:
+                for completed_row in range(3):
+                    current = pending[completed_row]
+                    detector_targets = [stim.target_rec(current - measurement_count)]
+                    previous = previous_syndromes.get(
+                        (logical_id, family, completed_row)
+                    )
+                    if previous is not None:
+                        detector_targets.append(
+                            stim.target_rec(previous - measurement_count)
+                        )
+                    circuit.append("DETECTOR", detector_targets)
+                    previous_syndromes[(logical_id, family, completed_row)] = current
+                pending.clear()
+            return
+
+        data_match = _DATA_MEASUREMENT_RE.fullmatch(key)
+        if data_match:
+            logical_id = int(data_match.group(1))
+            records = data_measurements.setdefault(logical_id, [])
+            records.append(record_index)
+            if len(records) == 7:
+                circuit.append(
+                    "OBSERVABLE_INCLUDE",
+                    [stim.target_rec(record - measurement_count) for record in records],
+                    observable_ids[logical_id],
+                )
+            elif len(records) > 7:
+                raise ValueError(
+                    f"Logical qubit {logical_id} has more than 7 final data measurements"
+                )
+
+    for instruction in serialized_instructions:
+        name = str(instruction.get("name", "")).lower()
+        locus = instruction.get("locus", [])
+        args = instruction.get("args", {})
+        if not isinstance(locus, list) or not isinstance(args, dict):
+            raise ValueError(f"Malformed IQM instruction: {instruction!r}")
+        targets = [component_indices[str(component)] for component in locus]
+
+        if name == "prx":
+            if len(targets) != 1:
+                raise ValueError(f"Cannot convert malformed PRX to STIM: {instruction!r}")
+            _append_stim_prx(circuit, targets[0], args, instruction)
+            circuit.append("DEPOLARIZE1", targets, physical_error_rate)
+        elif name == "cz":
+            if len(targets) != 2:
+                raise ValueError(f"Cannot convert malformed CZ to STIM: {instruction!r}")
+            circuit.append("CZ", targets)
+            circuit.append("DEPOLARIZE2", targets, physical_error_rate)
+        elif name in {"move", "swap"}:
+            if len(targets) != 2:
+                raise ValueError(
+                    f"Cannot convert malformed {name.upper()} to STIM: {instruction!r}"
+                )
+            # IQM MOVE transfers quantum state between a qubit and resonator;
+            # SWAP is the equivalent state transformation in STIM.
+            circuit.append("SWAP", targets)
+            circuit.append("DEPOLARIZE2", targets, physical_error_rate)
+        elif name == "reset":
+            if not targets:
+                raise ValueError(f"Cannot convert malformed reset to STIM: {instruction!r}")
+            circuit.append("R", targets)
+            circuit.append("X_ERROR", targets, physical_error_rate)
+        elif name == "measure":
+            if not targets:
+                raise ValueError(f"Cannot convert malformed measure to STIM: {instruction!r}")
+            # Measurement noise must precede M to affect its recorded result.
+            circuit.append("X_ERROR", targets, physical_error_rate)
+            circuit.append("M", targets)
+            first_record = measurement_count
+            measurement_count += len(targets)
+            if measurement_keys is not None:
+                if measurement_key_index + len(targets) > len(measurement_keys):
+                    raise ValueError("More routed measurements than input measurement keys")
+                native_key = str(args.get("key", ""))
+                native_match = _QISKIT_MEASUREMENT_KEY_RE.fullmatch(native_key)
+                if len(targets) == 1 and native_match:
+                    register_length, register_index, classical_bit = map(
+                        int, native_match.groups()
+                    )
+                    if register_index != 0 or register_length != len(measurement_keys):
+                        raise ValueError(
+                            f"Unexpected routed measurement key {native_key!r}"
+                        )
+                    if classical_bit >= len(measurement_keys):
+                        raise ValueError(f"Invalid routed measurement key {native_key!r}")
+                    instruction_key_indices = [classical_bit]
+                    instruction_keys = [measurement_keys[classical_bit]]
+                else:
+                    instruction_key_indices = list(range(
+                        measurement_key_index, measurement_key_index + len(targets)
+                    ))
+                    instruction_keys = [
+                        measurement_keys[index] for index in instruction_key_indices
+                    ]
+                for index in instruction_key_indices:
+                    if index in used_measurement_key_indices:
+                        raise ValueError(
+                            f"Classical bit {index} is measured more than once"
+                        )
+                    used_measurement_key_indices.add(index)
+            else:
+                key = args.get("key")
+                instruction_keys = [str(key)] if key is not None else []
+                if len(targets) != len(instruction_keys) and instruction_keys:
+                    raise ValueError(
+                        "A multi-qubit IQM measurement requires one measurement key "
+                        "per target to generate Steane STIM annotations"
+                    )
+            for offset, key in enumerate(instruction_keys):
+                append_steane_annotations(key, first_record + offset)
+            measurement_key_index += len(targets)
+        else:
+            raise ValueError(
+                f"Cannot convert IQM operation {name!r} to STIM: {instruction!r}"
+            )
+
+    if measurement_keys is not None and len(used_measurement_key_indices) != len(
+        measurement_keys
+    ):
+        raise ValueError("Fewer routed measurements than input measurement keys")
+    incomplete = [block for block, rows in pending_syndromes.items() if rows]
+    if incomplete:
+        raise ValueError(f"Incomplete Steane syndrome round for {incomplete[0]}")
+    for logical_id, records in data_measurements.items():
+        if len(records) != 7:
+            raise ValueError(
+                f"Logical qubit {logical_id} requires exactly 7 data measurements; "
+                f"found {len(records)}"
+            )
+
+    return circuit, component_indices
+
+
+def write_stim_circuit(
+    output_path: Path,
+    serialized_instructions: list[dict[str, Any]],
+    physical_error_rate: float,
+    measurement_keys: list[str] | None = None,
+) -> None:
+    circuit, component_indices = make_stim_circuit(
+        serialized_instructions, physical_error_rate, measurement_keys
+    )
+    with output_path.open("w", encoding="utf-8") as f:
+        f.write("# IQM component to STIM qubit mapping:\n")
+        for component, index in sorted(component_indices.items(), key=lambda item: item[1]):
+            f.write(f"# {component} -> {index}\n")
+        f.write(str(circuit))
+        if str(circuit) and not str(circuit).endswith("\n"):
+            f.write("\n")
 
 
 def qubit_index(qubit_name: str) -> int:
@@ -638,9 +941,22 @@ def make_metrics(
 def main() -> int:
     args = parse_args()
     input_path = args.input_circuit
+    optimization_level = (
+        args.opt_level
+        if args.opt_level is not None
+        else (1 if args.gen_stim is not None else 2)
+    )
 
     if not input_path.is_file():
         print(f"error: input file does not exist: {input_path}", file=sys.stderr)
+        return 2
+    if args.gen_stim is not None and (
+        not math.isfinite(args.gen_stim) or not 0 <= args.gen_stim <= 1
+    ):
+        print(
+            "error: --gen-stim physical error rate must be between 0 and 1",
+            file=sys.stderr,
+        )
         return 2
 
     output_path = output_path_for(input_path)
@@ -701,7 +1017,12 @@ def main() -> int:
                 print(f"metrics: {metrics}")
             return 0
 
-        transpiled_qc = transpile_to_IQM(qc, backend, initial_layout=initial_layout)
+        transpiled_qc = transpile_to_IQM(
+            qc,
+            backend,
+            initial_layout=initial_layout,
+            optimization_level=optimization_level,
+        )
         if DEBUG_PRINT >= 1:
             print(f"Circuit layout: {transpiled_qc.layout}")
         if args.shots > 0:
@@ -742,11 +1063,25 @@ def main() -> int:
             ),
         }
 
+        stim_output_path = None
+        if args.gen_stim is not None:
+            stim_output_path = stim_path_for(output_path)
+            # Convert before updating the IQM output so an unsupported gate
+            # does not leave this invocation's pair of outputs half-written.
+            write_stim_circuit(
+                stim_output_path,
+                serialized_instructions,
+                args.gen_stim,
+                [key for key, _ in sorted(key_to_cbit.items(), key=lambda item: item[1])],
+            )
+
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
             f.write("\n")
 
         print(f"Wrote transpiled IQM circuit to: {output_path}")
+        if stim_output_path is not None:
+            print(f"Wrote transpiled STIM circuit to: {stim_output_path}")
         return 0
 
     except Exception as exc:
