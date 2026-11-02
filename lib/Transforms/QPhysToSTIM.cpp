@@ -7,8 +7,8 @@
 // emitters submit.  It reconstructs `DETECTOR` records and the logical
 // `OBSERVABLE_INCLUDE` from the QEC-structure metadata (role / stabilizer /
 // round / logical) that expand-physical stamps on each qphys.measure:
-//   * a stabilizer measured in round r and r-1 yields a round-difference
-//     detector (always deterministic under no noise);
+//   * a stabilizer's first measurement yields a detector against the expected
+//     zero syndrome, while later rounds yield round-difference detectors;
 //   * the data measurements of a logical qubit XOR into its logical observable.
 //
 // Depolarizing noise is added at rate `physical-error-rate` (0 = noiseless).
@@ -120,12 +120,16 @@ struct FTQCQPhysToSTIMPassImpl
             os << "X_ERROR(" << p << ") " << i << "\n";
           os << "M " << i << "\n";
           long cur = nMeas++;
-          // Round-difference detector: same stabilizer, consecutive rounds.
+          // The first measurement is compared against the implicit zero
+          // syndrome.  Later measurements are compared with the same
+          // stabilizer from the preceding round.
           if (auto sAttr = m.getStabilizer()) {
             int64_t sid = *sAttr;
             auto it = lastForStab.find(sid);
             if (it != lastForStab.end())
               os << "DETECTOR " << rec(cur) << " " << rec(it->second) << "\n";
+            else
+              os << "DETECTOR " << rec(cur) << "\n";
             lastForStab[sid] = cur;
           }
           // Data measurements feed the logical observable.
