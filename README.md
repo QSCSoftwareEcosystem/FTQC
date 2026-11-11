@@ -55,7 +55,19 @@ Useful algorithms (Shor, quantum chemistry) require logical error rates $p_L < 1
 > **FTQC** makes this pipeline a first-class citizen of the MLIR compiler stack.
 
 ---
+## Scientific paper on this work (please cite this when you use our software)
 
+```
+@article{Miniskar:2026vpp,
+    author = "Miniskar, Narasinga Rao and Wong, Elaine and Lee, Seyong and Leyton-Ortega, Vicente and Vetter, Jeffrey S. and Humble, Travis S.",
+    title = "{A Compiler for Fault Tolerant Quantum Computing}",
+    eprint = "2611.13301",
+    archivePrefix = "arXiv",
+    primaryClass = "quant-ph",
+    month = "11",
+    year = "2026"
+}
+```
 ## What Is an MLIR Dialect?
 
 MLIR is a reusable compiler infrastructure for representing and transforming programs at multiple levels of abstraction.
