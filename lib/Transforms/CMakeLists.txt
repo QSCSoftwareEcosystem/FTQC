@@ -11,6 +11,9 @@ add_mlir_library(FTQCTransforms
   LowerToQuantum.cpp
   LowerToQASM3.cpp
   LowerToIQMJSON.cpp
+  LowerToLightStimJSON.cpp
+  CanonicalizeToLightStimAtomic.cpp
+  LowerToLightStimAtomicJSON.cpp
   LowerToSTIM.cpp
   LowerToLatticeSurgery.cpp
   LowerToQIR.cpp

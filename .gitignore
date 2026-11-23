@@ -15,3 +15,5 @@ test/Transforms/ExpandPhysical/
 topology/EncodeTwoQubits/
 topology/__pycache__/
 gitignore_local
+__pycache__/
+*.py[cod]
